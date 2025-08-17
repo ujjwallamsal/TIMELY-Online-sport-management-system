@@ -1,16 +1,26 @@
-# Python
-venv/
-__pycache__/
-*.pyc
+# macOS
+.DS_Store
 
 # Node/React
 node_modules/
-build/
 dist/
-.next/
+build/
 .cache/
+.next/
+out/
 
-# OS / Editors
-.DS_Store
+# Python/Django
+venv/
+.env
+*.pyc
+__pycache__/
+.mypy_cache/
+.coverage
+htmlcov/
+media/
+staticfiles/
+
+# Logs & IDE
+*.log
 .idea/
 .vscode/
