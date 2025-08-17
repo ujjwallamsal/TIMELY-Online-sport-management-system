@@ -1,0 +1,16 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Node/React
+node_modules/
+build/
+dist/
+.next/
+.cache/
+
+# OS / Editors
+.DS_Store
+.idea/
+.vscode/
