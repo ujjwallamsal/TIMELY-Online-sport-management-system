@@ -35,6 +35,12 @@ from reports.views import TicketSummaryReport, TicketCSVExport
 from reports.views_admin import AdminOverviewView
 
 
+from django.http import HttpResponse  # add this import (you already import JsonResponse)
+
+def _public_events_new_noop(_request):
+    # Quietly acknowledge stray GETs from extensions/prefetchers.
+    # We purposely do NOT implement public "new" creation here.
+    return HttpResponse(status=204)
 
 
 # Gallery (private + public)
@@ -91,13 +97,15 @@ urlpatterns = [
     # OpenAPI / Docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
-
+ # --- QUIET STUB to silence stray extension calls ---
+    path("api/public/events/new/", _public_events_new_noop),
     # API routes
     path("api/", include(router.urls)),
     path("api/reports/", include("reports.urls")),
 
     # Browsable API session auth (dev helper)
     path("api/auth/", include("rest_framework.urls")),
+    
 
     # JWT endpoints (obtain/refresh/verify in timely/jwt_urls.py)
     path("api/token/", include("timely.jwt_urls")),

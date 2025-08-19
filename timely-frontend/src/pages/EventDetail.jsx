@@ -1,23 +1,30 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { axiosPublic } from "../api/axios.js";
-import { formatDate } from "../lib/format.js";
+import { Link, Navigate, useParams } from "react-router-dom";
+import { getPublicEvent } from "../api"; // <-- import from the folder (index.js)
+
+function fmtDate(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  return dt.toLocaleString();
+}
 
 export default function EventDetail() {
   const { id } = useParams();
-  const [data, setData] = useState(null);
+  const [event, setEvent] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      setLoading(true); setErr("");
       try {
-        const res = await axiosPublic.get(`/public/events/${id}/`);
-        if (alive) setData(res.data);
+        setLoading(true);
+        const data = await getPublicEvent(id);
+        if (!alive) return;
+        setEvent(data);
       } catch (e) {
-        if (alive) setErr(e?.response?.data?.detail || e.message || "Failed to load");
+        if (!alive) return;
+        setErr(e?.message || "Failed to load event");
       } finally {
         if (alive) setLoading(false);
       }
@@ -25,30 +32,27 @@ export default function EventDetail() {
     return () => { alive = false; };
   }, [id]);
 
-  if (loading) return <div className="container mx-auto max-w-3xl px-4 py-8">Loading…</div>;
-  if (err) return <div className="container mx-auto max-w-3xl px-4 py-8 text-red-600">Error: {err}</div>;
-  if (!data) return null;
-
-  const v = data.venue_detail || data.venue;
+  if (!id) return <Navigate to="/events" replace />;
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-8">
-      <Link to="/events" className="underline">&larr; Back to events</Link>
-      <h1 className="text-3xl font-bold mt-4">{data.name}</h1>
-      <div className="opacity-80">{data.sport_type} • {data.status}</div>
-      <div className="mt-2">{formatDate(data.start_date)} → {formatDate(data.end_date)}</div>
+    <div className="container mx-auto max-w-3xl p-4">
+      <h1 className="text-2xl font-semibold mb-4">Event details</h1>
 
-      <div className="mt-6">
-        <h2 className="font-semibold">Venue</h2>
-        <div>{v?.name}</div>
-        <div>{v?.address} {v?.city} {v?.state} {v?.postcode}</div>
-        <div>Capacity: {v?.capacity}</div>
-      </div>
+      {loading && <p>Loading…</p>}
+      {err && <p className="text-red-600">Error: {err}</p>}
 
-      {data.notes && (
-        <div className="mt-6">
-          <h2 className="font-semibold">Notes</h2>
-          <p>{data.notes}</p>
+      {event && (
+        <div className="border rounded p-4 space-y-2">
+          <h2 className="text-xl font-medium">{event.name}</h2>
+          <p><span className="font-medium">Sport:</span> {event.sport || "—"}</p>
+          <p><span className="font-medium">Venue:</span> {event.venue?.name || "—"}</p>
+          <p><span className="font-medium">Start:</span> {fmtDate(event.start_date)}</p>
+          <p><span className="font-medium">End:</span> {fmtDate(event.end_date)}</p>
+          {event.description && <p className="mt-2">{event.description}</p>}
+
+          <div className="mt-4">
+            <Link to="/events" className="underline">← Back to Events</Link>
+          </div>
         </div>
       )}
     </div>

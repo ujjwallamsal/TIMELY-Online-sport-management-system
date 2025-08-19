@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import api from "../lib/api.js";
 
+/**
+ * AuthProvider
+ * - Detects if a Django session is active (via api.pingAuth())
+ * - Opens DRF login page in a new tab when you call openLogin()
+ * - Logs out with proper CSRF when you call doLogout()
+ */
 const AuthCtx = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -13,18 +19,20 @@ export function AuthProvider({ children }) {
     setAuthed(!!r.ok);
     setChecking(false);
     return r.ok;
-    }
+  }
 
-  useEffect(() => { check(); }, []);
+  useEffect(() => {
+    check();
+  }, []);
 
   function openLogin() {
-    // adds ?next=/api/ so you don’t hit /accounts/profile/ even if settings aren’t changed
+    // DRF login (session) — after login it redirects to /api/
     window.open(api.loginUrl("/api/"), "_blank", "noopener,noreferrer");
   }
 
   async function doLogout() {
-    await api.logout();   // POST with CSRF
-    await check();        // refresh flag
+    await api.logout();   // POST + CSRF handled inside api.js
+    await check();
   }
 
   return (
@@ -39,5 +47,3 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within <AuthProvider>");
   return ctx;
 }
-
-

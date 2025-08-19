@@ -1,65 +1,30 @@
-function getCookie(name) {
-    const m = document.cookie.match(new RegExp("(^|; )" + name + "=([^;]*)"));
-    return m ? decodeURIComponent(m[2]) : "";
-  }
-  
-  function join(base, path) {
-    const b = base.replace(/\/+$/, "");
-    const p = path.startsWith("/") ? path : `/${path}`;
-    return `${b}${p}`;
-  }
-  
-  const BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api").replace(/\/+$/, "");
-  const PATHS = {
-    login: import.meta.env.VITE_LOGIN_PATH || "/auth/login/",
-    logout: import.meta.env.VITE_LOGOUT_PATH || "/auth/logout/",
-    ping: import.meta.env.VITE_ME_PATH || "/events/",
-  };
-  
-  export const api = {
-    loginUrl: (next = "/api/") => {
-      const url = new URL(join(BASE, PATHS.login));
-      if (next) url.searchParams.set("next", next);
-      return url.toString();
-    },
-  
-    async ensureCsrf() {
-      // If no csrftoken yet, GET the login form to receive one (Django sets it on GET)
-      if (!getCookie("csrftoken")) {
-        await fetch(join(BASE, PATHS.login), { method: "GET", credentials: "include" });
-      }
-    },
-  
-    async logout() {
-      await api.ensureCsrf();
-      const res = await fetch(join(BASE, PATHS.logout), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Accept": "application/json",
-          "X-CSRFToken": getCookie("csrftoken"),
-        },
-      });
-      if (res.status < 200 || res.status >= 300) {
-        throw new Error(`Logout failed: ${res.status} ${res.statusText}`);
-      }
-      return true;
-    },
-  
-    async pingAuth() {
-      try {
-        const res = await fetch(join(BASE, PATHS.ping), {
-          method: "GET",
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        });
-        if (res.status >= 200 && res.status < 300) return { ok: true };
-        if (res.status === 401 || res.status === 403) return { ok: false };
-        return { ok: false, status: res.status };
-      } catch (e) {
-        return { ok: false, error: String(e) };
-      }
-    },
-  };
-  export default api;
-  
+// src/api/api.js
+import axios from "axios";
+
+// Create axios instance with base URL
+const api = axios.create({
+  baseURL: "http://127.0.0.1:8000/api", // Django backend base URL
+  withCredentials: true, // include cookies if using auth
+});
+
+// ---- API WRAPPERS ----
+
+// Events
+export const getEvents = (params = {}) => api.get("/events/", { params });
+export const getEvent = (id) => api.get(`/events/${id}/`);
+export const createEvent = (data) => api.post("/events/", data);
+export const updateEvent = (id, data) => api.put(`/events/${id}/`, data);
+export const deleteEvent = (id) => api.delete(`/events/${id}/`);
+
+// Public modules
+export const getNews = () => api.get("/public/news/");
+export const getMatches = () => api.get("/public/matches/");
+export const getResults = () => api.get("/public/results/");
+
+// ---- Auth ----
+export const login = (credentials) => api.post("/auth/login/", credentials);
+export const register = (data) => api.post("/auth/register/", data);
+export const logout = () => api.post("/auth/logout/");
+
+// Default export if you just need the axios instance
+export default api;
