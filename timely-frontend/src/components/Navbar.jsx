@@ -4,7 +4,7 @@ import { useAuth } from "../state/AuthContext.jsx";
 export default function Navbar() {
   const active = ({ isActive }) =>
     "px-1 " + (isActive ? "underline underline-offset-4 decoration-2" : "");
-  const { authed, check, openLogin, doLogout } = useAuth();
+  const { authed, doLogout } = useAuth();
 
   return (
     <header className="border-b">
@@ -25,18 +25,7 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <>
-              <button className="border rounded px-2 py-1" onClick={openLogin}>
-                Login
-              </button>
-              <button
-                className="text-xs opacity-70 underline"
-                onClick={check}
-                title="Refresh login status"
-              >
-                I’ve logged in
-              </button>
-            </>
+            <NavLink to="/login" className={active}>Login</NavLink>
           )}
         </nav>
       </div>
