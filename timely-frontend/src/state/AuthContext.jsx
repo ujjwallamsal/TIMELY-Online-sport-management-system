@@ -1,49 +1,53 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import api from "../lib/api.js";
+import * as api from "../lib/api"; // uses your src/lib/api.js
 
-/**
- * AuthProvider
- * - Detects if a Django session is active (via api.pingAuth())
- * - Opens DRF login page in a new tab when you call openLogin()
- * - Logs out with proper CSRF when you call doLogout()
- */
 const AuthCtx = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [authed, setAuthed] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true);
 
-  async function check() {
-    setChecking(true);
-    const r = await api.pingAuth();
-    setAuthed(!!r.ok);
-    setChecking(false);
-    return r.ok;
+  async function refreshAuth() {
+    try {
+      // ping cookie session and load /me
+      await api.pingAuth();
+      const me = await api.getMe();
+      setUser(me);
+    } catch {
+      setUser(null);
+    } finally {
+      setInitializing(false);
+    }
   }
 
   useEffect(() => {
-    check();
+    refreshAuth();
   }, []);
 
-  function openLogin() {
-    // DRF login (session) — after login it redirects to /api/
-    window.open(api.loginUrl("/api/"), "_blank", "noopener,noreferrer");
-  }
+  const login = () => {
+    // open Django login, user returns and clicks “I’m logged in”
+    window.open(api.urls.login, "_blank", "noopener,noreferrer");
+  };
 
-  async function doLogout() {
-    await api.logout();   // POST + CSRF handled inside api.js
-    await check();
-  }
+  const confirmLoggedIn = async () => {
+    await refreshAuth();
+  };
+
+  const logout = async () => {
+    try {
+      await api.logout();
+    } finally {
+      setUser(null);
+    }
+  };
 
   return (
-    <AuthCtx.Provider value={{ authed, checking, check, openLogin, doLogout }}>
+    <AuthCtx.Provider value={{ user, initializing, login, confirmLoggedIn, logout }}>
       {children}
     </AuthCtx.Provider>
   );
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthCtx);
-  if (!ctx) throw new Error("useAuth must be used within <AuthProvider>");
-  return ctx;
+  return useContext(AuthCtx);
 }

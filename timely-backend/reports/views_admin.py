@@ -13,7 +13,7 @@ from events.models import Event
 from fixtures.models import Match
 from tickets.models import Ticket
 from results.models import Result
-from payments.models import Payment
+from payments.models import PaymentIntent
 # If you later want registration stats, import your model:
 # from registrations.models import Registration
 
@@ -36,7 +36,7 @@ class AdminOverviewView(APIView):
                 "matches": Match.objects.count(),
                 "tickets": Ticket.objects.count(),
                 "results": Result.objects.count(),
-                "payments": Payment.objects.count(),
+                "payments": PaymentIntent.objects.count(),
             },
             "activity": {
                 "new_users_7d": User.objects.filter(date_joined__gte=last_7d).count(),
@@ -44,7 +44,7 @@ class AdminOverviewView(APIView):
                 # "registrations_7d": Registration.objects.filter(created_at__gte=last_7d).count(),
                 "tickets_7d": Ticket.objects.filter(purchased_at__gte=last_7d).count(),
                 "revenue_cents_7d": (
-                    Payment.objects.filter(created_at__gte=last_7d, status="SUCCEEDED")
+                    PaymentIntent.objects.filter(created_at__gte=last_7d, status="succeeded")
                     .aggregate(total=models.Sum("amount_cents"))
                     .get("total") or 0
                 ),

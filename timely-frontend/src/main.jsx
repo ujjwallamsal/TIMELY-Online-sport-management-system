@@ -1,22 +1,19 @@
-// src/main.jsx
 import React from "react";
-import { createRoot } from "react-dom/client";
+import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-
 import App from "./App.jsx";
-import { AuthProvider } from "./state/AuthContext.jsx";
+import "./index.css";
+import { AuthProvider } from "./context/AuthContext.jsx";
+import { NotificationProvider } from "./components/NotificationSystem.jsx";
 
-const rootEl = document.getElementById("root");
-
-if (rootEl) {
-  const root = createRoot(rootEl);
-  root.render(
-    <React.StrictMode>
-      <BrowserRouter>
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <NotificationProvider>
         <AuthProvider>
           <App />
         </AuthProvider>
-      </BrowserRouter>
-    </React.StrictMode>
-  );
-}
+      </NotificationProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);

@@ -17,12 +17,14 @@ class PublicMatchViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = (
         Match.objects
-        .select_related("event", "venue", "team_a", "team_b")
+        .select_related("fixture", "venue")
+        .prefetch_related("entries")
+        .filter(is_published=True)
         .all()
-        .order_by("start_time")
+        .order_by("scheduled_at")
     )
 
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["event", "venue", "team_a", "team_b"]
-    ordering_fields = ["start_time"]
-    ordering = ["start_time"]
+    filterset_fields = ["fixture", "venue", "status", "round_number"]
+    ordering_fields = ["scheduled_at", "round_number", "match_number"]
+    ordering = ["scheduled_at"]

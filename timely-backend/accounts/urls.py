@@ -1,20 +1,27 @@
 # accounts/urls.py
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from django.urls import path
-from .views import (
-    request_password_reset,
-    confirm_password_reset,
-    request_email_verification,
-    verify_email,
-)
-from .views_verify import RequestEmailVerification, VerifyEmail
+from .views import AuthViewSet, UserViewSet, UserRoleViewSet, AdminUserViewSet, AuditLogViewSet
 
 app_name = "accounts"
 
+# Create router for ViewSets
+router = DefaultRouter()
+router.register(r'users', UserViewSet, basename='user')
+router.register(r'roles', UserRoleViewSet, basename='role')
+router.register(r'admin/users', AdminUserViewSet, basename='admin-user')
+router.register(r'audit-logs', AuditLogViewSet, basename='audit-log')
+
+auth_login = AuthViewSet.as_view({"post": "login"})
+auth_logout = AuthViewSet.as_view({"post": "logout"})
+auth_refresh = AuthViewSet.as_view({"post": "refresh"})
+auth_register = AuthViewSet.as_view({"post": "register"})
+
 urlpatterns = [
-    path("password/reset/request/", request_password_reset, name="password-reset-request"),
-    path("password/reset/confirm/", confirm_password_reset, name="password-reset-confirm"),
-    path("email/verify/request/", request_email_verification, name="request-email-verification"),
-    path("email/verify/", verify_email, name="verify-email"),
-    path("request-email-verification/", RequestEmailVerification.as_view()),
-    path("verify/", VerifyEmail.as_view()),
+    path('auth/login/', auth_login, name='auth-login'),
+    path('auth/logout/', auth_logout, name='auth-logout'),
+    path('auth/register/', auth_register, name='auth-register'),
+    path('refresh/', auth_refresh, name='auth-refresh'),
+    path('', include(router.urls)),
 ]

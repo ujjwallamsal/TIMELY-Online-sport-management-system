@@ -11,12 +11,17 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 # Private (authenticated) viewsets
 from accounts.views import UserViewSet
 from venues.views import VenueViewSet
-from events.views import EventViewSet
+from events.views import EventViewSet, DivisionViewSet
 from teams.views import TeamViewSet, AthleteProfileViewSet
-from registrations.views import RegistrationViewSet
-from fixtures.views import MatchViewSet
+from registrations.views import RegistrationViewSet, secure_document_download
+# from registrations.views import RegistrationViewSet, DocumentViewSet, secure_document_download
+from payments.views import create_payment_intent, confirm_payment, payment_status, stripe_webhook
+from fixtures.views import FixtureViewSet, MatchViewSet, MatchEntryViewSet
 from results.views import ResultViewSet
-from tickets.views import TicketViewSet
+from tickets.views import (
+    TicketTypeViewSet, TicketOrderViewSet, TicketViewSet, PaymentRecordViewSet,
+    StripeWebhookView, PayPalWebhookView, TicketValidationView
+)
 from notifications.views import NotificationViewSet
 
 # Public (read-only) viewsets
@@ -27,8 +32,6 @@ from content.public_views import PublicAnnouncementViewSet
 
 # Public (create-only) endpoint (FR43)
 from tickets.public_views import PublicCheckoutView
-
-from payments.views import PaymentViewSet
 
 from reports.views import TicketSummaryReport, TicketCSVExport
 
@@ -58,13 +61,20 @@ router = DefaultRouter()
 
 router.register(r"users", UserViewSet, basename="user")
 router.register(r"venues", VenueViewSet)
-router.register(r"events", EventViewSet)
+router.register(r"events", EventViewSet, basename="event")
+router.register(r"divisions", DivisionViewSet, basename="division")
 router.register(r"teams", TeamViewSet)
 router.register(r"athletes", AthleteProfileViewSet)
-router.register(r"registrations", RegistrationViewSet)
-router.register(r"matches", MatchViewSet)
+router.register(r"registrations", RegistrationViewSet, basename="registration")
+# router.register(r"documents", DocumentViewSet, basename="document")  # Temporarily commented out
+router.register(r"fixtures", FixtureViewSet, basename="fixture")
+router.register(r"matches", MatchViewSet, basename="match")
+router.register(r"match-entries", MatchEntryViewSet, basename="matchentry")
 router.register(r"results", ResultViewSet)
+router.register(r"ticket-types", TicketTypeViewSet, basename="tickettype")
+router.register(r"ticket-orders", TicketOrderViewSet, basename="ticketorder")
 router.register(r"tickets", TicketViewSet, basename="ticket")
+router.register(r"payment-records", PaymentRecordViewSet, basename="paymentrecord")
 router.register(r"notifications", NotificationViewSet, basename="notification")
 
 # Public spectator APIs (no auth)
@@ -78,7 +88,6 @@ router.register(r"albums", AlbumViewSet, basename="album")
 router.register(r"media", MediaAssetViewSet, basename="media")
 router.register(r"public/albums", PublicAlbumViewSet, basename="public-albums")
 router.register(r"public/media", PublicMediaViewSet, basename="public-media")
-router.register(r"payments", PaymentViewSet, basename="payment")
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +121,20 @@ urlpatterns = [
 
     # Public checkout (FR43)
     path("api/public/checkout/", PublicCheckoutView.as_view(), name="public-checkout"),
+    
+    # Secure document download
+    path("api/documents/<uuid:token>/download/", secure_document_download, name="secure-document-download"),
+    
+    # Payment endpoints
+    path("api/payments/create-intent/", create_payment_intent, name="create-payment-intent"),
+    path("api/payments/confirm/", confirm_payment, name="confirm-payment"),
+    path("api/payments/status/<int:registration_id>/", payment_status, name="payment-status"),
+    path("api/webhooks/stripe/", stripe_webhook, name="stripe-webhook"),
+    
+    # Ticketing endpoints
+    path("api/webhooks/stripe-tickets/", StripeWebhookView.as_view({'post': 'stripe_webhook'}), name="stripe-tickets-webhook"),
+    path("api/webhooks/paypal-tickets/", PayPalWebhookView.as_view({'post': 'paypal_webhook'}), name="paypal-tickets-webhook"),
+    path("api/tickets/validate/", TicketValidationView.as_view({'post': 'validate_ticket'}), name="validate-ticket"),
 
     path("api/reports/tickets/summary", TicketSummaryReport.as_view(), name="report-ticket-summary"),
     path("api/reports/tickets/export.csv", TicketCSVExport.as_view(), name="report-ticket-export"),

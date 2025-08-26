@@ -1,12 +1,217 @@
-# React + Vite
+# Timely - Sports Event Management System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern, real-time sports event management platform built with Django 5 + DRF + PostgreSQL + React (Vite).
 
-Currently, two official plugins are available:
+## 🚀 Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### Event Management
+- **CRUD Operations**: Create, read, update, and delete events (organizers only)
+- **Event Statuses**: Draft → Published → Upcoming → Ongoing → Completed/Cancelled
+- **Validation**: Date validation, capacity limits, venue conflict detection
+- **Real-time Updates**: WebSocket integration for live event updates
 
-## Expanding the ESLint configuration
+### User Roles & Permissions
+- **Spectator**: Browse and attend events
+- **Athlete**: Participate in sports events
+- **Coach**: Train and guide athletes
+- **Organizer**: Create and manage events
+- **Admin**: Full system access
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Modern UI/UX
+- **Tailwind CSS**: Utility-first, responsive design
+- **Mobile-First**: Optimized for all devices
+- **Accessibility**: WCAG AA compliant
+- **Real-time Indicators**: Live connection status
+
+## 🛠️ Tech Stack
+
+### Backend
+- **Django 5**: Modern Python web framework
+- **Django REST Framework**: API development
+- **PostgreSQL**: Robust database
+- **Django Channels**: WebSocket support
+- **Redis**: Message broker for real-time features
+
+### Frontend
+- **React 18**: Modern UI library
+- **Vite**: Fast build tool
+- **Tailwind CSS**: Utility-first CSS framework
+- **WebSockets**: Real-time communication
+
+## 📁 Project Structure
+
+```
+timely-frontend/
+├── src/
+│   ├── components/          # Reusable UI components
+│   ├── pages/              # Page components
+│   ├── context/            # React context providers
+│   ├── hooks/              # Custom React hooks
+│   ├── lib/                # API and utility functions
+│   └── utils/              # Helper functions
+├── public/                 # Static assets
+└── package.json            # Dependencies
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
+- Backend API running (see backend setup)
+
+### Frontend Setup
+
+1. **Install dependencies**
+   ```bash
+   cd timely-frontend
+   npm install
+   ```
+
+2. **Environment variables**
+   Create `.env.local` file:
+   ```env
+   VITE_API_BASE=http://127.0.0.1:8000
+   ```
+
+3. **Start development server**
+   ```bash
+   npm run dev
+   ```
+
+4. **Build for production**
+   ```bash
+   npm run build
+   ```
+
+### Backend Setup
+
+1. **Navigate to backend**
+   ```bash
+   cd timely-backend
+   ```
+
+2. **Create virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Database setup**
+   ```bash
+   python manage.py migrate
+   python manage.py createsuperuser
+   ```
+
+5. **Start development server**
+   ```bash
+   python manage.py runserver
+   ```
+
+6. **Start Redis (for WebSockets)**
+   ```bash
+   redis-server
+   ```
+
+## 🔧 Key Components
+
+### Event Management
+- **EventManagement.jsx**: Organizer dashboard for CRUD operations
+- **Events.jsx**: Public event listing with filters
+- **EventDetail.jsx**: Comprehensive event information
+
+### Real-time Features
+- **useWebSocket.js**: WebSocket hook for real-time updates
+- **Event updates**: Live notifications when events change
+- **Connection status**: Visual indicators for WebSocket state
+
+### Authentication
+- **AuthContext.jsx**: User authentication and role management
+- **Protected routes**: Role-based access control
+- **JWT tokens**: Secure authentication
+
+## 🎨 Design Principles
+
+- **Mobile-First**: Responsive design starting from mobile
+- **Accessibility**: WCAG AA compliance
+- **Performance**: Optimized loading and real-time updates
+- **User Experience**: Intuitive navigation and clear feedback
+
+## 📱 Responsive Design
+
+- **Mobile**: Single-column layout, touch-friendly
+- **Tablet**: Two-column grid, optimized spacing
+- **Desktop**: Full-featured layout with sidebar
+
+## 🔒 Security Features
+
+- **Role-based access**: Granular permissions
+- **Input validation**: Client and server-side validation
+- **CSRF protection**: Django security features
+- **Secure headers**: HTTPS and security headers
+
+## 🧪 Testing
+
+```bash
+# Frontend tests
+npm run test
+
+# Backend tests
+python manage.py test
+```
+
+## 🚀 Deployment
+
+### Frontend
+```bash
+npm run build
+# Deploy dist/ folder to your hosting service
+```
+
+### Backend
+```bash
+# Production settings
+python manage.py collectstatic
+gunicorn timely.wsgi:application
+```
+
+## 📊 Database Indexes
+
+Optimized for performance:
+- `(status, start_date)` - Event filtering
+- `(sport_type, status)` - Sport-based queries
+- `(venue, start_date)` - Venue availability
+
+## 🔄 Real-time Updates
+
+- **WebSocket events**: `event.changed`, `user.updated`
+- **Fallback**: Automatic reconnection with polling
+- **Lightweight**: Efficient message handling
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 🆘 Support
+
+For support and questions:
+- Create an issue on GitHub
+- Check the documentation
+- Contact the development team
+
+---
+
+**Built with ❤️ for the sports community**

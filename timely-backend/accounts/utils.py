@@ -2,6 +2,9 @@
 from django.utils.crypto import get_random_string
 from django.core.mail import send_mail
 from django.conf import settings
+from django.http import HttpRequest
+from typing import Optional
+
 
 def send_verification_email(user):
     if not user.email_token:
@@ -29,3 +32,39 @@ def send_password_reset_email(user):
         recipient_list=[user.email],
         fail_silently=True,
     )
+
+
+def get_client_ip(request: HttpRequest) -> Optional[str]:
+    """Get client IP address from request"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
+
+def get_user_agent(request: HttpRequest) -> Optional[str]:
+    """Get user agent from request"""
+    return request.META.get('HTTP_USER_AGENT', '')[:500]  # Limit length
+
+
+def is_ajax_request(request: HttpRequest) -> bool:
+    """Check if request is AJAX/API request"""
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+           request.content_type == 'application/json' or \
+           request.path.startswith('/api/')
+
+
+def get_request_metadata(request: HttpRequest) -> dict:
+    """Get comprehensive request metadata for audit logging"""
+    return {
+        'ip_address': get_client_ip(request),
+        'user_agent': get_user_agent(request),
+        'method': request.method,
+        'path': request.path,
+        'query_params': dict(request.GET.items()),
+        'is_ajax': is_ajax_request(request),
+        'referer': request.META.get('HTTP_REFERER', ''),
+        'content_type': request.content_type or '',
+    }

@@ -1,103 +1,75 @@
-// src/pages/EventForm.jsx
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { axiosPrivate } from "../api/axios.js";
+import { createEvent, getEvent, updateEvent } from "../lib/api";
 
-export default function EventForm({ mode }) {
-  const isEdit = mode === "edit";
+export default function EventForm() {
+  const nav = useNavigate();
   const { id } = useParams();
-  const navigate = useNavigate();
+  const editing = !!id;
 
-  const [values, setValues] = useState({
-    name: "", sport_type: "",
-    start_date: "", end_date: "",
-    status: "", notes: ""
+  const [f, setF] = useState({
+    name: "",
+    sport: "",
+    description: "",
+    start_date: "",
+    end_date: "",
+    venue_id: "",
+    capacity: 0,
   });
-  const [loading, setLoading] = useState(isEdit);
-  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
 
   useEffect(() => {
-    if (!isEdit) return;
-    let alive = true;
-    (async () => {
-      try {
-        // READ may use public detail (no creds)
-        const base = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api").replace(/\/+$/, "");
-        const res = await fetch(`${base}/public/events/${id}/`, { headers:{Accept:"application/json"}});
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        const j = await res.json();
-        if (alive) setValues({
-          name: j.name || "", sport_type: j.sport_type || "",
-          start_date: j.start_date || "", end_date: j.end_date || "",
-          status: j.status || "", notes: j.notes || ""
-        });
-      } catch (e) { if (alive) setErr(e.message || "Failed to load"); }
-      finally { if (alive) setLoading(false); }
-    })();
-    return () => { alive = false; };
-  }, [id, isEdit]);
+    if (!editing) return;
+    getEvent(id)
+      .then((d) => setF({
+        name: d.name || "",
+        sport: d.sport || "",
+        description: d.description || "",
+        start_date: d.start_date || "",
+        end_date: d.end_date || "",
+        venue_id: d.venue_id || "",
+        capacity: d.capacity || 0,
+      }))
+      .catch(setErr);
+  }, [editing, id]);
 
   async function onSubmit(e) {
     e.preventDefault();
-    setErr("");
+    setSaving(true); setErr(null);
     try {
-      if (isEdit) {
-        await axiosPrivate.put(`/events/${id}/`, values);    // PUT /api/events/:id/
-      } else {
-        await axiosPrivate.post(`/events/`, values);         // POST /api/events/
-      }
-      navigate("/events");
+      if (editing) await updateEvent(id, f);
+      else await createEvent(f);
+      nav("/dashboard");
     } catch (e2) {
-      setErr(e2?.response?.data?.detail || e2.message || "Failed to save");
+      setErr(e2);
+    } finally {
+      setSaving(false);
     }
   }
 
-  if (loading) return <div className="p-8">Loading…</div>;
+  function upd(k, v) { setF((s) => ({ ...s, [k]: v })); }
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-bold mb-4">{isEdit ? "Edit" : "Create"} Event</h1>
-      {err && <div className="text-red-600 mb-4">Error: {err}</div>}
-      <form onSubmit={onSubmit} className="grid gap-4">
-        <label className="grid gap-1">
-          <span>Name</span>
-          <input className="border rounded px-3 py-2" value={values.name}
-                 onChange={(e)=>setValues(v=>({...v,name:e.target.value}))} required/>
-        </label>
-        <label className="grid gap-1">
-          <span>Sport type</span>
-          <input className="border rounded px-3 py-2" value={values.sport_type}
-                 onChange={(e)=>setValues(v=>({...v,sport_type:e.target.value}))} required/>
-        </label>
-        <div className="grid grid-cols-2 gap-4">
-          <label className="grid gap-1">
-            <span>Start date</span>
-            <input type="date" className="border rounded px-3 py-2" value={values.start_date}
-                   onChange={(e)=>setValues(v=>({...v,start_date:e.target.value}))} required/>
-          </label>
-          <label className="grid gap-1">
-            <span>End date</span>
-            <input type="date" className="border rounded px-3 py-2" value={values.end_date}
-                   onChange={(e)=>setValues(v=>({...v,end_date:e.target.value}))} required/>
-          </label>
+    <main className="container stack">
+      <h1>{editing ? "Edit event" : "Create event"}</h1>
+      {err && <div className="alert">{String(err.data?.detail || err.message)}</div>}
+      <form className="form card stack" onSubmit={onSubmit}>
+        <label> Name <input value={f.name} onChange={e=>upd("name", e.target.value)} required/> </label>
+        <label> Sport <input value={f.sport} onChange={e=>upd("sport", e.target.value)} required/> </label>
+        <label> Description <textarea value={f.description} onChange={e=>upd("description", e.target.value)} /> </label>
+        <div className="row">
+          <label> Start <input type="date" value={f.start_date} onChange={e=>upd("start_date", e.target.value)} required/> </label>
+          <label> End <input type="date" value={f.end_date} onChange={e=>upd("end_date", e.target.value)} required/> </label>
         </div>
-        <label className="grid gap-1">
-          <span>Status</span>
-          <input className="border rounded px-3 py-2" value={values.status}
-                 onChange={(e)=>setValues(v=>({...v,status:e.target.value}))}/>
-        </label>
-        <label className="grid gap-1">
-          <span>Notes</span>
-          <textarea className="border rounded px-3 py-2" rows={4} value={values.notes}
-                    onChange={(e)=>setValues(v=>({...v,notes:e.target.value}))}/>
-        </label>
-        <div className="flex gap-3">
-          <button className="border rounded px-4 py-2" type="submit">
-            {isEdit ? "Save changes" : "Create event"}
-          </button>
-          <button className="border rounded px-4 py-2" type="button" onClick={()=>history.back()}>Cancel</button>
+        <div className="row">
+          <label> Venue ID <input value={f.venue_id} onChange={e=>upd("venue_id", e.target.value)} /> </label>
+          <label> Capacity <input type="number" min="0" value={f.capacity} onChange={e=>upd("capacity", Number(e.target.value))} /> </label>
+        </div>
+        <div className="row">
+          <button className="btn" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
         </div>
       </form>
-    </div>
+    </main>
   );
 }

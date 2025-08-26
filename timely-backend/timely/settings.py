@@ -1,4 +1,5 @@
 # timely/settings.py
+import os
 from pathlib import Path
 import environ
 from datetime import timedelta
@@ -15,7 +16,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 # --- Core ---
 DEBUG = env.bool("DEBUG", default=True)
 SECRET_KEY = env("SECRET_KEY", default="insecure-key")
-ALLOWED_HOSTS = [h.strip() for h in env("ALLOWED_HOSTS", default="127.0.0.1,localhost").split(",") if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in env("ALLOWED_HOSTS", default="127.0.0.1,localhost,testserver").split(",") if h.strip()]
 
 # --- Apps ---
 INSTALLED_APPS = [
@@ -83,6 +84,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "timely.wsgi.application"
+ASGI_APPLICATION = "timely.asgi.application"
 
 # --- Database (PostgreSQL via .env) ---
 DATABASES = {
@@ -127,10 +129,11 @@ AUTH_USER_MODEL = "accounts.User"
 # --- DRF / Filters / JWT / Schema ---
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "accounts.auth.CookieJWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",  # for browsable API
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
+        "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -158,35 +161,64 @@ SPECTACULAR_SETTINGS = {
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("ACCESS_TOKEN_LIFETIME_MIN", default=60)),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("REFRESH_TOKEN_LIFETIME_DAYS", default=7)),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "AUTH_COOKIE": "access",
+    "AUTH_COOKIE_REFRESH": "refresh",
+    "AUTH_COOKIE_DOMAIN": None,
+    "AUTH_COOKIE_SECURE": False,  # dev only; set True on HTTPS
+    "AUTH_COOKIE_HTTP_ONLY": True,
+    "AUTH_COOKIE_PATH": "/",
+    "AUTH_COOKIE_SAMESITE": "Lax",
 }
 
-# --- CORS (React/Vite defaults) ---
+# Email verification settings
+EMAIL_VERIFICATION_REQUIRED = True
+EMAIL_VERIFICATION_TOKEN_EXPIRY = 24 * 60 * 60  # 24 hours in seconds
+
+# --- CORS Configuration ---
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:5174",
+    "http://localhost:5174",
+    "http://127.0.0.1:5175",
+    "http://localhost:5175",
+    "http://127.0.0.1:5176",
+    "http://localhost:5176",
+    "http://127.0.0.1:5177",
+    "http://localhost:5177",
+    "http://127.0.0.1:5178",
+    "http://localhost:5178",
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:5174",
+    "http://localhost:5174",
+    "http://127.0.0.1:5175",
+    "http://localhost:5175",
+    "http://127.0.0.1:5176",
+    "http://localhost:5176",
+    "http://127.0.0.1:5177",
+    "http://localhost:5177",
+    "http://127.0.0.1:5178",
+    "http://localhost:5178",
+]
+
+# Email configuration
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-FRONTEND_ORIGIN = "http://localhost:5173"  # your React dev URL
-
+FRONTEND_ORIGIN = "http://localhost:5173"
 DEFAULT_FROM_EMAIL = "no-reply@timely.local"
-
-
-# DRF throttling (reuse what you already added)
-REST_FRAMEWORK.setdefault("DEFAULT_THROTTLE_CLASSES", [
-    "rest_framework.throttling.AnonRateThrottle",
-    "rest_framework.throttling.UserRateThrottle",
-])
-REST_FRAMEWORK.setdefault("DEFAULT_THROTTLE_RATES", {
-    "anon": "100/hour",
-    "user": "1000/hour",
-    "public_checkout": "10/minute",
-})
 
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "accounts.auth.CookieJWTAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",  # for browsable API
     ],
@@ -196,15 +228,18 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_THROTTLE_RATES": {
-        "public_checkout": "5/hour",
+        "public_checkout": "5/min",
+        "anon": "60/min",
+        "user": "120/min",
+        "login": "10/min",
     },
 }
 
-SPECTACULAR_SETTINGS = {
-    "TITLE": "Timely API",
-    "VERSION": "1.0.0",
-    "SERVE_INCLUDE_SCHEMA": False,
-}
+SIMPLE_JWT.setdefault("AUTH_COOKIE", "access")
+SIMPLE_JWT.setdefault("AUTH_COOKIE_REFRESH", "refresh")
+SIMPLE_JWT.setdefault("AUTH_COOKIE_SAMESITE", "Lax")
+SIMPLE_JWT.setdefault("AUTH_COOKIE_SECURE", False)
+SIMPLE_JWT.setdefault("AUTH_COOKIE_PATH", "/")
 
 # Email (dev): console backend prints emails in runserver logs
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -213,26 +248,64 @@ DEFAULT_FROM_EMAIL = "no-reply@timely.local"
 # Point to your React app for deep links (change later)
 FRONTEND_URL = "http://localhost:5173"
 
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
 
-# If you use CSRF-protected POSTs later:
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
-
-REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
-    "public_checkout": "5/min",
-    "anon": "60/min",
-    "user": "120/min",
-    "login": "10/min",
-}
+# Throttling rates are configured in REST_FRAMEWORK above
 
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+
+# CORS and CSRF settings are configured above
+
+# Channels configuration: use Redis only if REDIS_URL is set; otherwise in-memory for dev
+if os.environ.get("REDIS_URL"):
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [os.environ.get('REDIS_URL')],
+            },
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
+
+# Real-time Configuration
+REALTIME_CONFIG = {
+    'ENABLE_WEBSOCKETS': True,
+    'NOTIFICATION_INTERVAL': 5,  # seconds
+    'MATCH_UPDATE_INTERVAL': 10,  # seconds
+    'LEADERBOARD_UPDATE_INTERVAL': 30,  # seconds
+}
+
+# Stripe Configuration
+STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', 'pk_test_your_test_key_here')
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', 'sk_test_your_test_key_here')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', 'whsec_your_webhook_secret_here')
+
+# Enhanced Email Configuration for Payment Confirmations
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Console for development
+EMAIL_HOST = 'localhost'
+EMAIL_PORT = 1025
+EMAIL_USE_TLS = False
+
+# Admin branding - will be set in apps.py to avoid "Apps aren't loaded yet" error
+
+# Admin hardening (dev defaults; enable in production)
+SECURE_SSL_REDIRECT = False  # True in prod
+SESSION_COOKIE_SECURE = False  # True in prod
+CSRF_COOKIE_SECURE = False  # True in prod
+
+# Optional: IP allowlist for admin (example)
+# ADMIN_IP_ALLOWLIST = {"127.0.0.1", "::1"}
+# In middleware or a custom AdminSite, enforce request.META['REMOTE_ADDR'] in allowlist.
+
+# Optional 2FA: django-otp integration (stub)
+# INSTALLED_APPS += ["django_otp", "django_otp.plugins.otp_totp"]
+# MIDDLEWARE.insert(0, "django_otp.middleware.OTPMiddleware")
 
