@@ -1,7 +1,15 @@
+from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import MediaViewSet
+from .views import (
+    AlbumViewSet,
+    MediaAssetViewSet,
+)
 
-router = DefaultRouter()
-router.register(r"media", MediaViewSet, basename="media")
+# Admin router
+admin_router = DefaultRouter()
+admin_router.register(r"albums", AlbumViewSet, basename="albums")
+admin_router.register(r"media", MediaAssetViewSet, basename="media")
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("", include(admin_router.urls)),           # Admin CRUD - mounted at /api/gallery/
+]

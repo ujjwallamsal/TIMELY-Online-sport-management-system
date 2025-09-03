@@ -10,8 +10,7 @@ export function AuthProvider({ children }) {
   async function refreshAuth() {
     try {
       // ping cookie session and load /me
-      await api.pingAuth();
-      const me = await api.getMe();
+      const me = await api.getCurrentUser();
       setUser(me);
     } catch {
       setUser(null);
@@ -25,8 +24,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = () => {
-    // open Django login, user returns and clicks “I’m logged in”
-    window.open(api.urls.login, "_blank", "noopener,noreferrer");
+    // open Django login, user returns and clicks "I'm logged in"
+    window.open("http://127.0.0.1:8000/accounts/login/", "_blank", "noopener,noreferrer");
   };
 
   const confirmLoggedIn = async () => {

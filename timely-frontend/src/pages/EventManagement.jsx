@@ -1,602 +1,415 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Badge from '../components/ui/Badge';
+import Input from '../components/ui/Input';
 import { 
-  getMyEvents, 
-  createEvent, 
-  updateEvent, 
+  listEvents, 
   publishEvent, 
   unpublishEvent,
-  getDivisions,
-  getVenues
-} from "../lib/api";
+  deleteEvent 
+} from '../lib/api';
+import { 
+  CalendarIcon, 
+  MapPinIcon, 
+  UserGroupIcon, 
+  EyeIcon,
+  PencilIcon,
+  TrashIcon,
+  EyeSlashIcon,
+  PlusIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon
+} from '@heroicons/react/24/outline';
 
 export default function EventManagement() {
-  const { user, isOrganizer } = useAuth();
-  const { connected } = useWebSocket();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editingEvent, setEditingEvent] = useState(null);
-  const [divisions, setDivisions] = useState([]);
-  const [venues, setVenues] = useState([]);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  
-  // Filters
-  const [filters, setFilters] = useState({
-    status: "",
-    sport_type: "",
-    start_date: "",
-    end_date: ""
-  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sportFilter, setSportFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [actionLoading, setActionLoading] = useState(null);
 
   useEffect(() => {
-    if (isOrganizer) {
-      loadData();
+    if (!user || !['ADMIN', 'ORGANIZER'].includes(user.role)) {
+      navigate('/dashboard');
+      return;
     }
-  }, [isOrganizer]);
+    loadEvents();
+  }, [user, navigate, currentPage, statusFilter, sportFilter]);
 
-  async function loadData() {
+  async function loadEvents() {
     try {
       setLoading(true);
-      const [eventsData, divisionsData, venuesData] = await Promise.all([
-        getMyEvents(),
-        getDivisions(),
-        getVenues()
-      ]);
       
-      setEvents(eventsData?.results || eventsData || []);
-      setDivisions(divisionsData || []);
-      setVenues(venuesData || []);
-    } catch (err) {
-      setError("Failed to load events");
+      const filters = {
+        page: currentPage,
+        search: searchTerm,
+        status: statusFilter,
+        sport_type: sportFilter
+      };
+
+      // If organizer, only show their events
+      if (user.role === 'ORGANIZER') {
+        filters.organizer = user.id;
+      }
+
+      const response = await listEvents({
+        page: currentPage,
+        q: searchTerm,
+        sport: sportFilter,
+        ...filters
+      });
+      
+      setEvents(response.results || []);
+      setTotalPages(Math.ceil((response.count || 0) / 20));
+      
+    } catch (error) {
+      console.error('Error loading events:', error);
     } finally {
       setLoading(false);
     }
   }
 
-  // WebSocket event handling for real-time updates
-  useEffect(() => {
-    if (connected) {
-      // Listen for event.changed messages
-      const handleEventChange = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'event.changed') {
-            loadData(); // Refresh events list
-            setSuccess("Events updated in real-time!");
-            setTimeout(() => setSuccess(""), 3000);
-          }
-        } catch (error) {
-          // Not a JSON message, ignore
-        }
-      };
+  const handleSearch = (e) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    loadEvents();
+  };
 
-      // Add event listener to WebSocket
-      if (window.ws && window.ws.addEventListener) {
-        window.ws.addEventListener('message', handleEventChange);
+  const handlePublishToggle = async (eventId, currentStatus) => {
+    try {
+      setActionLoading(eventId);
+      
+      if (currentStatus === 'PUBLISHED') {
+        await unpublishEvent(eventId);
+      } else {
+        await publishEvent(eventId);
       }
-
-      return () => {
-        if (window.ws && window.ws.removeEventListener) {
-          window.ws.removeEventListener('message', handleEventChange);
-        }
-      };
+      
+      // Reload events to reflect changes
+      await loadEvents();
+      
+    } catch (error) {
+      console.error('Error toggling event status:', error);
+    } finally {
+      setActionLoading(null);
     }
-  }, [connected]);
+  };
 
-  const handlePublish = async (eventId) => {
+  const handleDeleteEvent = async (eventId) => {
+    if (!window.confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
+      return;
+    }
+
     try {
-      await publishEvent(eventId);
-      setSuccess("Event published successfully!");
-      loadData();
-    } catch (err) {
-      setError("Failed to publish event");
+      setActionLoading(eventId);
+      await deleteEvent(eventId);
+      
+      // Reload events to reflect changes
+      await loadEvents();
+      
+    } catch (error) {
+      console.error('Error deleting event:', error);
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const handleUnpublish = async (eventId) => {
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      'DRAFT': { variant: 'warning', text: 'Draft' },
+      'PUBLISHED': { variant: 'success', text: 'Published' },
+      'ONGOING': { variant: 'info', text: 'Live' },
+      'COMPLETED': { variant: 'secondary', text: 'Completed' },
+      'CANCELLED': { variant: 'danger', text: 'Cancelled' }
+    };
+    
+    const config = statusConfig[status] || { variant: 'secondary', text: status };
+    return <Badge variant={config.variant}>{config.text}</Badge>;
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'TBD';
     try {
-      await unpublishEvent(eventId);
-      setSuccess("Event unpublished successfully!");
-      loadData();
-    } catch (err) {
-      setError("Failed to unpublish event");
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return dateString;
     }
   };
 
-  const filteredEvents = events.filter(event => {
-    if (filters.status && event.status !== filters.status) return false;
-    if (filters.sport_type && event.sport_type !== filters.sport_type) return false;
-    if (filters.start_date && event.start_date < filters.start_date) return false;
-    if (filters.end_date && event.end_date > filters.end_date) return false;
-    return true;
-  });
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'DRAFT': return 'bg-gray-100 text-gray-800';
-      case 'PUBLISHED': return 'bg-green-100 text-green-800';
-      case 'UPCOMING': return 'bg-blue-100 text-blue-800';
-      case 'ONGOING': return 'bg-yellow-100 text-yellow-800';
-      case 'COMPLETED': return 'bg-purple-100 text-purple-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const formatPrice = (feeCents) => {
+    if (!feeCents || feeCents === 0) return 'Free';
+    return `$${(feeCents / 100).toFixed(2)}`;
   };
 
-  if (!isOrganizer) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-          <p className="text-gray-600">You need organizer permissions to manage events.</p>
-        </div>
-      </div>
-    );
+  if (!user || !['ADMIN', 'ORGANIZER'].includes(user.role)) {
+    return null;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Event Management</h1>
-              <p className="mt-2 text-sm text-gray-600">
-                Create and manage your sports events
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+              Event Management
+            </h1>
+            <p className="text-xl text-gray-600">
+              Manage your sports events, publish updates, and track registrations
               </p>
             </div>
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+          
+          <Button 
+            as={Link} 
+            to="/create-event" 
+            variant="primary" 
+            size="lg"
+            className="mt-4 sm:mt-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg"
+          >
+            <PlusIcon className="w-5 h-5 mr-2" />
               Create Event
-            </button>
-          </div>
+          </Button>
         </div>
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600">{error}</p>
+        {/* Filters & Search */}
+        <Card className="mb-8 border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+          <div className="p-6">
+            <form onSubmit={handleSearch} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="relative">
+                  <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Input
+                    placeholder="Search events..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
           </div>
-        )}
-        
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-green-600">{success}</p>
-          </div>
-        )}
-
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Filters</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                
+                <Input
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  as="select"
               >
                 <option value="">All Statuses</option>
                 <option value="DRAFT">Draft</option>
                 <option value="PUBLISHED">Published</option>
-                <option value="UPCOMING">Upcoming</option>
-                <option value="ONGOING">Ongoing</option>
+                  <option value="ONGOING">Live</option>
                 <option value="COMPLETED">Completed</option>
                 <option value="CANCELLED">Cancelled</option>
-              </select>
+                </Input>
+                
+                <Input
+                  value={sportFilter}
+                  onChange={(e) => setSportFilter(e.target.value)}
+                  as="select"
+                >
+                  <option value="">All Sports</option>
+                  <option value="Soccer">Soccer</option>
+                  <option value="Football">Football</option>
+                  <option value="Basketball">Basketball</option>
+                  <option value="Tennis">Tennis</option>
+                  <option value="Swimming">Swimming</option>
+                  <option value="Athletics">Athletics</option>
+                </Input>
+                
+                <Button type="submit" variant="primary" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                  <FunnelIcon className="w-5 h-5 mr-2" />
+                  Filter
+                </Button>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sport Type</label>
-              <input
-                type="text"
-                value={filters.sport_type}
-                onChange={(e) => setFilters(prev => ({ ...prev, sport_type: e.target.value }))}
-                placeholder="e.g., Football"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-              <input
-                type="date"
-                value={filters.start_date}
-                onChange={(e) => setFilters(prev => ({ ...prev, start_date: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
-              <input
-                type="date"
-                value={filters.end_date}
-                onChange={(e) => setFilters(prev => ({ ...prev, end_date: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+            </form>
           </div>
-        </div>
+        </Card>
 
         {/* Events List */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">
-              My Events ({filteredEvents.length})
-            </h3>
-          </div>
-          
           {loading ? (
-            <div className="p-6 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-gray-600">Loading events...</p>
+          <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+            <div className="p-12 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading events...</p>
             </div>
-          ) : filteredEvents.length === 0 ? (
-            <div className="p-6 text-center">
-              <p className="text-gray-500">No events found. Create your first event to get started!</p>
+          </Card>
+        ) : events.length > 0 ? (
+          <div className="space-y-6">
+            {events.map((event) => (
+              <Card key={event.id} className="border-0 shadow-lg bg-white/80 backdrop-blur-sm hover:shadow-xl transition-all duration-300" hover>
+                <div className="p-6">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
+                    {/* Event Info */}
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-2xl font-bold text-gray-900 mb-2">{event.name}</h3>
+                          <div className="flex items-center space-x-4 text-gray-600 mb-3">
+                            <div className="flex items-center">
+                              <CalendarIcon className="w-5 h-5 mr-2 text-blue-500" />
+                              <span>{formatDate(event.start_date)} - {formatDate(event.end_date)}</span>
+                            </div>
+                            {event.venue_name && (
+                              <div className="flex items-center">
+                                <MapPinIcon className="w-5 h-5 mr-2 text-green-500" />
+                                <span>{event.venue_name}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          {getStatusBadge(event.status)}
+                          <Badge variant="info">{event.sport_type}</Badge>
             </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {filteredEvents.map((event) => (
-                <div key={event.id} className="p-6 hover:bg-gray-50 transition-colors duration-200">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h4 className="text-lg font-medium text-gray-900 truncate">
-                          {event.name}
-                        </h4>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
-                          {event.status}
-                        </span>
                       </div>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-gray-600">
-                        <div>
-                          <span className="font-medium">Sport:</span> {event.sport_type}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="font-semibold text-gray-900">{event.capacity || '∞'}</div>
+                          <div className="text-gray-600">Capacity</div>
                         </div>
-                        <div>
-                          <span className="font-medium">Venue:</span> {event.venue_name || "TBD"}
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="font-semibold text-gray-900">{formatPrice(event.fee_dollars * 100)}</div>
+                          <div className="text-gray-600">Fee</div>
                         </div>
-                        <div>
-                          <span className="font-medium">Dates:</span> {event.start_date} - {event.end_date}
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="font-semibold text-gray-900">{event.registration_count || 0}</div>
+                          <div className="text-gray-600">Registered</div>
                         </div>
-                        <div>
-                          <span className="font-medium">Fee:</span> ${event.fee_dollars || 0}
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="font-semibold text-gray-900">
+                            {event.is_registration_open ? 'Open' : 'Closed'}
+                          </div>
+                          <div className="text-gray-600">Registration</div>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="mt-4 lg:mt-0 lg:ml-6 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                      <Link
+                    {/* Actions */}
+                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 lg:flex-col lg:space-x-0 lg:space-y-2">
+                      <Button
+                        as={Link}
                         to={`/events/${event.id}`}
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
                       >
+                        <EyeIcon className="w-4 h-4 mr-2" />
                         View
-                      </Link>
+                      </Button>
                       
-                      <button
-                        onClick={() => setEditingEvent(event)}
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                      <Button
+                        as={Link}
+                        to={`/events/${event.id}/edit`}
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
                       >
+                        <PencilIcon className="w-4 h-4 mr-2" />
                         Edit
-                      </button>
+                      </Button>
                       
-                      {event.status === 'DRAFT' && (
-                        <button
-                          onClick={() => handlePublish(event.id)}
-                          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200"
-                        >
+                      <Button
+                        onClick={() => handlePublishToggle(event.id, event.status)}
+                        variant={event.status === 'PUBLISHED' ? 'warning' : 'success'}
+                        size="sm"
+                        loading={actionLoading === event.id}
+                        className="w-full sm:w-auto"
+                      >
+                        {event.status === 'PUBLISHED' ? (
+                          <>
+                            <EyeSlashIcon className="w-4 h-4 mr-2" />
+                            Unpublish
+                          </>
+                        ) : (
+                          <>
+                            <EyeIcon className="w-4 h-4 mr-2" />
                           Publish
-                        </button>
-                      )}
+                          </>
+                        )}
+                      </Button>
                       
-                      {event.status === 'PUBLISHED' && (
-                        <button
-                          onClick={() => handleUnpublish(event.id)}
-                          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors duration-200"
-                        >
-                          Unpublish
-                        </button>
-                      )}
+                      <Button
+                        onClick={() => handleDeleteEvent(event.id)}
+                        variant="danger"
+                        size="sm"
+                        loading={actionLoading === event.id}
+                        className="w-full sm:w-auto"
+                      >
+                        <TrashIcon className="w-4 h-4 mr-2" />
+                        Delete
+                      </Button>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Create/Edit Event Modal */}
-        {(showCreateForm || editingEvent) && (
-          <EventForm
-            event={editingEvent}
-            divisions={divisions}
-            venues={venues}
-            onClose={() => {
-              setShowCreateForm(false);
-              setEditingEvent(null);
-            }}
-            onSuccess={() => {
-              setShowCreateForm(false);
-              setEditingEvent(null);
-              loadData();
-              setSuccess(editingEvent ? "Event updated successfully!" : "Event created successfully!");
-            }}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Event Form Component
-function EventForm({ event, divisions, venues, onClose, onSuccess }) {
-  const [formData, setFormData] = useState({
-    name: event?.name || "",
-    sport_type: event?.sport_type || "",
-    description: event?.description || "",
-    start_date: event?.start_date || "",
-    end_date: event?.end_date || "",
-    venue: event?.venue || "",
-    capacity: event?.capacity || 100,
-    fee_cents: event?.fee_cents || 0,
-    registration_open: event?.registration_open || "",
-    registration_close: event?.registration_close || "",
-    divisions: event?.divisions || [],
-    eligibility_notes: event?.eligibility_notes || "",
-    rules_and_regulations: event?.rules_and_regulations || ""
-  });
-  
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({});
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrors({});
-
-    try {
-      if (event) {
-        await updateEvent(event.id, formData);
-      } else {
-        await createEvent(formData);
-      }
-      onSuccess();
-    } catch (err) {
-      if (err.errors) {
-        setErrors(err.errors);
-      } else {
-        setErrors({ general: err.message || "Failed to save event" });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateField = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-lg bg-white">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold text-gray-900">
-            {event ? "Edit Event" : "Create New Event"}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {errors.general && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600">{errors.general}</p>
+              </Card>
+            ))}
           </div>
+        ) : (
+          <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+            <div className="p-12 text-center">
+              <div className="text-6xl mb-6">🎯</div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">No events found</h3>
+              <p className="text-gray-600 mb-8 text-lg">
+                {searchTerm || statusFilter || sportFilter 
+                  ? 'Try adjusting your filters or search terms.'
+                  : 'Create your first event to get started!'
+                }
+              </p>
+              <Button 
+                as={Link} 
+                to="/create-event" 
+                variant="primary" 
+                size="lg"
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+              >
+                <PlusIcon className="w-5 h-5 mr-2" />
+                Create Event
+              </Button>
+            </div>
+          </Card>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Event Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => updateField("name", e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.name ? "border-red-300" : "border-gray-300"
-                }`}
-                placeholder="Summer Football Championship"
-              />
-              {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Card className="mt-8 border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+            <div className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  Page {currentPage} of {totalPages}
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Sport Type <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.sport_type}
-                onChange={(e) => updateField("sport_type", e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.sport_type ? "border-red-300" : "border-gray-300"
-                }`}
-                placeholder="Football"
-              />
-              {errors.sport_type && <p className="mt-1 text-sm text-red-600">{errors.sport_type}</p>}
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
             </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => updateField("description", e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Describe your event..."
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Start Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.start_date}
-                onChange={(e) => updateField("start_date", e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.start_date ? "border-red-300" : "border-gray-300"
-                }`}
-              />
-              {errors.start_date && <p className="mt-1 text-sm text-red-600">{errors.start_date}</p>}
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                End Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.end_date}
-                onChange={(e) => updateField("end_date", e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.end_date ? "border-red-300" : "border-gray-300"
-                }`}
-              />
-              {errors.end_date && <p className="mt-1 text-sm text-red-600">{errors.end_date}</p>}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Venue</label>
-              <select
-                value={formData.venue}
-                onChange={(e) => updateField("venue", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select a venue</option>
-                {venues.map(venue => (
-                  <option key={venue.id} value={venue.id}>{venue.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Capacity <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                min="1"
-                value={formData.capacity}
-                onChange={(e) => updateField("capacity", parseInt(e.target.value))}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.capacity ? "border-red-300" : "border-gray-300"
-                }`}
-              />
-              {errors.capacity && <p className="mt-1 text-sm text-red-600">{errors.capacity}</p>}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fee (USD)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.fee_cents / 100}
-                onChange={(e) => updateField("fee_cents", Math.round(parseFloat(e.target.value || 0) * 100))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0.00"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Divisions</label>
-              <select
-                multiple
-                value={formData.divisions}
-                onChange={(e) => updateField("divisions", Array.from(e.target.selectedOptions, option => option.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {divisions.map(division => (
-                  <option key={division.id} value={division.id}>{division.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Registration Open</label>
-              <input
-                type="datetime-local"
-                value={formData.registration_open}
-                onChange={(e) => updateField("registration_open", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Registration Close</label>
-              <input
-                type="datetime-local"
-                value={formData.registration_close}
-                onChange={(e) => updateField("registration_close", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-            >
-              {loading ? "Saving..." : (event ? "Update Event" : "Create Event")}
-            </button>
-          </div>
-        </form>
+          </Card>
+        )}
       </div>
     </div>
   );

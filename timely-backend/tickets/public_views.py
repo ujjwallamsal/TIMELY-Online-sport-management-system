@@ -8,7 +8,7 @@ from rest_framework import status, permissions, throttling
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from fixtures.models import Match
+from fixtures.models import Fixture
 from .models import Ticket
 from .serializers import TicketSerializer
 
@@ -56,15 +56,15 @@ class PublicCheckoutView(APIView):
 
         # Match lookup
         try:
-            match = Match.objects.select_related("event", "venue").get(pk=match_id)
-        except Match.DoesNotExist:
+            fixture = Fixture.objects.select_related("event", "venue").get(pk=fixture_id)
+        except Fixture.DoesNotExist:
             return Response({"detail": "match not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # (Optional) capacity control via venue.capacity (or add match.capacity later)
-        cap = getattr(match.venue, "capacity", None)
+        # (Optional) capacity control via venue.capacity (or add fixture.capacity later)
+        cap = getattr(fixture.venue, "capacity", None)
         if cap:
             sold = (
-                Ticket.objects.filter(match=match, status=Ticket.Status.ACTIVE)
+                Ticket.objects.filter(fixture=fixture, status=Ticket.Status.ACTIVE)
                 .aggregate(n=Sum("quantity"))["n"] or 0
             )
             if sold + quantity > cap:

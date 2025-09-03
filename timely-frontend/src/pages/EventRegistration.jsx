@@ -3,9 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   getEvent, 
-  getDivisions, 
-  createRegistration, 
-  uploadDocument 
+  listDivisions, 
+  createRegistration
 } from '../lib/api';
 
 const DOCUMENT_TYPES = [
@@ -72,10 +71,10 @@ export default function EventRegistration() {
       setLoading(true);
       const [eventData, divisionsData] = await Promise.all([
         getEvent(eventId),
-        getDivisions()
+        listDivisions(eventId)
       ]);
       setEvent(eventData);
-      setDivisions(divisionsData || []);
+      setDivisions(divisionsData?.results || divisionsData || []);
     } catch (err) {
       setError('Failed to load event details');
     } finally {
@@ -266,33 +265,11 @@ export default function EventRegistration() {
       const registration = await createRegistration(registrationData);
       setRegistrationId(registration.id);
       
-      // Upload documents
-      for (const [docType, docData] of Object.entries(documents)) {
-        if (docData.file && docData.uploaded) {
-          const docTypeInfo = DOCUMENT_TYPES.find(dt => dt.value === docType);
-          await uploadDocument(
-            registration.id,
-            docData.file,
-            docType,
-            docTypeInfo.label,
-            docTypeInfo.description
-          );
-        }
-      }
+      // Upload documents - TODO: Implement document upload API
+      console.log('Document upload to be implemented');
       
-      // Upload KYC documents
-      for (const [docType, docData] of Object.entries(kycDocuments)) {
-        if (docData.file && docData.uploaded) {
-          const docTypeInfo = KYC_DOCUMENT_TYPES.find(dt => dt.value === docType);
-          await uploadDocument(
-            registration.id,
-            docData.file,
-            docType,
-            docTypeInfo.label,
-            docTypeInfo.description
-          );
-        }
-      }
+      // Upload KYC documents - TODO: Implement KYC document upload API
+      console.log('KYC document upload to be implemented');
       
       setCurrentStep(5); // Success step
     } catch (err) {

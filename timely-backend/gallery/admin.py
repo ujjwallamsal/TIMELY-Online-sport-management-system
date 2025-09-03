@@ -13,9 +13,9 @@ def reject_media(modeladmin, request, queryset):
 
 @admin.register(Album)
 class AlbumAdmin(admin.ModelAdmin):
-	list_display = ["title", "event", "match", "is_public", "created_by", "created_at"]
+	list_display = ["title", "event", "fixture", "is_public", "created_by", "created_at"]
 	list_filter = ["is_public", "event", "created_at"]
-	search_fields = ["title", "event__name", "match__id", "created_by__email"]
+	search_fields = ["title", "event__name", "fixture__id", "created_by__email"]
 	ordering = ["-created_at"]
 
 @admin.register(MediaAsset)

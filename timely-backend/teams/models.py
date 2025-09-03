@@ -10,6 +10,24 @@ class Team(models.Model):
     sport = models.CharField(max_length=100, help_text="Sport this team plays")
     description = models.TextField(blank=True)
     
+    # Team Management
+    manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='managed_teams',
+        help_text="Team manager"
+    )
+    coach = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='coached_teams',
+        help_text="Team coach (optional)"
+    )
+    contact_email = models.EmailField(help_text="Team contact email")
+    contact_phone = models.CharField(max_length=20, blank=True, help_text="Team contact phone")
+    
     # Team Details
     founded_date = models.DateField(null=True, blank=True)
     home_venue = models.ForeignKey('venues.Venue', on_delete=models.SET_NULL, null=True, blank=True, related_name='home_teams')
@@ -33,8 +51,10 @@ class Team(models.Model):
     class Meta:
         ordering = ['name']
         indexes = [
-            models.Index(fields=['sport', 'is_active']),
-            models.Index(fields=['created_by']),
+            models.Index(fields=['name']),
+            models.Index(fields=['sport', 'name']),
+            models.Index(fields=['manager']),
+            models.Index(fields=['coach']),
         ]
     
     def __str__(self):
@@ -76,21 +96,30 @@ class TeamMember(models.Model):
         SUPPORT = "SUPPORT", "Support Staff"
     
     class Status(models.TextChoices):
-        ACTIVE = "ACTIVE", "Active"
-        INACTIVE = "INACTIVE", "Inactive"
+        ACTIVE = "active", "Active"
+        INACTIVE = "inactive", "Inactive"
         SUSPENDED = "SUSPENDED", "Suspended"
         INJURED = "INJURED", "Injured"
     
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='members')
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='team_memberships')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='team_memberships',
+        null=True,
+        blank=True,
+        help_text="Linked user account (optional for standalone profiles)"
+    )
+    
+    # Member Details
+    full_name = models.CharField(max_length=255, help_text="Full name of the team member")
+    date_of_birth = models.DateField(null=True, blank=True, help_text="Date of birth for age verification")
+    position = models.CharField(max_length=100, blank=True, help_text="Player position (e.g., Forward, Defender)")
+    jersey_number = models.PositiveIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(99)])
     
     # Role and Status
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.PLAYER)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
-    
-    # Team Details
-    jersey_number = models.PositiveIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(99)])
-    position = models.CharField(max_length=100, blank=True, help_text="Player position (e.g., Forward, Defender)")
     
     # Dates
     joined_date = models.DateField(default=timezone.now)
@@ -114,7 +143,8 @@ class TeamMember(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.team.name} ({self.get_role_display()})"
+        name = self.user.get_full_name() if self.user else self.full_name
+        return f"{name} - {self.team.name} ({self.get_role_display()})"
     
     @property
     def is_active_member(self):
@@ -251,5 +281,95 @@ class TeamInvitation(models.Model):
         
         self.status = self.Status.DECLINED
         self.responded_at = timezone.now()
+        self.save()
+        return True
+
+
+class TeamEventEntry(models.Model):
+    """Team entry to events/divisions"""
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+    
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='event_entries')
+    event = models.ForeignKey('events.Event', on_delete=models.CASCADE, related_name='team_entries')
+    division = models.ForeignKey(
+        'events.Division', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True,
+        related_name='team_entries',
+        help_text="Specific division (optional)"
+    )
+    
+    # Entry Status
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    note = models.TextField(blank=True, help_text="Additional notes or comments")
+    
+    # Decision tracking
+    decided_at = models.DateTimeField(null=True, blank=True, help_text="When the entry was decided")
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='decided_team_entries',
+        help_text="User who made the decision"
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['team', 'event', 'division']
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['team', 'event', 'status']),
+            models.Index(fields=['event', 'status']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self):
+        division_str = f" - {self.division.name}" if self.division else ""
+        return f"{self.team.name} → {self.event.name}{division_str} ({self.get_status_display()})"
+    
+    def approve(self, decided_by, note=""):
+        """Approve the team entry"""
+        if self.status not in [self.Status.PENDING]:
+            return False
+        
+        self.status = self.Status.APPROVED
+        self.decided_at = timezone.now()
+        self.decided_by = decided_by
+        if note:
+            self.note = note
+        self.save()
+        return True
+    
+    def reject(self, decided_by, note=""):
+        """Reject the team entry"""
+        if self.status not in [self.Status.PENDING]:
+            return False
+        
+        self.status = self.Status.REJECTED
+        self.decided_at = timezone.now()
+        self.decided_by = decided_by
+        if note:
+            self.note = note
+        self.save()
+        return True
+    
+    def withdraw(self, note=""):
+        """Withdraw the team entry"""
+        if self.status not in [self.Status.PENDING, self.Status.APPROVED]:
+            return False
+        
+        self.status = self.Status.WITHDRAWN
+        self.decided_at = timezone.now()
+        if note:
+            self.note = note
         self.save()
         return True

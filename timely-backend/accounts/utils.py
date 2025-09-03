@@ -34,19 +34,19 @@ def send_password_reset_email(user):
     )
 
 
-def get_client_ip(request: HttpRequest) -> Optional[str]:
+def get_client_ip(request: HttpRequest) -> str:
     """Get client IP address from request"""
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
         ip = x_forwarded_for.split(',')[0]
     else:
         ip = request.META.get('REMOTE_ADDR')
-    return ip
+    return ip or 'unknown'
 
 
-def get_user_agent(request: HttpRequest) -> Optional[str]:
+def get_user_agent(request: HttpRequest) -> str:
     """Get user agent from request"""
-    return request.META.get('HTTP_USER_AGENT', '')[:500]  # Limit length
+    return request.META.get('HTTP_USER_AGENT', 'unknown')
 
 
 def is_ajax_request(request: HttpRequest) -> bool:

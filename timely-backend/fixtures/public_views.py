@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from rest_framework import viewsets, permissions, filters
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q
 
 from .models import Match
 from .serializers import MatchSerializer
@@ -10,21 +11,22 @@ from .serializers import MatchSerializer
 
 class PublicMatchViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    FR42 — Public schedules/fixtures.
+    Public schedules/fixtures - read-only access to published matches.
     """
     permission_classes = [permissions.AllowAny]
+    authentication_classes = []
     serializer_class = MatchSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["event", "division", "status", "venue_id", "round_no"]
+    search_fields = ["event__name", "note"]
+    ordering_fields = ["starts_at", "round_no", "sequence_no"]
+    ordering = ["starts_at", "round_no", "sequence_no"]
 
-    queryset = (
-        Match.objects
-        .select_related("fixture", "venue")
-        .prefetch_related("entries")
-        .filter(is_published=True)
-        .all()
-        .order_by("scheduled_at")
-    )
-
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["fixture", "venue", "status", "round_number"]
-    ordering_fields = ["scheduled_at", "round_number", "match_number"]
-    ordering = ["scheduled_at"]
+    def get_queryset(self):
+        """Return only published matches from published events"""
+        return Fixture.objects.filter(
+            status=Fixture.Status.PUBLISHED,
+            event__lifecycle_status='published'
+        ).select_related(
+            "event", "venue"
+        )

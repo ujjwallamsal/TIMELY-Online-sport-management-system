@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.core.exceptions import ValidationError
 
-from .models import Fixture, Match, MatchEntry
+from .models import Fixture, FixtureEntry
 from venues.models import Venue
 from teams.models import Team
 from registrations.models import Registration

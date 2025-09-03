@@ -10,7 +10,7 @@ from rest_framework.response import Response
 
 from accounts.models import User
 from events.models import Event
-from fixtures.models import Match
+from fixtures.models import Fixture
 from tickets.models import Ticket
 from results.models import Result
 from payments.models import PaymentIntent
@@ -33,7 +33,7 @@ class AdminOverviewView(APIView):
             "totals": {
                 "users": User.objects.count(),
                 "events": Event.objects.count(),
-                "matches": Match.objects.count(),
+                "fixtures": Fixture.objects.count(),
                 "tickets": Ticket.objects.count(),
                 "results": Result.objects.count(),
                 "payments": PaymentIntent.objects.count(),
@@ -56,9 +56,9 @@ class AdminOverviewView(APIView):
                     end_date__gte=now.date(),
                 ).count(),
                 # Matches starting within the next 7 days
-                "matches_next_7d": Match.objects.filter(
-                    start_time__gte=now, start_time__lte=next_7d
-                ).order_by("start_time").count(),
+                "fixtures_next_7d": Fixture.objects.filter(
+                    starts_at__gte=now, starts_at__lte=next_7d
+                ).order_by("starts_at").count(),
             },
         }
         return Response(data)

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import { api } from "../lib/api";
+import api from "../lib/api";
 
 const AuthContext = createContext();
 
@@ -8,15 +8,22 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    checkAuthStatus();
+    // Temporarily disable automatic auth check to prevent refresh loops
+    // checkAuthStatus();
+    setLoading(false);
   }, []);
 
   const checkAuthStatus = async () => {
     try {
-      const { data } = await api.get('/accounts/users/me/');
+      // With cookie-based auth, we don't need to check localStorage
+      // The cookies are sent automatically with withCredentials: true
+      const { data } = await api.get('accounts/users/me/');
       setUser(data);
     } catch (error) {
-      console.log('Auth check failed:', error.message);
+      // Don't log 401 errors as they're expected for unauthenticated users
+      if (error.response?.status !== 401) {
+        console.log('Auth check failed:', error.message);
+      }
       setUser(null);
     } finally {
       setLoading(false);
@@ -27,31 +34,16 @@ export function AuthProvider({ children }) {
     const payload = /@/.test(emailOrUsername) ? { email: emailOrUsername, password } : { username: emailOrUsername, password };
     console.log('Login attempt with payload:', payload);
     try {
-      // First, get a CSRF token if we don't have one
-      let csrfToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('csrftoken='))
-        ?.split('=')[1];
-      
-      if (!csrfToken) {
-        console.log('No CSRF token found, getting one from backend...');
-        try {
-          // Make a GET request to get the CSRF token
-          await api.get('/');
-          csrfToken = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('csrftoken='))
-            ?.split('=')[1];
-          console.log('CSRF token obtained:', csrfToken ? 'Yes' : 'No');
-        } catch (error) {
-          console.warn('Failed to get CSRF token:', error);
-        }
-      }
-      
-      const { data } = await api.post('/accounts/auth/login/', payload);
+      const { data } = await api.post('accounts/auth/login/', payload);
       console.log('Login successful:', data);
-      setUser(data.user);
-      return data.user;
+      
+      // With cookie-based auth, tokens are automatically set in cookies by the backend
+      // No need to handle localStorage or Authorization headers
+      
+      // Handle both possible response formats
+      const userData = data.user || data;
+      setUser(userData);
+      return userData;
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -60,68 +52,45 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      // First, get a CSRF token if we don't have one
-      let csrfToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('csrftoken='))
-        ?.split('=')[1];
-      
-      if (!csrfToken) {
-        console.log('No CSRF token found for logout, getting one from backend...');
-        try {
-          // Make a GET request to get the CSRF token
-          await api.get('/');
-          csrfToken = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('csrftoken='))
-            ?.split('=')[1];
-          console.log('CSRF token obtained for logout:', csrfToken ? 'Yes' : 'No');
-        } catch (error) {
-          console.warn('Failed to get CSRF token for logout:', error);
-        }
-      }
-      
-      window.__LOGGED_OUT__ = true;
-      await api.post('/accounts/auth/logout/');
+      await api.post('accounts/auth/logout/');
     } finally {
+      // With cookie-based auth, cookies are cleared by the backend
+      // Just clear the user state
       setUser(null);
     }
   };
 
   const signup = async ({ email, password, password_confirm, first_name = '', last_name = '', role = 'SPECTATOR' }) => {
-    // First, get a CSRF token if we don't have one
-    let csrfToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('csrftoken='))
-      ?.split('=')[1];
-    
-    if (!csrfToken) {
-      console.log('No CSRF token found for signup, getting one from backend...');
-      try {
-        // Make a GET request to get the CSRF token
-        await api.get('/');
-        csrfToken = document.cookie
-          .split('; ')
-          .find(row => row.startsWith('csrftoken='))
-          ?.split('=')[1];
-        console.log('CSRF token obtained for signup:', csrfToken ? 'Yes' : 'No');
-      } catch (error) {
-        console.warn('Failed to get CSRF token for signup:', error);
-      }
+    try {
+      const { data } = await api.post('accounts/auth/register/', { 
+        email, 
+        password, 
+        password_confirm, 
+        first_name, 
+        last_name, 
+        role 
+      });
+      // Auto login after successful registration
+      await login(email, password);
+      return data;
+    } catch (error) {
+      console.error('Signup failed:', error);
+      throw error;
     }
-    
-    const { data } = await api.post('/accounts/auth/register/', { email, password, password_confirm, first_name, last_name, role });
-    // auto login
-    await login(email, password);
-    return data;
   };
 
   const refreshUser = async () => {
-    const { data } = await api.get('/accounts/users/me/');
-    setUser(data);
-    return data;
+    try {
+      const { data } = await api.get('accounts/users/me/');
+      setUser(data);
+      return data;
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+      throw error;
+    }
   };
 
+  // Remove duplicate getMe function - use refreshUser instead
   const value = {
     user,
     loading,
@@ -129,6 +98,7 @@ export function AuthProvider({ children }) {
     logout,
     signup,
     refreshUser,
+    getMe: refreshUser, // Alias to prevent breaking existing code
     isAuthenticated: !!user,
   };
 

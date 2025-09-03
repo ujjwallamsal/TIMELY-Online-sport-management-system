@@ -1,382 +1,379 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getVenues, getDivisions, createEvent } from '../lib/api';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import { 
+  createEvent, 
+  listVenues
+} from '../lib/api';
+import { 
+  CalendarIcon, 
+  MapPinIcon, 
+  CurrencyDollarIcon,
+  DocumentTextIcon,
+  PhotoIcon,
+  PlusIcon
+} from '@heroicons/react/24/outline';
 
 export default function CreateEvent() {
-  const navigate = useNavigate();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [venues, setVenues] = useState([]);
   const [divisions, setDivisions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     name: '',
-    sport_type: '',
+    sport: '',
     description: '',
-    start_date: '',
-    end_date: '',
-    registration_open: '',
-    registration_close: '',
+    start_datetime: '',
+    end_datetime: '',
+    registration_close_at: '',
+    location: '',
     venue: '',
-    capacity: 100,
-    fee_cents: 0,
-    divisions: [],
-    eligibility_notes: '',
-    rules_and_regulations: ''
+    capacity: 0,
+    registration_fee_cents: 0,
+    cover_image: null
   });
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!user || !['ADMIN', 'ORGANIZER'].includes(user.role)) {
+      navigate('/dashboard');
+      return;
+    }
+    loadFormData();
+  }, [user, navigate]);
 
-  async function loadData() {
+  async function loadFormData() {
     try {
-      setLoading(true);
-      const [venuesData, divisionsData] = await Promise.all([
-        getVenues(),
-        getDivisions()
-      ]);
+      const venuesData = await listVenues();
       setVenues(venuesData || []);
-      setDivisions(divisionsData || []);
-    } catch (err) {
-      setError('Failed to load venues and divisions');
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Error loading form data:', error);
     }
   }
 
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    
-    if (type === 'checkbox') {
-      const checked = e.target.checked;
-      if (name === 'divisions') {
-        const divisionId = parseInt(value);
-        setFormData(prev => ({
-          ...prev,
-          divisions: checked 
-            ? [...prev.divisions, divisionId]
-            : prev.divisions.filter(id => id !== divisionId)
-        }));
-      }
-    } else if (type === 'number') {
-      setFormData(prev => ({
-        ...prev,
-        [name]: parseInt(value) || 0
-      }));
+  const handleInputChange = (e) => {
+    const { name, value, type, files } = e.target;
+    if (type === 'file') {
+      setFormData(prev => ({ ...prev, [name]: files[0] }));
     } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
   const validateForm = () => {
-    const errors = [];
+    const newErrors = {};
     
-    if (!formData.name.trim()) errors.push('Event name is required');
-    if (!formData.sport_type.trim()) errors.push('Sport type is required');
-    if (!formData.start_date) errors.push('Start date is required');
-    if (!formData.end_date) errors.push('End date is required');
-    if (!formData.venue) errors.push('Venue is required');
-    if (formData.capacity < 1) errors.push('Capacity must be at least 1');
-    if (formData.fee_cents < 0) errors.push('Fee cannot be negative');
+    if (!formData.name.trim()) newErrors.name = 'Event name is required';
+    if (!formData.sport) newErrors.sport = 'Sport type is required';
+    if (!formData.description.trim()) newErrors.description = 'Description is required';
+    if (!formData.start_datetime) newErrors.start_datetime = 'Start date is required';
+    if (!formData.end_datetime) newErrors.end_datetime = 'End date is required';
+    if (!formData.registration_close_at) newErrors.registration_close_at = 'Registration deadline is required';
+    if (!formData.location.trim()) newErrors.location = 'Location is required';
+    if (!formData.capacity || formData.capacity <= 0) newErrors.capacity = 'Capacity must be greater than 0';
     
-    if (formData.start_date && formData.end_date && formData.start_date > formData.end_date) {
-      errors.push('End date must be after start date');
+    // Date validation
+    if (formData.start_datetime && formData.end_datetime && formData.start_datetime >= formData.end_datetime) {
+      newErrors.end_datetime = 'End date must be after start date';
     }
     
-    if (formData.registration_close && formData.start_date && 
-        new Date(formData.registration_close) > new Date(formData.start_date)) {
-      errors.push('Registration must close before event starts');
+    if (formData.registration_close_at && formData.start_datetime && formData.registration_close_at >= formData.start_datetime) {
+      newErrors.registration_close_at = 'Registration deadline must be before event start';
     }
-    
-    return errors;
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const errors = validateForm();
-    if (errors.length > 0) {
-      setError(errors.join(', '));
-      return;
-    }
-    
+    if (!validateForm()) return;
+
     try {
-      setSaving(true);
-      setError('');
+      setLoading(true);
       
-      // Convert fee to cents
+      // Prepare data for submission
       const eventData = {
         ...formData,
-        fee_cents: Math.round(parseFloat(formData.fee_cents) * 100)
+        capacity: parseInt(formData.capacity) || 0,
+        registration_fee_cents: parseInt(formData.registration_fee_cents) || 0,
+        is_published: false, // Start as draft
+        status: 'DRAFT'
       };
+
+      // Remove cover_image from main data (will be handled separately)
+      delete eventData.cover_image;
+
+      const response = await createEvent(eventData);
       
-      await createEvent(eventData);
-      navigate('/manage-events');
-    } catch (err) {
-      setError(err.message || 'Failed to create event');
+      // Handle cover image upload if present
+      if (formData.cover_image) {
+        // TODO: Implement image upload
+        console.log('Cover image upload to be implemented');
+      }
+
+      // Redirect to the created event
+      navigate(`/events/${response.data.id}`);
+      
+    } catch (error) {
+      console.error('Error creating event:', error);
+      if (error.response?.data) {
+        setErrors(error.response.data);
+      } else {
+        setErrors({ general: 'Failed to create event. Please try again.' });
+      }
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="page-wrap">
-        <div className="card">
-          <div className="card-body text-center py-8">
-            <div className="loading-spinner"></div>
-            <p className="mt-3">Loading venues and divisions...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const sportTypes = [
+    'Soccer', 'Football', 'Basketball', 'Tennis', 'Swimming', 'Athletics',
+    'Cricket', 'Baseball', 'Volleyball', 'Hockey', 'Golf', 'Rugby',
+    'Badminton', 'Table Tennis', 'Boxing', 'Martial Arts', 'Cycling', 'Rowing'
+  ];
 
-  if (!user || !['ORGANIZER', 'ADMIN'].includes(user.role)) {
-    return (
-      <div className="page-wrap">
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-6xl mb-4">🚫</div>
-            <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
-            <p className="text-gray-600">You need organizer privileges to create events.</p>
-          </div>
-        </div>
-      </div>
-    );
+  if (!user || !['ADMIN', 'ORGANIZER'].includes(user.role)) {
+    return null;
   }
 
   return (
-    <div className="page-wrap">
-      <div className="card">
-        <div className="card-header">
-          <h1>Create New Event</h1>
-          <p className="text-gray-600">Fill in the details below to create your event</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+            Create New Event
+          </h1>
+          <p className="text-xl text-gray-600">
+            Set up your sports event with all the details participants need to know
+          </p>
         </div>
-        <div className="card-body">
-          {error && <div className="error-message mb-4"><p>{error}</p></div>}
-          
-          <form onSubmit={handleSubmit} className="space-y-6">
+
+        <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <form onSubmit={handleSubmit} className="p-8 space-y-8">
             {/* Basic Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="form-label">Event Name *</label>
-                <input
-                  type="text"
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-900 border-b border-gray-200 pb-3">
+                Basic Information
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Event Name *"
                   name="name"
                   value={formData.name}
-                  onChange={handleChange}
-                  required
-                  className="form-input"
+                  onChange={handleInputChange}
+                  error={errors.name}
                   placeholder="e.g., Summer Soccer Championship"
-                />
-              </div>
-              
-              <div>
-                <label className="form-label">Sport Type *</label>
-                <input
-                  type="text"
-                  name="sport_type"
-                  value={formData.sport_type}
-                  onChange={handleChange}
                   required
-                  className="form-input"
-                  placeholder="e.g., Soccer, Basketball, Swimming"
                 />
+                
+                <Input
+                  label="Sport Type *"
+                  name="sport"
+                  value={formData.sport}
+                  onChange={handleInputChange}
+                  error={errors.sport}
+                  required
+                  as="select"
+                >
+                  <option value="">Select Sport</option>
+                  {sportTypes.map(sport => (
+                    <option key={sport} value={sport}>{sport}</option>
+                  ))}
+                </Input>
               </div>
-            </div>
 
-            <div>
-              <label className="form-label">Description</label>
-              <textarea
+              <Input
+                label="Description *"
                 name="description"
                 value={formData.description}
-                onChange={handleChange}
-                rows={3}
-                className="form-input"
-                placeholder="Describe your event..."
+                onChange={handleInputChange}
+                error={errors.description}
+                placeholder="Describe your event, rules, prizes, and what participants can expect..."
+                as="textarea"
+                rows={4}
+                required
               />
             </div>
 
-            {/* Dates */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="form-label">Start Date *</label>
-                <input
-                  type="date"
-                  name="start_date"
-                  value={formData.start_date}
-                  onChange={handleChange}
-                  required
-                  className="form-input"
-                  min={new Date().toISOString().split('T')[0]}
-                />
-              </div>
+            {/* Dates & Schedule */}
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-900 border-b border-gray-200 pb-3">
+                Dates & Schedule
+              </h2>
               
-              <div>
-                <label className="form-label">End Date *</label>
-                <input
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Input
+                  label="Start Date *"
+                  name="start_datetime"
                   type="date"
-                  name="end_date"
-                  value={formData.end_date}
-                  onChange={handleChange}
+                  value={formData.start_datetime}
+                  onChange={handleInputChange}
+                  error={errors.start_datetime}
                   required
-                  className="form-input"
-                  min={formData.start_date || new Date().toISOString().split('T')[0]}
+                />
+                
+                <Input
+                  label="End Date *"
+                  name="end_datetime"
+                  type="date"
+                  value={formData.end_datetime}
+                  onChange={handleInputChange}
+                  error={errors.end_datetime}
+                  required
+                />
+                
+                <Input
+                  label="Registration Deadline *"
+                  name="registration_close_at"
+                  type="date"
+                  value={formData.registration_close_at}
+                  onChange={handleInputChange}
+                  error={errors.registration_close_at}
+                  required
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="form-label">Registration Opens</label>
-                <input
-                  type="datetime-local"
-                  name="registration_open"
-                  value={formData.registration_open}
-                  onChange={handleChange}
-                  className="form-input"
-                />
-              </div>
+            {/* Venue & Capacity */}
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-900 border-b border-gray-200 pb-3">
+                Venue & Capacity
+              </h2>
               
-              <div>
-                <label className="form-label">Registration Closes</label>
-                <input
-                  type="datetime-local"
-                  name="registration_close"
-                  value={formData.registration_close}
-                  onChange={handleChange}
-                  className="form-input"
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Location *"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleInputChange}
+                  error={errors.location}
+                  placeholder="e.g., Main Stadium, City Center"
+                  required
                 />
-              </div>
-            </div>
-
-            {/* Venue and Capacity */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="form-label">Venue *</label>
-                <select
+                
+                <Input
+                  label="Venue (Optional)"
                   name="venue"
                   value={formData.venue}
-                  onChange={handleChange}
-                  required
-                  className="form-input"
+                  onChange={handleInputChange}
+                  error={errors.venue}
+                  as="select"
                 >
-                  <option value="">Select a venue</option>
+                  <option value="">Select Venue</option>
                   {venues.map(venue => (
-                    <option key={venue.id} value={venue.id}>
-                      {venue.name}
-                    </option>
+                    <option key={venue.id} value={venue.id}>{venue.name}</option>
                   ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="form-label">Capacity *</label>
-                <input
-                  type="number"
+                </Input>
+                
+                <Input
+                  label="Maximum Capacity *"
                   name="capacity"
+                  type="number"
                   value={formData.capacity}
-                  onChange={handleChange}
-                  required
+                  onChange={handleInputChange}
+                  error={errors.capacity}
+                  placeholder="e.g., 100"
                   min="1"
-                  max="10000"
-                  className="form-input"
+                  required
                 />
               </div>
             </div>
 
-            {/* Financial */}
-            <div>
-              <label className="form-label">Registration Fee (USD)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-                <input
+            {/* Registration & Pricing */}
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-900 border-b border-gray-200 pb-3">
+                Registration & Pricing
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Registration Fee (USD)"
+                  name="registration_fee_cents"
                   type="number"
-                  name="fee_cents"
-                  value={formData.fee_cents / 100}
-                  onChange={handleChange}
+                  value={formData.registration_fee_cents}
+                  onChange={handleInputChange}
+                  error={errors.registration_fee_cents}
+                  placeholder="0 for free events"
                   min="0"
                   step="0.01"
-                  className="form-input pl-8"
-                  placeholder="0.00"
                 />
+                
+                <div className="flex items-end">
+                  <div className="w-full">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cover Image
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                      <PhotoIcon className="mx-auto h-12 w-12 text-gray-400" />
+                      <div className="mt-4">
+                        <label htmlFor="cover_image" className="cursor-pointer">
+                          <span className="text-blue-600 hover:text-blue-500 font-medium">
+                            Upload a file
+                          </span>
+                          <span className="text-gray-500"> or drag and drop</span>
+                        </label>
+                        <input
+                          id="cover_image"
+                          name="cover_image"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleInputChange}
+                          className="sr-only"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        PNG, JPG, GIF up to 10MB
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Divisions */}
-            <div>
-              <label className="form-label">Event Divisions</label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {divisions.map(division => (
-                  <label key={division.id} className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      name="divisions"
-                      value={division.id}
-                      checked={formData.divisions.includes(division.id)}
-                      onChange={handleChange}
-                      className="form-checkbox"
-                    />
-                    <span className="text-sm">{division.name}</span>
-                  </label>
-                ))}
+            {/* Error Display */}
+            {errors.general && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-red-800 text-sm">{errors.general}</p>
               </div>
-            </div>
+            )}
 
-            {/* Additional Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="form-label">Eligibility Notes</label>
-                <textarea
-                  name="eligibility_notes"
-                  value={formData.eligibility_notes}
-                  onChange={handleChange}
-                  rows={3}
-                  className="form-input"
-                  placeholder="Who can participate..."
-                />
-              </div>
-              
-              <div>
-                <label className="form-label">Rules & Regulations</label>
-                <textarea
-                  name="rules_and_regulations"
-                  value={formData.rules_and_regulations}
-                  onChange={handleChange}
-                  rows={3}
-                  className="form-input"
-                  placeholder="Event rules..."
-                />
-              </div>
-            </div>
-
-            {/* Submit */}
-            <div className="flex gap-3 pt-4">
-              <button
-                type="submit"
-                disabled={saving}
-                className="btn btn-primary"
-              >
-                {saving ? 'Creating Event...' : 'Create Event'}
-              </button>
-              
-              <button
+            {/* Form Actions */}
+            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+              <Button
                 type="button"
-                onClick={() => navigate('/manage-events')}
-                className="btn btn-secondary"
+                variant="outline"
+                size="lg"
+                onClick={() => navigate('/events')}
+                disabled={loading}
               >
                 Cancel
-              </button>
+              </Button>
+              
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                loading={loading}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+              >
+                <PlusIcon className="w-5 h-5 mr-2" />
+                {loading ? 'Creating...' : 'Create Event'}
+              </Button>
             </div>
           </form>
-        </div>
+        </Card>
       </div>
     </div>
   );

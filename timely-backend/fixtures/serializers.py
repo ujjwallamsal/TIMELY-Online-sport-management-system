@@ -1,250 +1,233 @@
 # fixtures/serializers.py
-from __future__ import annotations
-
 from rest_framework import serializers
-from django.utils import timezone
-from django.db import transaction
+from django.contrib.auth import get_user_model
+from .models import Fixture, FixtureEntry
 
-from .models import Fixture, MatchEntry, Match
-from events.serializers import DivisionSerializer
-from venues.serializers import VenueSerializer
-from teams.serializers import TeamSerializer
-from accounts.serializers import UserSerializer
+User = get_user_model()
 
 
-class MatchEntrySerializer(serializers.ModelSerializer):
-    """Serializer for match entries"""
-    team_detail = TeamSerializer(source='team', read_only=True)
-    individual_detail = UserSerializer(source='individual_registration.user', read_only=True)
-    entry_display = serializers.SerializerMethodField()
+class FixtureEntrySerializer(serializers.ModelSerializer):
+    """Serializer for FixtureEntry"""
+    
+    team_name = serializers.CharField(source='team.name', read_only=True)
+    participant_name = serializers.CharField(source='participant.get_full_name', read_only=True)
+    name = serializers.ReadOnlyField()
     
     class Meta:
-        model = MatchEntry
+        model = FixtureEntry
         fields = [
-            'id', 'fixture', 'match', 'entry_type', 'team', 'team_detail',
-            'individual_registration', 'individual_detail', 'position', 'seed',
-            'previous_match', 'entry_display', 'created_at', 'updated_at'
+            'id', 'fixture', 'side', 'team', 'team_name', 
+            'participant', 'participant_name', 'name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
-    def get_entry_display(self, obj):
-        """Get human-readable entry display"""
-        if obj.entry_type == MatchEntry.EntryType.TEAM:
-            return f"{obj.team.name} ({obj.position})" if obj.team else "TBD"
-        elif obj.entry_type == MatchEntry.EntryType.INDIVIDUAL:
-            if obj.individual_registration and obj.individual_registration.user:
-                return f"{obj.individual_registration.user.get_full_name()} ({obj.position})"
-            return "TBD"
-        else:
-            return f"Bye ({obj.position})"
-
-
-class MatchSerializer(serializers.ModelSerializer):
-    """Serializer for matches"""
-    entries = MatchEntrySerializer(many=True, read_only=True)
-    venue_detail = VenueSerializer(source='venue', read_only=True)
-    winner_detail = MatchEntrySerializer(source='winner', read_only=True)
-    end_time = serializers.ReadOnlyField()
-    has_conflicts = serializers.ReadOnlyField()
-    
-    class Meta:
-        model = Match
-        fields = [
-            'id', 'fixture', 'round_number', 'match_number', 'venue', 'venue_detail',
-            'scheduled_at', 'status', 'is_published', 'entries', 'winner', 'winner_detail',
-            'score_home', 'score_away', 'notes', 'end_time', 'has_conflicts',
-            'original_scheduled_at', 'rescheduled_by', 'reschedule_reason',
-            'created_at', 'updated_at'
-        ]
-        read_only_fields = [
-            'id', 'created_at', 'updated_at', 'end_time', 'has_conflicts',
-            'original_scheduled_at', 'rescheduled_by'
-        ]
-
-
-class FixtureSerializer(serializers.ModelSerializer):
-    """Serializer for fixtures"""
-    division_detail = DivisionSerializer(source='division', read_only=True)
-    venues_detail = VenueSerializer(source='venues', many=True, read_only=True)
-    generated_by_detail = UserSerializer(source='generated_by', read_only=True)
-    matches = MatchSerializer(many=True, read_only=True)
-    total_matches = serializers.ReadOnlyField()
-    is_generatable = serializers.ReadOnlyField()
-    
-    class Meta:
-        model = Fixture
-        fields = [
-            'id', 'event', 'division', 'division_detail', 'name', 'tournament_type',
-            'status', 'rounds', 'teams_per_match', 'start_date', 'end_date',
-            'match_duration_minutes', 'break_between_matches_minutes', 'venues',
-            'venues_detail', 'max_matches_per_venue_per_day', 'earliest_start_time',
-            'latest_end_time', 'generated_at', 'generated_by', 'generated_by_detail',
-            'generation_notes', 'matches', 'total_matches', 'is_generatable',
-            'created_at', 'updated_at'
-        ]
-        read_only_fields = [
-            'id', 'generated_at', 'generated_by', 'created_at', 'updated_at',
-            'total_matches', 'is_generatable'
-        ]
-
-
-class FixtureCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating fixtures"""
-    class Meta:
-        model = Fixture
-        fields = [
-            'event', 'division', 'name', 'tournament_type', 'rounds', 'teams_per_match',
-            'start_date', 'end_date', 'match_duration_minutes', 'break_between_matches_minutes',
-            'venues', 'max_matches_per_venue_per_day', 'earliest_start_time', 'latest_end_time'
-        ]
-
     def validate(self, data):
-        """Validate fixture data"""
-        # Check if event has confirmed registrations
-        if data.get('division'):
-            confirmed_count = data['division'].registrations.filter(status='CONFIRMED').count()
-            if confirmed_count < 2:
-                raise serializers.ValidationError(
-                    f"Division must have at least 2 confirmed registrations. Current: {confirmed_count}"
-                )
+        """Validate fixture entry data"""
+        team = data.get('team')
+        participant = data.get('participant')
         
-        # Check if venues are available
-        if data.get('venues'):
-            for venue in data['venues']:
-                # Check venue availability for the date range
-                conflicting_fixtures = Fixture.objects.filter(
-                    venues=venue,
-                    start_date__lte=data['end_date'],
-                    end_date__gte=data['start_date'],
-                    status__in=[Fixture.Status.PUBLISHED, Fixture.Status.PROPOSED]
-                )
-                if conflicting_fixtures.exists():
-                    raise serializers.ValidationError(
-                        f"Venue {venue.name} is not available for the selected date range"
-                    )
+        if not team and not participant:
+            raise serializers.ValidationError("Must specify either team or participant")
+        
+        if team and participant:
+            raise serializers.ValidationError("Cannot specify both team and participant")
         
         return data
 
 
-class FixtureUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating fixtures"""
+class FixtureSerializer(serializers.ModelSerializer):
+    """Serializer for Fixture CRUD operations"""
+    
+    entries = FixtureEntrySerializer(many=True, read_only=True)
+    venue_name = serializers.CharField(source='venue.name', read_only=True)
+    event_name = serializers.CharField(source='event.name', read_only=True)
+    home_team = serializers.ReadOnlyField()
+    away_team = serializers.ReadOnlyField()
+    home_participant = serializers.ReadOnlyField()
+    away_participant = serializers.ReadOnlyField()
+    
     class Meta:
         model = Fixture
         fields = [
-            'name', 'tournament_type', 'rounds', 'teams_per_match', 'start_date', 'end_date',
-            'match_duration_minutes', 'break_between_matches_minutes', 'venues',
-            'max_matches_per_venue_per_day', 'earliest_start_time', 'latest_end_time',
-            'generation_notes'
+            'id', 'event', 'event_name', 'round_no', 'starts_at', 'ends_at',
+            'venue', 'venue_name', 'status', 'entries', 'home_team', 'away_team',
+            'home_participant', 'away_participant', 'created_at', 'updated_at'
         ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate(self, data):
-        """Validate fixture updates"""
-        instance = self.instance
+        """Validate fixture data"""
+        starts_at = data.get('starts_at')
+        ends_at = data.get('ends_at')
         
-        # Cannot change dates if matches are already scheduled
-        if instance.matches.exists():
-            if 'start_date' in data and data['start_date'] != instance.start_date:
-                raise serializers.ValidationError(
-                    "Cannot change start date when matches are already scheduled"
-                )
-            if 'end_date' in data and data['end_date'] != instance.end_date:
-                raise serializers.ValidationError(
-                    "Cannot change end date when matches are already scheduled"
-                )
+        if starts_at and ends_at:
+            if ends_at <= starts_at:
+                raise serializers.ValidationError({
+                    'ends_at': 'End time must be after start time'
+                })
         
         return data
 
 
 class FixtureGenerateSerializer(serializers.Serializer):
     """Serializer for fixture generation requests"""
-    generation_type = serializers.ChoiceField(choices=[
-        ('ROUND_ROBIN', 'Round Robin'),
-        ('KNOCKOUT', 'Knockout'),
-        ('GROUP_STAGE', 'Group Stage + Knockout'),
-        ('SWISS', 'Swiss System')
-    ])
     
-    # Round Robin specific options
-    rounds = serializers.IntegerField(min_value=1, max_value=10, required=False)
-    randomize_seeds = serializers.BooleanField(default=False)
-    
-    # Knockout specific options
-    seed_teams = serializers.BooleanField(default=False)
-    include_playoffs = serializers.BooleanField(default=False)
-    
-    # Group Stage options
-    group_size = serializers.IntegerField(min_value=3, max_value=8, required=False)
-    teams_per_group = serializers.IntegerField(min_value=2, max_value=8, required=False)
-    
-    # Scheduling options
-    start_time = serializers.TimeField(required=False)
-    end_time = serializers.TimeField(required=False)
-    matches_per_day = serializers.IntegerField(min_value=1, max_value=20, required=False)
-    
-    # Venue assignment
-    auto_assign_venues = serializers.BooleanField(default=True)
-    venue_preferences = serializers.ListField(
+    event_id = serializers.IntegerField()
+    mode = serializers.ChoiceField(choices=['rr', 'ko'])
+    participants = serializers.ListField(
         child=serializers.IntegerField(),
-        required=False,
-        help_text="List of venue IDs in order of preference"
+        min_length=2,
+        help_text="List of team IDs or user IDs"
     )
-
-    def validate(self, data):
-        """Validate generation parameters"""
-        fixture = self.context.get('fixture')
-        if not fixture:
-            raise serializers.ValidationError("Fixture context is required")
+    slot_hints = serializers.DictField(required=False, allow_empty=True)
+    
+    def validate_participants(self, value):
+        """Validate participants list"""
+        if len(value) < 2:
+            raise serializers.ValidationError("At least 2 participants required")
         
-        if not fixture.is_generatable:
-            raise serializers.ValidationError("Fixture cannot be generated - check teams and venues")
-        
-        # Validate group stage parameters
-        if data.get('generation_type') == 'GROUP_STAGE':
-            if not data.get('group_size') or not data.get('teams_per_group'):
+        # For knockout, check if count is power of 2
+        mode = self.initial_data.get('mode')
+        if mode == 'ko':
+            count = len(value)
+            if count & (count - 1) != 0:
                 raise serializers.ValidationError(
-                    "Group size and teams per group are required for group stage tournaments"
+                    "Knockout tournaments require participant count to be a power of 2"
+                )
+        
+        return value
+
+
+class FixtureAcceptSerializer(serializers.Serializer):
+    """Serializer for accepting generated fixtures"""
+    
+    event_id = serializers.IntegerField()
+    fixtures = serializers.ListField(
+        child=serializers.DictField(),
+        min_length=1
+    )
+    
+    def validate_fixtures(self, value):
+        """Validate fixtures data structure"""
+        for i, fixture_data in enumerate(value):
+            required_fields = ['round_no', 'starts_at', 'ends_at', 'entries']
+            for field in required_fields:
+                if field not in fixture_data:
+                    raise serializers.ValidationError(
+                        f"Fixture {i}: Missing required field '{field}'"
+                    )
+            
+            # Validate entries
+            entries = fixture_data.get('entries', [])
+            if len(entries) < 2:
+                raise serializers.ValidationError(
+                    f"Fixture {i}: Must have at least 2 entries"
                 )
             
-            available_teams = fixture.get_available_teams().count()
-            if available_teams < data['teams_per_group'] * data['group_size']:
+            # Check for home and away entries
+            sides = [entry.get('side') for entry in entries]
+            if 'home' not in sides or 'away' not in sides:
                 raise serializers.ValidationError(
-                    f"Not enough teams for {data['group_size']} groups of {data['teams_per_group']} teams. Available: {available_teams}"
+                    f"Fixture {i}: Must have both home and away entries"
                 )
+        
+        return value
+
+
+class FixtureRescheduleSerializer(serializers.Serializer):
+    """Serializer for rescheduling fixtures"""
+    
+    starts_at = serializers.DateTimeField(required=False)
+    ends_at = serializers.DateTimeField(required=False)
+    venue_id = serializers.IntegerField(required=False, allow_null=True)
+    
+    def validate(self, data):
+        """Validate reschedule data"""
+        starts_at = data.get('starts_at')
+        ends_at = data.get('ends_at')
+        
+        if starts_at and ends_at:
+            if ends_at <= starts_at:
+                raise serializers.ValidationError({
+                    'ends_at': 'End time must be after start time'
+                })
         
         return data
 
 
-class MatchRescheduleSerializer(serializers.Serializer):
-    """Serializer for rescheduling matches"""
-    new_scheduled_at = serializers.DateTimeField()
-    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
-    check_conflicts = serializers.BooleanField(default=True)
-
-    def validate_new_scheduled_at(self, value):
-        """Validate new scheduled time"""
-        if value <= timezone.now():
-            raise serializers.ValidationError("New scheduled time must be in the future")
-        return value
+class FixtureSwapEntriesSerializer(serializers.Serializer):
+    """Serializer for swapping fixture entries"""
+    
+    swap = serializers.ChoiceField(choices=['home-away'])
 
 
-class FixturePublishSerializer(serializers.Serializer):
-    """Serializer for publishing fixtures"""
-    publish_matches = serializers.BooleanField(default=True)
-    send_notifications = serializers.BooleanField(default=True)
-    publish_notes = serializers.CharField(max_length=500, required=False, allow_blank=True)
+class FixtureConflictSerializer(serializers.Serializer):
+    """Serializer for conflict checking"""
+    
+    fixture_id = serializers.IntegerField(required=False)
+    starts_at = serializers.DateTimeField()
+    ends_at = serializers.DateTimeField()
+    venue_id = serializers.IntegerField(required=False, allow_null=True)
+    
+    def validate(self, data):
+        """Validate conflict check data"""
+        starts_at = data.get('starts_at')
+        ends_at = data.get('ends_at')
+        
+        if starts_at and ends_at:
+            if ends_at <= starts_at:
+                raise serializers.ValidationError({
+                    'ends_at': 'End time must be after start time'
+                })
+        
+        return data
 
 
 class FixtureListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for fixture lists"""
-    division_name = serializers.CharField(source='division.name', read_only=True)
-    event_name = serializers.CharField(source='event.name', read_only=True)
-    total_matches = serializers.ReadOnlyField()
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    venue_name = serializers.CharField(source='venue.name', read_only=True)
+    home_team_name = serializers.SerializerMethodField()
+    away_team_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Fixture
         fields = [
-            'id', 'name', 'event_name', 'division_name', 'tournament_type',
-            'status', 'status_display', 'start_date', 'end_date', 'total_matches',
-            'generated_at', 'created_at'
+            'id', 'event', 'round_no', 'starts_at', 'ends_at',
+            'venue', 'venue_name', 'status', 'home_team_name', 'away_team_name'
         ]
+    
+    def get_home_team_name(self, obj):
+        """Get home team name"""
+        home_entry = obj.home_entry
+        if home_entry:
+            return home_entry.name
+        return None
+    
+    def get_away_team_name(self, obj):
+        """Get away team name"""
+        away_entry = obj.away_entry
+        if away_entry:
+            return away_entry.name
+        return None
+
+
+class FixtureProposalSerializer(serializers.Serializer):
+    """Serializer for fixture generation proposals"""
+    
+    round_no = serializers.IntegerField()
+    starts_at = serializers.DateTimeField()
+    ends_at = serializers.DateTimeField()
+    venue_id = serializers.IntegerField(required=False, allow_null=True)
+    entries = serializers.ListField(
+        child=serializers.DictField(),
+        min_length=2
+    )
+    
+    def validate_entries(self, value):
+        """Validate entries in proposal"""
+        sides = [entry.get('side') for entry in value]
+        if 'home' not in sides or 'away' not in sides:
+            raise serializers.ValidationError("Must have both home and away entries")
+        
+        return value

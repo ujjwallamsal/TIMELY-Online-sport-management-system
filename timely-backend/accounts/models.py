@@ -15,6 +15,18 @@ class UserManager(BaseUserManager):
         if not email:
             raise ValueError('The Email field must be set')
         email = self.normalize_email(email)
+        
+        # Generate username from email if not provided
+        if not extra_fields.get('username'):
+            username = email.split('@')[0]
+            # Ensure username is unique
+            counter = 1
+            original_username = username
+            while self.model.objects.filter(username=username).exists():
+                username = f"{original_username}{counter}"
+                counter += 1
+            extra_fields['username'] = username
+        
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -53,6 +65,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         SUPPORT = "SUPPORT", "Support Staff"
     
     email = models.EmailField(unique=True, db_index=True)
+    username = models.CharField(max_length=150, unique=True, blank=True, null=True)
     first_name = models.CharField(max_length=80, blank=True)
     last_name = models.CharField(max_length=80, blank=True)
     
@@ -99,27 +112,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
     last_login = models.DateTimeField(null=True, blank=True)
     
-    # Audit Fields - make these optional for existing data
-    created_by = models.ForeignKey(
-        'self', 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
-        related_name='created_users'
-    )
-    updated_by = models.ForeignKey(
-        'self', 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
-        related_name='updated_users'
-    )
+    # Audit Fields - temporarily removed for migration compatibility
+    # created_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_users')
+    # updated_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_users')
     
     objects = UserManager()
     
-    # Use email for authentication
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['first_name', 'last_name']
+    # Use username for authentication
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['email', 'first_name', 'last_name']
     
     class Meta:
         db_table = 'accounts_user'
@@ -209,14 +210,8 @@ class UserRole(models.Model):
     context_type = models.CharField(max_length=50, blank=True, help_text="Type of context (event, team, organization)")
     context_id = models.PositiveIntegerField(null=True, blank=True, help_text="ID of the context object")
     
-    # Role metadata
-    assigned_by = models.ForeignKey(
-        User, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
-        related_name='assigned_roles'
-    )
+    # Role metadata - temporarily removed for migration compatibility
+    # assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_roles')
     assigned_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)

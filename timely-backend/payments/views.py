@@ -13,8 +13,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import PaymentIntent, WebhookEvent, Refund
+from .stripe_gateway import stripe_gateway
 from registrations.models import Registration
-from registrations.serializers import RegistrationSerializer
+from registrations.serializers import RegistrationDetailSerializer
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -359,5 +360,104 @@ def payment_status(request, registration_id):
         logger.error(f"Error getting payment status: {e}")
         return Response(
             {'error': 'Failed to get payment status'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# Ticketing-specific payment views
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def stripe_checkout(request):
+    """Create Stripe checkout session for ticket order"""
+    try:
+        order_id = request.data.get('order_id')
+        if not order_id:
+            return Response(
+                {'error': 'order_id is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get order
+        from tickets.models import TicketOrder
+        order = get_object_or_404(TicketOrder, id=order_id, user=request.user)
+        
+        # Check if order can be paid
+        if order.status != TicketOrder.Status.PENDING:
+            return Response(
+                {'error': 'Order is not in pending status'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create checkout session
+        result = stripe_gateway.create_checkout_session(order, request)
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Stripe checkout error: {e}")
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def stripe_webhook_tickets(request):
+    """Handle Stripe webhook events for ticket orders"""
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+    
+    # Verify webhook
+    event = stripe_gateway.verify_webhook(payload, sig_header)
+    if not event:
+        return HttpResponse(status=400)
+    
+    # Handle event
+    result = stripe_gateway.handle_webhook_event(event)
+    
+    if result['status'] == 'error':
+        logger.error(f"Webhook processing error: {result['message']}")
+        return HttpResponse(status=500)
+    
+    return HttpResponse(status=200)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_refund(request, order_id):
+    """Create refund for ticket order (stub for test mode)"""
+    try:
+        from tickets.models import TicketOrder
+        
+        # Get order
+        order = get_object_or_404(TicketOrder, id=order_id)
+        
+        # Check permissions (admin/organizer only)
+        if not (request.user.is_superuser or 
+                request.user.is_staff or
+                (request.user.role == 'ORGANIZER' and 
+                 order.event.created_by == request.user)):
+            return Response(
+                {'error': 'Permission denied'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Create refund
+        result = stripe_gateway.create_refund(order)
+        
+        if result['status'] == 'error':
+            return Response(
+                {'error': result['message']}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Refund creation error: {e}")
+        return Response(
+            {'error': str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

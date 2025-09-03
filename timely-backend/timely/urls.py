@@ -4,91 +4,66 @@ from django.http import JsonResponse
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-
 from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 
-# Private (authenticated) viewsets
-from accounts.views import UserViewSet
-from venues.views import VenueViewSet
-from events.views import EventViewSet, DivisionViewSet
-from teams.views import TeamViewSet, AthleteProfileViewSet
-from registrations.views import RegistrationViewSet, secure_document_download
-# from registrations.views import RegistrationViewSet, DocumentViewSet, secure_document_download
-from payments.views import create_payment_intent, confirm_payment, payment_status, stripe_webhook
-from fixtures.views import FixtureViewSet, MatchViewSet, MatchEntryViewSet
-from results.views import ResultViewSet
-from tickets.views import (
-    TicketTypeViewSet, TicketOrderViewSet, TicketViewSet, PaymentRecordViewSet,
-    StripeWebhookView, PayPalWebhookView, TicketValidationView
-)
-from notifications.views import NotificationViewSet
-
-# Public (read-only) viewsets
-from events.public_views import PublicEventViewSet
-from fixtures.public_views import PublicMatchViewSet
-from results.public_views import PublicResultViewSet
-from content.public_views import PublicAnnouncementViewSet
-
-# Public (create-only) endpoint (FR43)
-from tickets.public_views import PublicCheckoutView
-
+# Import views (only what's actually used in this file)
 from reports.views import TicketSummaryReport, TicketCSVExport
-
 from reports.views_admin import AdminOverviewView
+# from tickets.views import StripeWebhookView, PayPalWebhookView  # Views don't exist yet
+from tickets.public_views import PublicCheckoutView
+# from registrations.views import secure_document_download
 
-
-from django.http import HttpResponse  # add this import (you already import JsonResponse)
+from django.http import HttpResponse
 
 def _public_events_new_noop(_request):
     # Quietly acknowledge stray GETs from extensions/prefetchers.
     # We purposely do NOT implement public "new" creation here.
     return HttpResponse(status=204)
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def test_public_endpoint(request):
+    return JsonResponse({"message": "Public endpoint works!", "status": "success"})
 
-# Gallery (private + public)
-from gallery.views import (
-    AlbumViewSet, MediaAssetViewSet,
-    PublicAlbumViewSet, PublicMediaViewSet,
-)
+# Old public endpoints removed - now handled by public app
 
 # ---------------------------------------------------------------------------
 
 router = DefaultRouter()
 
-# Auth-required APIs
-
-
-router.register(r"users", UserViewSet, basename="user")
-router.register(r"venues", VenueViewSet)
-router.register(r"events", EventViewSet, basename="event")
-router.register(r"divisions", DivisionViewSet, basename="division")
-router.register(r"teams", TeamViewSet)
-router.register(r"athletes", AthleteProfileViewSet)
-router.register(r"registrations", RegistrationViewSet, basename="registration")
+# Only register viewsets that don't have their own URL files
+# router.register(r"users", UserViewSet, basename="user")
+# router.register(r"venues", VenueViewSet)
+# router.register(r"events", EventViewSet, basename="event")
+# router.register(r"divisions", DivisionViewSet, basename="division")
+# router.register(r"teams", TeamViewSet)
+# router.register(r"athletes", AthleteProfileViewSet)
+# router.register(r"registrations", RegistrationViewSet, basename="registration")
 # router.register(r"documents", DocumentViewSet, basename="document")  # Temporarily commented out
-router.register(r"fixtures", FixtureViewSet, basename="fixture")
-router.register(r"matches", MatchViewSet, basename="match")
-router.register(r"match-entries", MatchEntryViewSet, basename="matchentry")
-router.register(r"results", ResultViewSet)
-router.register(r"ticket-types", TicketTypeViewSet, basename="tickettype")
-router.register(r"ticket-orders", TicketOrderViewSet, basename="ticketorder")
-router.register(r"tickets", TicketViewSet, basename="ticket")
-router.register(r"payment-records", PaymentRecordViewSet, basename="paymentrecord")
-router.register(r"notifications", NotificationViewSet, basename="notification")
+# router.register(r"fixtures", FixtureViewSet, basename="fixture")
+# router.register(r"matches", MatchViewSet, basename="match")
+# router.register(r"match-entries", MatchEntryViewSet, basename="matchentry")
+# router.register(r"results", ResultViewSet)
+# router.register(r"ticket-types", TicketTypeViewSet, basename="tickettype")
+# router.register(r"ticket-orders", TicketOrderViewSet, basename="ticketorder")
+# router.register(r"tickets", TicketViewSet, basename="ticket")
+# router.register(r"payment-records", PaymentRecordViewSet, basename="paymentrecord")
+# router.register(r"notifications", NotificationViewSet, basename="notification")
 
-# Public spectator APIs (no auth)
-router.register(r"public/events", PublicEventViewSet, basename="public-events")
-router.register(r"public/matches", PublicMatchViewSet, basename="public-matches")
-router.register(r"public/results", PublicResultViewSet, basename="public-results")
-router.register(r"public/news", PublicAnnouncementViewSet, basename="public-news")
+# Public spectator APIs (no auth) - Handled by individual app URLs
+# router.register(r"public/events", PublicEventViewSet, basename="public-events")
+# router.register(r"public/matches", PublicMatchViewSet, basename="public-matches")
+# router.register(r"public/results", PublicResultViewSet, basename="public-results")
+# router.register(r"public/news", PublicAnnouncementViewSet, basename="public-news")
 
-# Gallery APIs
-router.register(r"albums", AlbumViewSet, basename="album")
-router.register(r"media", MediaAssetViewSet, basename="media")
-router.register(r"public/albums", PublicAlbumViewSet, basename="public-albums")
-router.register(r"public/media", PublicMediaViewSet, basename="public-media")
-
+# Gallery APIs - Handled by gallery app
+# router.register(r"albums", AlbumViewSet, basename="album")
+# router.register(r"media", MediaAssetViewSet, basename="media")
+# router.register(r"public/albums", PublicAlbumViewSet, basename="public-albums")
+# router.register(r"public/media", PublicMediaAssetViewSet, basename="public-media")
 
 # ---------------------------------------------------------------------------
 
@@ -100,49 +75,44 @@ urlpatterns = [
 
     # Admin
     path("admin/", admin.site.urls),
+    
+    # Test public endpoint
+    path("api/test-public/", test_public_endpoint, name="test-public"),
+    
+    # Public spectator portal endpoints
+    path("api/public/", include("public.urls")),
+    
+    # API routes - Clean, single-level paths
     path("api/accounts/", include("accounts.urls")),
-
-
+    path("api/events/", include("events.urls")),
+    path("api/venues/", include("venues.urls")),
+    path("api/teams/", include("teams.urls")),
+    path("api/registrations/", include("registrations.urls")),
+    path("api/fixtures/", include("fixtures.urls")),
+    path("api/results/", include("results.urls")),
+    path("api/tickets/", include("tickets.urls")),
+    path("api/payments/", include("payments.urls")),
+    path("api/notifications/", include("notifications.urls")),
+    path("api/reports/", include("reports.urls")),
+    path("api/content/", include("content.urls")),
+    path("api/gallery/", include("gallery.urls")),
+    
+    # Legacy public APIs (kept for backward compatibility)
+    path("api/fixtures/public/", include("fixtures.urls")),
+    
     # OpenAPI / Docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
- # --- QUIET STUB to silence stray extension calls ---
+    
+    # --- QUIET STUB to silence stray extension calls ---
     path("api/public/events/new/", _public_events_new_noop),
-    # API routes
+    
+    # Include router URLs last
     path("api/", include(router.urls)),
-    path("api/reports/", include("reports.urls")),
-
-    # Browsable API session auth (dev helper)
-    path("api/auth/", include("rest_framework.urls")),
-    
-
-    # JWT endpoints (obtain/refresh/verify in timely/jwt_urls.py)
-    path("api/token/", include("timely.jwt_urls")),
-
-    # Public checkout (FR43)
-    path("api/public/checkout/", PublicCheckoutView.as_view(), name="public-checkout"),
-    
-    # Secure document download
-    path("api/documents/<uuid:token>/download/", secure_document_download, name="secure-document-download"),
-    
-    # Payment endpoints
-    path("api/payments/create-intent/", create_payment_intent, name="create-payment-intent"),
-    path("api/payments/confirm/", confirm_payment, name="confirm-payment"),
-    path("api/payments/status/<int:registration_id>/", payment_status, name="payment-status"),
-    path("api/webhooks/stripe/", stripe_webhook, name="stripe-webhook"),
-    
-    # Ticketing endpoints
-    path("api/webhooks/stripe-tickets/", StripeWebhookView.as_view({'post': 'stripe_webhook'}), name="stripe-tickets-webhook"),
-    path("api/webhooks/paypal-tickets/", PayPalWebhookView.as_view({'post': 'paypal_webhook'}), name="paypal-tickets-webhook"),
-    path("api/tickets/validate/", TicketValidationView.as_view({'post': 'validate_ticket'}), name="validate-ticket"),
-
-    path("api/reports/tickets/summary", TicketSummaryReport.as_view(), name="report-ticket-summary"),
-    path("api/reports/tickets/export.csv", TicketCSVExport.as_view(), name="report-ticket-export"),
-    path("api/reports/admin/overview/", AdminOverviewView.as_view(), name="admin-overview"),
-
 ]
 
-# Serve uploaded media in development
+# Serve static files in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 

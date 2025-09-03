@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, authenticate
 from django.utils import timezone
 from django.db.models import Q
 from django.core.mail import send_mail
@@ -19,12 +19,14 @@ from django.db import models
 
 from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, AuditLog
 from rest_framework_simplejwt.tokens import RefreshToken
-from accounts.auth import set_jwt_cookies, clear_jwt_cookies
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from accounts.auth import set_jwt_cookies, clear_jwt_cookies, CookieJWTAuthentication
 from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserProfileSerializer,
     UserRoleSerializer, UserRoleAssignmentSerializer, PasswordChangeSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    EmailVerificationSerializer, UserListSerializer, AuditLogSerializer
+    EmailVerificationSerializer, UserListSerializer, AuditLogSerializer,
+    UserProfileUpdateSerializer, UserRoleUpdateSerializer
 )
 from .permissions import IsUserManager, IsSelfOrAdmin
 from .utils import get_client_ip, get_user_agent
@@ -38,8 +40,6 @@ class AuthViewSet(viewsets.ViewSet):
     """Authentication endpoints"""
     permission_classes = [AllowAny]
     authentication_classes = []  # avoid SessionAuthentication CSRF on login/register
-    
-    # CSRF exemption is handled by authentication_classes = []
     
     @action(detail=False, methods=['post'])
     def register(self, request):
@@ -58,6 +58,17 @@ class AuthViewSet(viewsets.ViewSet):
             # Send verification email (stub for now)
             # send_verification_email(user, token.token)
             
+            # Log user creation
+            AuditLog.log_action(
+                user=user,
+                action=AuditLog.ActionType.CREATE,
+                resource_type='User',
+                resource_id=str(user.id),
+                details={'email': user.email, 'method': 'registration', 'role': user.role},
+                ip_address=get_client_ip(request),
+                user_agent=get_user_agent(request)
+            )
+            
             return Response({
                 'message': 'User registered successfully. Please check your email for verification.',
                 'user_id': user.id,
@@ -69,10 +80,8 @@ class AuthViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def login(self, request):
         """User login endpoint"""
-        payload = request.data.copy()
-        if 'username' in payload and 'email' not in payload:
-            payload['email'] = payload['username']
-        serializer = UserLoginSerializer(data=payload)
+        # Accept email and password directly from frontend
+        serializer = UserLoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data['user']
             login(request, user)
@@ -86,8 +95,21 @@ class AuthViewSet(viewsets.ViewSet):
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
 
+            # Log login
+            AuditLog.log_action(
+                user=user,
+                action=AuditLog.ActionType.LOGIN,
+                resource_type='User',
+                resource_id=str(user.id),
+                details={'email': user.email, 'method': 'email_password'},
+                ip_address=get_client_ip(request),
+                user_agent=get_user_agent(request)
+            )
+
             resp = Response({
                 'message': 'Login successful',
+                'access': access_token,
+                'refresh': refresh_token,
                 'user': UserProfileSerializer(user, context={'request': request}).data
             })
 
@@ -101,7 +123,7 @@ class AuthViewSet(viewsets.ViewSet):
     def logout(self, request):
         """User logout endpoint"""
         if request.user.is_authenticated:
-            # Log logout action
+            # Log logout
             AuditLog.log_action(
                 user=request.user,
                 action=AuditLog.ActionType.LOGOUT,
@@ -113,20 +135,95 @@ class AuthViewSet(viewsets.ViewSet):
             )
             
             logout(request)
-
-            resp = Response({'message': 'Logout successful'})
-            # Clear cookies with matching attributes
-            try:
-                from django.utils.http import http_date
-                import time
-                expires = http_date(0)
-                resp.set_cookie('access', '', max_age=0, expires=expires, path='/', samesite=settings.SIMPLE_JWT.get('AUTH_COOKIE_SAMESITE', 'Lax'))
-                resp.set_cookie('refresh', '', max_age=0, expires=expires, path='/', samesite=settings.SIMPLE_JWT.get('AUTH_COOKIE_SAMESITE', 'Lax'))
-            except Exception:
-                clear_jwt_cookies(resp)
-            return resp
         
-        return Response({'message': 'Not logged in'}, status=status.HTTP_400_BAD_REQUEST)
+        resp = Response({'message': 'Logout successful'})
+        clear_jwt_cookies(resp)
+        return resp
+    
+    @action(detail=False, methods=['post'])
+    def refresh(self, request):
+        """Refresh JWT token endpoint"""
+        refresh_token = request.COOKIES.get('refresh')
+        if not refresh_token:
+            return Response({'error': 'No refresh token provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            refresh = RefreshToken(refresh_token)
+            access_token = str(refresh.access_token)
+            
+            resp = Response({'message': 'Token refreshed successfully'})
+            set_jwt_cookies(resp, access_token)
+            return resp
+        except Exception as e:
+            return Response({'error': 'Invalid refresh token'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def password_reset_request(self, request):
+        """Request password reset endpoint"""
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            try:
+                user = User.objects.get(email=email, is_active=True)
+                
+                # Create password reset token
+                token = PasswordResetToken.objects.create(
+                    user=user,
+                    token=get_random_string(64),
+                    expires_at=timezone.now() + timezone.timedelta(hours=24)
+                )
+                
+                # Send reset email (stub for now)
+                # send_password_reset_email(user, token.token)
+                
+                return Response({
+                    'message': 'Password reset email sent. Please check your email.'
+                })
+            except User.DoesNotExist:
+                # Don't reveal if user exists
+                return Response({
+                    'message': 'If an account with this email exists, a password reset email has been sent.'
+                })
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def password_reset_confirm(self, request):
+        """Confirm password reset endpoint"""
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        if serializer.is_valid():
+            token = serializer.validated_data['token']
+            new_password = serializer.validated_data['new_password']
+            
+            try:
+                reset_token = PasswordResetToken.objects.get(
+                    token=token,
+                    is_used=False,
+                    expires_at__gt=timezone.now()
+                )
+                
+                user = reset_token.user
+                user.set_password(new_password)
+                user.save()
+                
+                reset_token.use_token()
+                
+                # Log password change
+                AuditLog.log_action(
+                    user=user,
+                    action=AuditLog.ActionType.PASSWORD_CHANGE,
+                    resource_type='User',
+                    resource_id=str(user.id),
+                    details={'method': 'reset_token'},
+                    ip_address=get_client_ip(request),
+                    user_agent=get_user_agent(request)
+                )
+                
+                return Response({'message': 'Password reset successful'})
+            except PasswordResetToken.DoesNotExist:
+                return Response({'error': 'Invalid or expired reset token'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'])
     def verify_email(self, request):
@@ -134,387 +231,280 @@ class AuthViewSet(viewsets.ViewSet):
         serializer = EmailVerificationSerializer(data=request.data)
         if serializer.is_valid():
             token = serializer.validated_data['token']
-            user = token.user
             
-            # Mark email as verified
-            user.verify_email()
-            token.use_token()
-            
-            # Log verification
-            AuditLog.log_action(
-                user=user,
-                action=AuditLog.ActionType.EMAIL_VERIFICATION,
-                resource_type='User',
-                resource_id=str(user.id),
-                details={'email': user.email},
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
-            
-            return Response({'message': 'Email verified successfully'})
+            try:
+                verification_token = EmailVerificationToken.objects.get(
+                    token=token,
+                    is_used=False,
+                    expires_at__gt=timezone.now()
+                )
+                
+                user = verification_token.user
+                user.verify_email()
+                verification_token.use_token()
+                
+                # Log email verification
+                AuditLog.log_action(
+                    user=user,
+                    action=AuditLog.ActionType.EMAIL_VERIFICATION,
+                    resource_type='User',
+                    resource_id=str(user.id),
+                    details={'method': 'verification_token'},
+                    ip_address=get_client_ip(request),
+                    user_agent=get_user_agent(request)
+                )
+                
+                return Response({'message': 'Email verified successfully'})
+            except EmailVerificationToken.DoesNotExist:
+                return Response({'error': 'Invalid or expired verification token'}, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['post'])
-    def request_password_reset(self, request):
-        """Password reset request endpoint"""
-        serializer = PasswordResetRequestSerializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            user = User.objects.get(email=email)
-            
-            # Create reset token
-            token = PasswordResetToken.objects.create(
-                user=user,
-                token=get_random_string(64),
-                expires_at=timezone.now() + timezone.timedelta(hours=1)
-            )
-            
-            # Send reset email (stub for now)
-            # send_password_reset_email(user, token.token)
-            
-            return Response({
-                'message': 'Password reset email sent. Please check your email.'
-            })
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['post'])
-    def confirm_password_reset(self, request):
-        """Password reset confirmation endpoint"""
-        serializer = PasswordResetConfirmSerializer(data=request.data)
-        if serializer.is_valid():
-            reset_token = serializer.validated_data['reset_token']
-            user = reset_token.user
-            new_password = serializer.validated_data['new_password']
-            
-            # Update password
-            user.set_password(new_password)
-            user.save()
-            
-            # Mark token as used
-            reset_token.use_token()
-            
-            # Log password change
-            AuditLog.log_action(
-                user=user,
-                action=AuditLog.ActionType.PASSWORD_CHANGE,
-                resource_type='User',
-                resource_id=str(user.id),
-                details={'method': 'reset_token'},
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
-            
-            return Response({'message': 'Password reset successfully'})
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=False, methods=['post'])
-    def refresh(self, request):
-        """Issue a new access token from the refresh token cookie (or body)."""
-        token = request.COOKIES.get('refresh') or request.data.get('refresh')
-        if not token:
-            return Response({'detail': 'No refresh token'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        try:
-            refresh = RefreshToken(token)
-            access_token = str(refresh.access_token)
-        except Exception:
-            return Response({'detail': 'Invalid refresh token'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        resp = Response({'refreshed': True})
-        set_jwt_cookies(resp, access_token)
-        return resp
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    """User management ViewSet"""
+    """User management endpoints"""
     queryset = User.objects.all()
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
+    authentication_classes = [CookieJWTAuthentication, JWTAuthentication]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'email_verified', 'date_joined']
+    filterset_fields = ['is_active', 'email_verified', 'role']
     search_fields = ['email', 'first_name', 'last_name']
-    ordering_fields = ['email', 'first_name', 'last_name', 'date_joined', 'last_login']
+    ordering_fields = ['date_joined', 'last_login', 'email']
     ordering = ['-date_joined']
-    
-    def get_serializer_class(self):
-        """Return appropriate serializer based on action"""
-        if self.action == 'list' and self.request.user.is_staff:
-            return UserListSerializer
-        return UserProfileSerializer
     
     def get_queryset(self):
         """Filter queryset based on user permissions"""
-        if self.request.user.is_staff:
+        if self.request.user.is_superuser or self.request.user.role == User.Role.ADMIN:
             return User.objects.all()
-        else:
-            # Users can only see their own profile
-            return User.objects.filter(id=self.request.user.id)
+        
+        # Regular users can only see themselves
+        return User.objects.filter(id=self.request.user.id)
     
-    @method_decorator(ensure_csrf_cookie)
-    @action(detail=False, methods=['get'])
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action"""
+        if self.action == 'update' or self.action == 'partial_update':
+            return UserProfileUpdateSerializer
+        return UserProfileSerializer
+    
+    @action(detail=False, methods=['get', 'patch'])
     def me(self, request):
-        """Get current user's profile"""
-        serializer = self.get_serializer(request.user)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['put', 'patch'])
-    def update_me(self, request):
-        """Update current user's profile"""
-        serializer = self.get_serializer(request.user, data=request.data, partial=True)
-        if serializer.is_valid():
-            user = serializer.save()
-            # Realtime: broadcast user.updated
-            try:
-                channel_layer = get_channel_layer()
-                async_to_sync(channel_layer.group_send)(
-                    f'user_{user.id}',
-                    {
-                        'type': 'user.updated',
-                        'user_data': {
-                            'id': user.id,
-                            'email': user.email,
-                            'first_name': user.first_name,
-                            'last_name': user.last_name,
-                            'role': getattr(user, 'role', ''),
-                        },
-                    },
-                )
-            except Exception:
-                pass
+        """Get or update current user profile"""
+        if request.method == 'GET':
+            serializer = self.get_serializer(request.user)
             return Response(serializer.data)
+        
+        # PATCH method for updates
+        serializer = UserProfileUpdateSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            # Log profile update
+            old_data = {
+                'first_name': request.user.first_name,
+                'last_name': request.user.last_name,
+                'phone_number': request.user.phone_number,
+                'address': request.user.address,
+                'city': request.user.city,
+                'state': request.user.state,
+                'postal_code': request.user.postal_code,
+                'country': request.user.country,
+                'bio': request.user.bio,
+                'website': request.user.website,
+            }
+            
+            user = serializer.save()
+            
+            AuditLog.log_action(
+                user=request.user,
+                action=AuditLog.ActionType.UPDATE,
+                resource_type='UserProfile',
+                resource_id=str(user.id),
+                details={
+                    'old_data': old_data,
+                    'new_data': serializer.validated_data,
+                    'updated_fields': list(serializer.validated_data.keys())
+                },
+                ip_address=get_client_ip(request),
+                user_agent=get_user_agent(request)
+            )
+            
+            return Response(UserProfileSerializer(user).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=False, methods=['post'])
-    def change_password(self, request):
-        """Change current user's password"""
+    @action(detail=True, methods=['post'])
+    def change_password(self, request, pk=None):
+        """Change user password"""
+        user = self.get_object()
+        
+        # Check if user can change their own password or is admin
+        if user != request.user and not (request.user.is_superuser or request.user.role == User.Role.ADMIN):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        
         serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            user = request.user
-            new_password = serializer.validated_data['new_password']
-            
-            # Update password
-            user.set_password(new_password)
+            user.set_password(serializer.validated_data['new_password'])
             user.save()
             
             # Log password change
             AuditLog.log_action(
-                user=user,
+                user=request.user,
                 action=AuditLog.ActionType.PASSWORD_CHANGE,
                 resource_type='User',
                 resource_id=str(user.id),
-                details={'method': 'current_password'},
+                details={'method': 'change_password'},
                 ip_address=get_client_ip(request),
                 user_agent=get_user_agent(request)
             )
             
             return Response({'message': 'Password changed successfully'})
-        
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=True, methods=['get'])
-    def roles(self, request, pk=None):
-        """Get user's roles"""
-        user = self.get_object()
-        roles = user.roles.filter(is_active=True)
-        serializer = UserRoleSerializer(roles, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['post', 'patch'], permission_classes=[IsAdminUser])
+    @action(detail=True, methods=['patch'])
     def update_role(self, request, pk=None):
-        """Admin: update a user's primary role (legacy role field)."""
+        """Update user role (admin only)"""
+        if not (request.user.is_superuser or request.user.role == User.Role.ADMIN):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        
         user = self.get_object()
-        new_role = request.data.get('role')
-        if not new_role:
-            return Response({'detail': 'role is required'}, status=status.HTTP_400_BAD_REQUEST)
-        prev_role = getattr(user, 'role', '')
-        user.role = new_role
-        user.save(update_fields=['role'])
-        # Audit
-        AuditLog.log_action(
-            user=request.user,
-            action=AuditLog.ActionType.ROLE_ASSIGNMENT,
-            resource_type='User',
-            resource_id=str(user.id),
-            details={'old_role': prev_role, 'new_role': new_role},
-            ip_address=get_client_ip(request),
-            user_agent=get_user_agent(request),
-        )
-        # Realtime
-        try:
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f'user_{user.id}',
-                {
-                    'type': 'user.updated',
-                    'user_data': {
-                        'id': user.id,
-                        'email': user.email,
-                        'first_name': user.first_name,
-                        'last_name': user.last_name,
-                        'role': getattr(user, 'role', ''),
-                    },
+        serializer = UserRoleUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            old_role = user.role
+            user.role = serializer.validated_data['role']
+            user.save()
+            
+            # Log role change
+            AuditLog.log_action(
+                user=request.user,
+                action=AuditLog.ActionType.ROLE_ASSIGNMENT,
+                resource_type='User',
+                resource_id=str(user.id),
+                details={
+                    'assigned_user': user.email,
+                    'old_role': old_role,
+                    'new_role': user.role
                 },
+                ip_address=get_client_ip(request),
+                user_agent=get_user_agent(request)
             )
-        except Exception:
-            pass
-        return Response({'message': 'Role updated', 'user': {'id': user.id, 'email': user.email, 'role': user.role}})
+            
+            return Response({'message': 'Role updated successfully'})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class UserRoleViewSet(viewsets.ModelViewSet):
-    """User role management ViewSet"""
-    queryset = UserRole.objects.all()
-    serializer_class = UserRoleSerializer
-    permission_classes = [IsAuthenticated]
+class AdminUserViewSet(viewsets.ModelViewSet):
+    """Admin user management endpoints"""
+    queryset = User.objects.all()
+    serializer_class = UserListSerializer
+    permission_classes = [IsUserManager]
+    authentication_classes = [CookieJWTAuthentication, JWTAuthentication]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['role_type', 'is_active', 'context_type', 'context_id']
-    search_fields = ['user__email', 'user__first_name', 'user__last_name']
-    ordering_fields = ['assigned_at', 'role_type', 'user__email']
-    ordering = ['-assigned_at']
+    filterset_fields = ['is_active', 'email_verified', 'role']
+    search_fields = ['email', 'first_name', 'last_name']
+    ordering_fields = ['date_joined', 'last_login', 'email']
+    ordering = ['-date_joined']
     
     def get_queryset(self):
-        """Filter queryset based on user permissions"""
-        if self.request.user.is_staff:
-            return UserRole.objects.all()
-        else:
-            # Users can only see their own roles
-            return UserRole.objects.filter(user=self.request.user)
-    
-    @action(detail=False, methods=['post'])
-    def assign_role(self, request):
-        """Assign a role to a user (admin/organizer only)"""
-        if not request.user.is_staff and not self._can_manage_users(request.user):
-            return Response(
-                {'detail': 'You do not have permission to assign roles'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        serializer = UserRoleAssignmentSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            role = serializer.save()
-            return Response(UserRoleSerializer(role).data, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        """Admin can see all users"""
+        return User.objects.all()
     
     @action(detail=True, methods=['post'])
-    def deactivate(self, request, pk=None):
-        """Deactivate a user role"""
-        role = self.get_object()
-        
-        # Check permissions
-        if not request.user.is_staff and not self._can_manage_users(request.user):
-            return Response(
-                {'detail': 'You do not have permission to deactivate roles'}, 
-                status=status.HTTP_403_FORBIDDEN
+    def assign_role(self, request, pk=None):
+        """Assign role to user"""
+        user = self.get_object()
+        serializer = UserRoleAssignmentSerializer(data=request.data, context={'user': user})
+        if serializer.is_valid():
+            # If setting as primary, remove other primary roles
+            if serializer.validated_data.get('is_primary', False):
+                UserRole.objects.filter(user=user, is_primary=True).update(is_primary=False)
+            
+            role = UserRole.objects.create(
+                user=user,
+                assigned_by=request.user,
+                **serializer.validated_data
             )
+            
+            # Log role assignment
+            AuditLog.log_action(
+                user=request.user,
+                action=AuditLog.ActionType.ROLE_ASSIGNMENT,
+                resource_type='UserRole',
+                resource_id=str(role.id),
+                details={
+                    'assigned_user': user.email,
+                    'role_type': role.role_type,
+                    'context_type': role.context_type,
+                    'context_id': role.context_id,
+                    'permissions': {
+                        'can_manage_events': role.can_manage_events,
+                        'can_manage_teams': role.can_manage_teams,
+                        'can_manage_users': role.can_manage_users,
+                        'can_manage_fixtures': role.can_manage_fixtures,
+                        'can_manage_results': role.can_manage_results,
+                        'can_manage_payments': role.can_manage_payments,
+                        'can_manage_content': role.can_manage_content,
+                        'can_view_reports': role.can_view_reports,
+                    }
+                },
+                ip_address=get_client_ip(request),
+                user_agent=get_user_agent(request)
+            )
+            
+            return Response(UserRoleSerializer(role).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['delete'])
+    def delete_user(self, request, pk=None):
+        """Delete user (admin only)"""
+        if not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         
-        role.deactivate()
+        user = self.get_object()
         
-        # Log role removal
+        # Log user deletion
         AuditLog.log_action(
             user=request.user,
-            action=AuditLog.ActionType.ROLE_REMOVAL,
-            resource_type='UserRole',
-            resource_id=str(role.id),
-            details={
-                'deactivated_user': role.user.email,
-                'role_type': role.role_type,
-                'context_type': role.context_type,
-                'context_id': role.context_id
-            },
+            action=AuditLog.ActionType.DELETE,
+            resource_type='User',
+            resource_id=str(user.id),
+            details={'deleted_user': user.email},
             ip_address=get_client_ip(request),
             user_agent=get_user_agent(request)
         )
         
-        return Response({'message': 'Role deactivated successfully'})
-    
-    def _can_manage_users(self, user):
-        """Check if user can manage other users"""
-        return user.roles.filter(
-            is_active=True,
-            can_manage_users=True
-        ).exists()
+        user.delete()
+        return Response({'message': 'User deleted successfully'})
 
 
-class AdminUserViewSet(viewsets.ModelViewSet):
-    """Admin-only user management ViewSet"""
-    queryset = User.objects.all()
-    serializer_class = UserListSerializer
-    permission_classes = [IsAdminUser]
+class UserRoleViewSet(viewsets.ModelViewSet):
+    """User role management endpoints"""
+    queryset = UserRole.objects.all()
+    serializer_class = UserRoleSerializer
+    permission_classes = [IsUserManager]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'email_verified', 'date_joined']
-    search_fields = ['email', 'first_name', 'last_name']
-    ordering_fields = ['email', 'first_name', 'last_name', 'date_joined', 'last_login']
-    ordering = ['-date_joined']
+    filterset_fields = ['role_type', 'is_active', 'is_primary', 'user']
+    search_fields = ['user__email', 'user__first_name', 'user__last_name']
+    ordering_fields = ['assigned_at', 'created_at']
+    ordering = ['-assigned_at']
     
-    @action(detail=True, methods=['post'])
-    def activate(self, request, pk=None):
-        """Activate a user account"""
-        user = self.get_object()
-        user.is_active = True
-        user.save()
+    def get_queryset(self):
+        """Filter queryset based on user permissions"""
+        if self.request.user.is_superuser or self.request.user.role == User.Role.ADMIN:
+            return UserRole.objects.all()
         
-        return Response({'message': 'User activated successfully'})
-    
-    @action(detail=True, methods=['post'])
-    def deactivate(self, request, pk=None):
-        """Deactivate a user account"""
-        user = self.get_object()
-        user.is_active = False
-        user.save()
-        
-        return Response({'message': 'User deactivated successfully'})
-    
-    @action(detail=True, methods=['post'])
-    def verify_email(self, request, pk=None):
-        """Manually verify a user's email"""
-        user = self.get_object()
-        user.verify_email()
-        
-        return Response({'message': 'Email verified successfully'})
-    
-    @action(detail=True, methods=['get'])
-    def audit_logs(self, request, pk=None):
-        """Get user's audit logs"""
-        user = self.get_object()
-        logs = AuditLog.objects.filter(user=user).order_by('-created_at')
-        
-        page = self.paginate_queryset(logs)
-        if page is not None:
-            serializer = AuditLogSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = AuditLogSerializer(logs, many=True)
-        return Response(serializer.data)
+        # Regular users can only see their own roles
+        return UserRole.objects.filter(user=self.request.user)
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
-    """Audit log ViewSet (admin only)"""
+    """Audit log viewing endpoints (admin only)"""
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsUserManager]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['action', 'resource_type', 'user']
-    search_fields = ['user__email', 'resource_type', 'resource_id']
-    ordering_fields = ['created_at', 'action', 'user__email']
+    search_fields = ['user__email', 'resource_type', 'details']
+    ordering_fields = ['created_at']
     ordering = ['-created_at']
     
-    @action(detail=False, methods=['get'])
-    def summary(self, request):
-        """Get audit log summary statistics"""
-        total_logs = AuditLog.objects.count()
-        recent_logs = AuditLog.objects.filter(
-            created_at__gte=timezone.now() - timezone.timedelta(days=7)
-        ).count()
-        
-        action_counts = AuditLog.objects.values('action').annotate(
-            count=models.Count('id')
-        ).order_by('-count')[:10]
-        
-        return Response({
-            'total_logs': total_logs,
-            'recent_logs': recent_logs,
-            'action_counts': action_counts
-        })
+    def get_queryset(self):
+        """Admin can see all audit logs"""
+        return AuditLog.objects.all()

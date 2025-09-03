@@ -1,366 +1,271 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { useNotifications } from "../components/NotificationSystem";
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Badge from '../components/ui/Badge';
+import { 
+  UserGroupIcon, 
+  CalendarIcon, 
+  TrophyIcon, 
+  ChartBarIcon,
+  CogIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  FireIcon,
+  StarIcon,
+  PlusIcon,
+  EyeIcon
+} from '@heroicons/react/24/outline';
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
-  const { addNotification } = useNotifications();
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEvents: 0,
     totalVenues: 0,
-    totalMatches: 0,
-    activeRegistrations: 0,
-    pendingApprovals: 0
+    pendingApprovals: 0,
+    activeEvents: 0,
+    completedEvents: 0
   });
-  const [recentActivity, setRecentActivity] = useState([]);
+  const [recentUsers, setRecentUsers] = useState([]);
+  const [recentEvents, setRecentEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.role === 'ADMIN') {
-      loadAdminData();
-    }
-  }, [user]);
-
-  const loadAdminData = async () => {
-    try {
-      setLoading(true);
-      // In real app, fetch admin data from API
-      // For demo, simulate data
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+    // Simulate loading data - replace with actual API calls
+    setTimeout(() => {
       setStats({
-        totalUsers: 156,
-        totalEvents: 24,
-        totalVenues: 8,
-        totalMatches: 89,
-        activeRegistrations: 342,
-        pendingApprovals: 12
+        totalUsers: 1247,
+        totalEvents: 89,
+        totalVenues: 23,
+        pendingApprovals: 12,
+        activeEvents: 15,
+        completedEvents: 67
       });
-      
-      setRecentActivity([
-        { id: 1, type: 'user_registration', message: 'New user registered: john.doe@email.com', timestamp: new Date(), severity: 'info' },
-        { id: 2, type: 'event_created', message: 'New event created: Summer Football League', timestamp: new Date(Date.now() - 3600000), severity: 'success' },
-        { id: 3, type: 'payment_failed', message: 'Payment failed for registration #1234', timestamp: new Date(Date.now() - 7200000), severity: 'warning' },
-        { id: 4, type: 'venue_conflict', message: 'Venue conflict detected for Central Stadium', timestamp: new Date(Date.now() - 10800000), severity: 'error' }
+      setRecentUsers([
+        { id: 1, name: 'John Doe', email: 'john@example.com', role: 'ATHLETE', status: 'active' },
+        { id: 2, name: 'Jane Smith', email: 'jane@example.com', role: 'ORGANIZER', status: 'active' },
+        { id: 3, name: 'Bob Wilson', email: 'bob@example.com', role: 'COACH', status: 'pending' }
       ]);
-    } catch (error) {
-      console.error('Failed to load admin data:', error);
-      addNotification({
-        type: 'error',
-        title: 'Data Load Failed',
-        message: 'Could not load administrative data'
-      });
-    } finally {
+      setRecentEvents([
+        { id: 1, name: 'Summer Soccer League', sport: 'Soccer', status: 'ONGOING', participants: 156 },
+        { id: 2, name: 'Basketball Championship', sport: 'Basketball', status: 'UPCOMING', participants: 89 },
+        { id: 3, name: 'Swimming Meet', sport: 'Swimming', status: 'COMPLETED', participants: 234 }
+      ]);
       setLoading(false);
-    }
-  };
-
-  const getSeverityColor = (severity) => {
-    switch (severity) {
-      case 'error': return 'text-red-600 bg-red-50';
-      case 'warning': return 'text-yellow-600 bg-yellow-50';
-      case 'success': return 'text-green-600 bg-green-50';
-      default: return 'text-blue-600 bg-blue-50';
-    }
-  };
-
-  const getActivityIcon = (type) => {
-    switch (type) {
-      case 'user_registration': return '👤';
-      case 'event_created': return '🎯';
-      case 'payment_failed': return '💳';
-      case 'venue_conflict': return '🏟️';
-      default: return '📢';
-    }
-  };
-
-  if (user?.role !== 'ADMIN') {
-    return (
-      <div className="page-wrap">
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-6xl mb-4">🚫</div>
-            <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
-            <p className="text-gray-600">You need administrator privileges to view this page.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    }, 1000);
+  }, []);
 
   if (loading) {
     return (
-      <div className="page-wrap">
-        <div className="empty-state">
-          <div className="loading-spinner"></div>
-          <p className="mt-4">Loading administrative data...</p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading admin dashboard...</p>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="page-wrap">
-      {/* Welcome Header */}
-      <div className="hero mb-8">
-        <div className="hero-content">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="text-6xl">⚙️</div>
-            <div>
-              <h1 className="text-white">Admin Dashboard</h1>
-              <span className="px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                ADMINISTRATOR
-              </span>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-12 text-center">
+          <div className="inline-flex items-center space-x-4 mb-6">
+            <div className="w-16 h-16 bg-gradient-to-br from-red-600 to-purple-600 rounded-full flex items-center justify-center">
+              <CogIcon className="w-8 h-8 text-white" />
             </div>
-          </div>
-          <p className="text-white/90">
-            Monitor system health, manage users, and oversee all operations
-          </p>
-        </div>
-      </div>
-
-      {/* System Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">👥</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.totalUsers}</div>
-            <div className="text-gray-600">Total Users</div>
-          </div>
-        </div>
-        
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">🎯</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.totalEvents}</div>
-            <div className="text-gray-600">Active Events</div>
-          </div>
-        </div>
-        
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">⚙️</div>
-            <div className="text-2xl font-bold text-gray-800">Admin</div>
-            <div className="text-gray-600">Quick Actions</div>
-            <div className="mt-3 space-y-2">
-              <Link to="/admin/users" className="btn btn-primary btn-sm w-full">Manage Users</Link>
+            <div className="text-left">
+              <h1 className="text-5xl font-bold bg-gradient-to-r from-red-600 to-purple-600 bg-clip-text text-transparent">
+                Admin Dashboard
+              </h1>
+              <p className="text-xl text-gray-600 mt-2">System overview and management</p>
             </div>
           </div>
         </div>
-        
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">🏟️</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.totalVenues}</div>
-            <div className="text-gray-600">Venues</div>
-          </div>
-        </div>
-        
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">⚽</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.totalMatches}</div>
-            <div className="text-gray-600">Scheduled Matches</div>
-          </div>
-        </div>
-        
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">📝</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.activeRegistrations}</div>
-            <div className="text-gray-600">Active Registrations</div>
-          </div>
-        </div>
-        
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">⏳</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.pendingApprovals}</div>
-            <div className="text-gray-600">Pending Approvals</div>
-          </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* Quick Actions */}
-        <div className="card">
-          <div className="card-header">
-            <h3>Quick Actions</h3>
-          </div>
-          <div className="card-body">
-            <div className="space-y-3">
-              <button className="btn btn-primary w-full">
-                👥 Manage Users
-              </button>
-              <button className="btn btn-secondary w-full">
-                🎯 Approve Events
-              </button>
-              <button className="btn btn-secondary w-full">
-                🏟️ Manage Venues
-              </button>
-              <button className="btn btn-secondary w-full">
-                📊 View Reports
-              </button>
-              <button className="btn btn-secondary w-full">
-                ⚙️ System Settings
-              </button>
-              <button className="btn btn-secondary w-full">
-                🔒 Security Logs
-              </button>
-            </div>
+        <div className="mb-8 text-center">
+          <div className="flex justify-center space-x-4">
+            <Button as={Link} to="/admin/users" variant="primary" size="xl" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg">
+              <UserGroupIcon className="w-6 h-6 mr-3" />
+              Manage Users
+            </Button>
+            <Button as={Link} to="/admin/events" variant="primary" size="xl" className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 shadow-lg">
+              <CalendarIcon className="w-6 h-6 mr-3" />
+              Manage Events
+            </Button>
+            <Button as={Link} to="/admin/reports" variant="primary" size="xl" className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg">
+              <ChartBarIcon className="w-6 h-6 mr-3" />
+              View Reports
+            </Button>
           </div>
         </div>
 
-        {/* System Health */}
-        <div className="card">
-          <div className="card-header">
-            <h3>System Health</h3>
-          </div>
-          <div className="card-body">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+          <Card className="text-center transform hover:scale-105 transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+            <div className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-20 rounded-full mx-auto mb-4">
+              <UserGroupIcon className="w-8 h-8" />
+            </div>
+            <h3 className="text-4xl font-bold mb-2">{stats.totalUsers.toLocaleString()}</h3>
+            <p className="text-blue-100">Total Users</p>
+          </Card>
+
+          <Card className="text-center transform hover:scale-105 transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-green-500 to-green-600 text-white">
+            <div className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-20 rounded-full mx-auto mb-4">
+              <CalendarIcon className="w-8 h-8" />
+            </div>
+            <h3 className="text-4xl font-bold mb-2">{stats.totalEvents}</h3>
+            <p className="text-green-100">Total Events</p>
+          </Card>
+
+          <Card className="text-center transform hover:scale-105 transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+            <div className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-20 rounded-full mx-auto mb-4">
+              <TrophyIcon className="w-8 h-8" />
+            </div>
+            <h3 className="text-4xl font-bold mb-2">{stats.totalVenues}</h3>
+            <p className="text-purple-100">Total Venues</p>
+          </Card>
+
+          <Card className="text-center transform hover:scale-105 transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-orange-500 to-orange-600 text-white">
+            <div className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-20 rounded-full mx-auto mb-4">
+              <ExclamationTriangleIcon className="w-8 h-8" />
+            </div>
+            <h3 className="text-4xl font-bold mb-2">{stats.pendingApprovals}</h3>
+            <p className="text-orange-100">Pending Approvals</p>
+          </Card>
+
+          <Card className="text-center transform hover:scale-105 transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-red-500 to-red-600 text-white">
+            <div className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-20 rounded-full mx-auto mb-4">
+              <FireIcon className="w-8 h-8" />
+            </div>
+            <h3 className="text-4xl font-bold mb-2">{stats.activeEvents}</h3>
+            <p className="text-red-100">Active Events</p>
+          </Card>
+
+          <Card className="text-center transform hover:scale-105 transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-indigo-500 to-indigo-600 text-white">
+            <div className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-20 rounded-full mx-auto mb-4">
+              <CheckCircleIcon className="w-8 h-8" />
+            </div>
+            <h3 className="text-4xl font-bold mb-2">{stats.completedEvents}</h3>
+            <p className="text-indigo-100">Completed Events</p>
+          </Card>
+        </div>
+
+        {/* Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Recent Users */}
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Recent Users</h2>
+              <Button as={Link} to="/admin/users" variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700">
+                View All
+              </Button>
+            </div>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">✅</span>
-                  <div>
-                    <div className="font-medium text-green-800">Database</div>
-                    <div className="text-sm text-green-600">All systems operational</div>
-                  </div>
-                </div>
-                <span className="text-green-600 font-medium">100%</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">✅</span>
-                  <div>
-                    <div className="font-medium text-green-800">API Services</div>
-                    <div className="text-sm text-green-600">Response time: 45ms</div>
-                  </div>
-                </div>
-                <span className="text-green-600 font-medium">100%</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">⚠️</span>
-                  <div>
-                    <div className="font-medium text-yellow-800">Storage</div>
-                    <div className="text-sm text-yellow-600">75% capacity used</div>
-                  </div>
-                </div>
-                <span className="text-yellow-600 font-medium">75%</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">✅</span>
-                  <div>
-                    <div className="font-medium text-green-800">Backup System</div>
-                    <div className="text-sm text-green-600">Last backup: 2 hours ago</div>
-                  </div>
-                </div>
-                <span className="text-green-600 font-medium">100%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="card mb-8">
-        <div className="card-header">
-          <h3>Recent System Activity</h3>
-          <button className="btn btn-secondary btn-sm">
-            View All Logs
-          </button>
-        </div>
-        <div className="card-body">
-          {recentActivity.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="text-4xl mb-2">📝</div>
-              <p className="text-gray-600">No recent activity to display</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentActivity.map(activity => (
-                <div key={activity.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">{getActivityIcon(activity.type)}</span>
+              {recentUsers.map((user) => (
+                <div key={user.id} className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 transition-colors duration-200">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold">
+                      {user.name.charAt(0)}
+                    </div>
                     <div>
-                      <p className="font-medium text-gray-800">{activity.message}</p>
-                      <p className="text-sm text-gray-500">
-                        {activity.timestamp.toLocaleString()}
-                      </p>
+                      <h3 className="font-semibold text-gray-900">{user.name}</h3>
+                      <p className="text-sm text-gray-500">{user.email} • {user.role}</p>
                     </div>
                   </div>
-                  
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getSeverityColor(activity.severity)}`}>
-                    {activity.severity}
-                  </span>
+                  <Badge 
+                    variant={user.status === 'active' ? 'success' : 'warning'}
+                    size="sm"
+                  >
+                    {user.status}
+                  </Badge>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      </div>
+          </Card>
 
-      {/* System Metrics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* User Growth */}
-        <div className="card">
-          <div className="card-header">
-            <h3>User Growth (Last 30 Days)</h3>
-          </div>
-          <div className="card-body">
-            <div className="text-center py-8">
-              <div className="text-4xl mb-2">📈</div>
-              <div className="text-2xl font-bold text-green-600 mb-2">+23%</div>
-              <p className="text-gray-600">New user registrations</p>
-              <div className="mt-4 text-sm text-gray-500">
-                <p>Week 1: +8 users</p>
-                <p>Week 2: +12 users</p>
-                <p>Week 3: +15 users</p>
-                <p>Week 4: +18 users</p>
-              </div>
+          {/* Recent Events */}
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Recent Events</h2>
+              <Button as={Link} to="/admin/events" variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700">
+                View All
+              </Button>
             </div>
-          </div>
-        </div>
-
-        {/* Event Statistics */}
-        <div className="card">
-          <div className="card-header">
-            <h3>Event Statistics</h3>
-          </div>
-          <div className="card-body">
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Football Events</span>
-                <span className="font-medium">12</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Basketball Events</span>
-                <span className="font-medium">8</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Swimming Events</span>
-                <span className="font-medium">4</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Other Sports</span>
-                <span className="font-medium">6</span>
-              </div>
-              
-              <div className="border-t pt-4 mt-4">
-                <div className="flex justify-between items-center font-medium">
-                  <span>Total Events</span>
-                  <span className="text-blue-600">30</span>
+              {recentEvents.map((event) => (
+                <div key={event.id} className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 transition-colors duration-200">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+                      {event.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{event.name}</h3>
+                      <p className="text-sm text-gray-500">{event.sport} • {event.participants} participants</p>
+                    </div>
+                  </div>
+                  <Badge 
+                    variant={event.status === 'ONGOING' ? 'warning' : event.status === 'UPCOMING' ? 'info' : 'success'}
+                    size="sm"
+                  >
+                    {event.status}
+                  </Badge>
                 </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        {/* Quick Actions Grid */}
+        <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Quick Actions</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Button as={Link} to="/admin/users/create" variant="outline" size="lg" className="justify-center h-20 text-lg hover:shadow-lg transition-all duration-200">
+              <PlusIcon className="w-6 h-6 mr-3" />
+              Add User
+            </Button>
+            <Button as={Link} to="/admin/events/create" variant="outline" size="lg" className="justify-center h-20 text-lg hover:shadow-lg transition-all duration-200">
+              <PlusIcon className="w-6 h-6 mr-3" />
+              Create Event
+            </Button>
+            <Button as={Link} to="/admin/approvals" variant="outline" size="lg" className="justify-center h-20 text-lg hover:shadow-lg transition-all duration-200">
+              <ExclamationTriangleIcon className="w-6 h-6 mr-3" />
+              Review Approvals
+            </Button>
+            <Button as={Link} to="/admin/reports" variant="outline" size="lg" className="justify-center h-20 text-lg hover:shadow-lg transition-all duration-200">
+              <ChartBarIcon className="w-6 h-6 mr-3" />
+              Generate Reports
+            </Button>
+          </div>
+        </Card>
+
+        {/* System Status */}
+        <Card className="mt-8 border-0 shadow-xl bg-gradient-to-r from-gray-50 to-blue-50">
+          <div className="text-center">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">System Status</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="flex items-center justify-center space-x-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span className="text-gray-700">Database: Online</span>
+              </div>
+              <div className="flex items-center justify-center space-x-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span className="text-gray-700">API: Operational</span>
+              </div>
+              <div className="flex items-center justify-center space-x-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span className="text-gray-700">Storage: Active</span>
               </div>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

@@ -2,18 +2,25 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count, Avg
 from django.utils import timezone
 
-from .models import Team, TeamMember, AthleteProfile, TeamInvitation
+from .models import Team, TeamMember, AthleteProfile, TeamInvitation, TeamEventEntry
 from .serializers import (
     TeamSerializer, TeamCreateSerializer, TeamUpdateSerializer,
     TeamMemberSerializer, TeamMemberCreateSerializer, TeamMemberUpdateSerializer,
     AthleteProfileSerializer, TeamInvitationSerializer, TeamInvitationCreateSerializer,
-    TeamInvitationResponseSerializer, TeamStatsSerializer, TeamRosterSerializer
+    TeamInvitationResponseSerializer, TeamStatsSerializer, TeamRosterSerializer,
+    TeamEventEntrySerializer, TeamEventEntryCreateSerializer, TeamEventEntryActionSerializer,
+    EligibilityCheckSerializer, EligibilityResultSerializer
 )
-from .permissions import IsTeamManager, IsTeamMember, CanInviteMembers
+from .permissions import (
+    IsTeamManager, IsTeamMember, CanInviteMembers, IsTeamOwner, 
+    IsOrganizerOrAdmin, CanManageTeamEntries, CanApproveTeamEntries
+)
+from .services.eligibility import EligibilityChecker
 
 
 class TeamViewSet(viewsets.ModelViewSet):
@@ -22,7 +29,7 @@ class TeamViewSet(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['sport', 'is_active', 'is_public', 'created_by']
+    filterset_fields = ['sport', 'is_active', 'is_public', 'manager', 'coach']
     search_fields = ['name', 'description', 'sport']
     ordering_fields = ['name', 'created_at', 'total_matches', 'wins', 'points']
     ordering = ['name']
@@ -35,9 +42,33 @@ class TeamViewSet(viewsets.ModelViewSet):
             return TeamUpdateSerializer
         return TeamSerializer
     
+    def get_queryset(self):
+        """Filter queryset based on user permissions"""
+        queryset = super().get_queryset()
+        
+        # If user is not authenticated, only show public teams
+        if not self.request.user.is_authenticated:
+            return queryset.filter(is_public=True)
+        
+        # If user is not staff, only show teams they own/manage or public teams
+        if not self.request.user.is_staff:
+            user_teams = queryset.filter(
+                Q(manager=self.request.user) |
+                Q(created_by=self.request.user) |
+                Q(members__user=self.request.user, members__can_manage_team=True) |
+                Q(is_public=True)
+            ).distinct()
+            return user_teams
+        
+        return queryset
+    
     def perform_create(self, serializer):
         """Set the creator when creating a team"""
-        serializer.save(created_by=self.request.user)
+        if self.request.user.is_authenticated:
+            serializer.save(created_by=self.request.user)
+        else:
+            # This should not happen due to permissions, but just in case
+            raise PermissionDenied("Authentication required to create teams")
     
     @action(detail=True, methods=['get'])
     def roster(self, request, pk=None):
@@ -118,6 +149,40 @@ class TeamViewSet(viewsets.ModelViewSet):
         
         serializer = TeamSerializer(managed_teams, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['get', 'post'])
+    def members(self, request, pk=None):
+        """Get or add team members"""
+        team = self.get_object()
+        
+        if request.method == 'GET':
+            members = team.members.all()
+            serializer = TeamMemberSerializer(members, many=True)
+            return Response(serializer.data)
+        
+        elif request.method == 'POST':
+            serializer = TeamMemberCreateSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save(team=team)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['get', 'post'])
+    def entries(self, request, pk=None):
+        """Get or create team event entries"""
+        team = self.get_object()
+        
+        if request.method == 'GET':
+            entries = team.event_entries.all()
+            serializer = TeamEventEntrySerializer(entries, many=True)
+            return Response(serializer.data)
+        
+        elif request.method == 'POST':
+            serializer = TeamEventEntryCreateSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save(team=team)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class TeamMemberViewSet(viewsets.ModelViewSet):
@@ -355,3 +420,104 @@ class TeamInvitationViewSet(viewsets.ModelViewSet):
         invitation.status = TeamInvitation.Status.EXPIRED
         invitation.save()
         return Response({"detail": "Invitation cancelled successfully"})
+
+
+class TeamEventEntryViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing team event entries"""
+    queryset = TeamEventEntry.objects.all()
+    serializer_class = TeamEventEntrySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['team', 'event', 'division', 'status']
+    search_fields = ['team__name', 'event__name', 'division__name']
+    ordering_fields = ['created_at', 'status']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        """Filter queryset based on user permissions"""
+        queryset = super().get_queryset()
+        
+        # If user is not staff, only show entries for teams they can manage
+        if not self.request.user.is_staff:
+            user_teams = Team.objects.filter(
+                Q(manager=self.request.user) |
+                Q(members__user=self.request.user, members__can_manage_team=True)
+            ).distinct()
+            queryset = queryset.filter(team__in=user_teams)
+        
+        return queryset
+    
+    @action(detail=True, methods=['patch'])
+    def withdraw(self, request, pk=None):
+        """Withdraw a team entry"""
+        entry = self.get_object()
+        
+        serializer = TeamEventEntryActionSerializer(data=request.data, context={'action': 'withdraw'})
+        if serializer.is_valid():
+            note = serializer.validated_data.get('note', '')
+            if entry.withdraw(note):
+                return Response({"detail": "Entry withdrawn successfully"})
+            else:
+                return Response(
+                    {"detail": "Cannot withdraw entry in current status"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['patch'], permission_classes=[CanApproveTeamEntries])
+    def approve(self, request, pk=None):
+        """Approve a team entry (organizer/admin only)"""
+        entry = self.get_object()
+        
+        serializer = TeamEventEntryActionSerializer(data=request.data, context={'action': 'approve'})
+        if serializer.is_valid():
+            note = serializer.validated_data.get('note', '')
+            if entry.approve(request.user, note):
+                return Response({"detail": "Entry approved successfully"})
+            else:
+                return Response(
+                    {"detail": "Cannot approve entry in current status"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['patch'], permission_classes=[CanApproveTeamEntries])
+    def reject(self, request, pk=None):
+        """Reject a team entry (organizer/admin only)"""
+        entry = self.get_object()
+        
+        serializer = TeamEventEntryActionSerializer(data=request.data, context={'action': 'reject'})
+        if serializer.is_valid():
+            note = serializer.validated_data.get('note', '')
+            if entry.reject(request.user, note):
+                return Response({"detail": "Entry rejected successfully"})
+            else:
+                return Response(
+                    {"detail": "Cannot reject entry in current status"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EligibilityCheckViewSet(viewsets.ViewSet):
+    """ViewSet for checking team eligibility"""
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=['post'])
+    def check(self, request):
+        """Check team eligibility for event/division"""
+        serializer = EligibilityCheckSerializer(data=request.data)
+        if serializer.is_valid():
+            team_id = serializer.validated_data['team_id']
+            event_id = serializer.validated_data['event_id']
+            division_id = serializer.validated_data.get('division_id')
+            
+            result = EligibilityChecker.check_team_eligibility(team_id, event_id, division_id)
+            
+            # Add team summary for context
+            team_summary = EligibilityChecker.get_team_roster_summary(team_id)
+            result['team_summary'] = team_summary
+            
+            return Response(result)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

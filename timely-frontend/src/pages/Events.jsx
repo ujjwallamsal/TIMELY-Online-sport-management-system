@@ -1,112 +1,54 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { getEvents, getDivisions, getVenues } from "../lib/api";
+import { getPublicEvents } from "../lib/api";
 
 export default function Events() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  
-  // Filters state
+
   const [filters, setFilters] = useState({
     search: "",
-    sport_type: "",
-    venue: "",
-    start_date: "",
-    end_date: "",
-    min_fee: "",
-    max_fee: "",
-    registration_open: "",
-    status: "PUBLISHED" // Default to published events
+    sport: "",
+    dateFrom: "",
+    dateTo: "",
+    lifecycleStatus: ""
   });
-  
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  
-  // Filter options
   const [sportTypes, setSportTypes] = useState([]);
   const [venues, setVenues] = useState([]);
   const [divisions, setDivisions] = useState([]);
 
-  // Fallback data for development
-  const fallbackEvents = [
-    {
-      id: 1,
-      name: "Summer Football Championship",
-      sport_type: "Football",
-      start_date: "2024-07-15",
-      end_date: "2024-07-20",
-      venue_name: "Central Stadium",
-      status: "UPCOMING",
-      is_registration_open: true,
-      fee_dollars: 25.00
-    },
-    {
-      id: 2,
-      name: "Basketball Tournament",
-      sport_type: "Basketball",
-      start_date: "2024-08-01",
-      end_date: "2024-08-05",
-      venue_name: "Sports Complex",
-      status: "UPCOMING",
-      is_registration_open: true,
-      fee_dollars: 30.00
-    },
-    {
-      id: 3,
-      name: "Swimming Competition",
-      sport_type: "Swimming",
-      start_date: "2024-09-10",
-      end_date: "2024-09-12",
-      venue_name: "Aquatic Center",
-      status: "UPCOMING",
-      is_registration_open: false,
-      fee_dollars: 20.00
+  // Use ref to prevent multiple simultaneous requests
+  const loadingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  // Load events function with proper error handling
+  const loadEvents = async (page = 1) => {
+    // Prevent multiple simultaneous requests
+    if (loadingRef.current) {
+      return;
     }
-  ];
 
-  useEffect(() => {
-    loadEvents();
-    loadFilterOptions();
-  }, [currentPage]);
-
-  // Load filter options
-  async function loadFilterOptions() {
     try {
-      const [divisionsData, venuesData] = await Promise.all([
-        getDivisions().catch(() => []),
-        getVenues().catch(() => [])
-      ]);
-      
-      setDivisions(divisionsData || []);
-      setVenues(venuesData || []);
-      
-      // Extract unique sport types from fallback data
-      const uniqueSports = [...new Set(fallbackEvents.map(event => event.sport_type))];
-      setSportTypes(uniqueSports);
-    } catch (err) {
-      console.error('Failed to load filter options:', err);
-      // Use fallback sport types
-      const uniqueSports = [...new Set(fallbackEvents.map(event => event.sport_type))];
-      setSportTypes(uniqueSports);
-    }
-  }
-
-  // Load events with better error handling
-  async function loadEvents() {
-    try {
+      loadingRef.current = true;
       setLoading(true);
       setError("");
       
-      // Try to load from API first
-      const response = await getEvents(currentPage, filters.search, filters.sport_type, filters.venue, filters);
+      // Load from API
+      const response = await getPublicEvents(page, 12);
+      
+      // Check if component is still mounted
+      if (!mountedRef.current) {
+        return;
+      }
       
       if (response && (response.results || response.length > 0)) {
         setEvents(response.results || response || []);
-        setTotalPages(response.total_pages || 1);
+        setTotalPages(response.total_pages || Math.ceil((response.count || response.length) / 12) || 1);
         setTotalCount(response.count || response.length || 0);
         
         // Update sport types if we have new events
@@ -115,283 +57,338 @@ export default function Events() {
           setSportTypes(prev => [...new Set([...prev, ...uniqueSports])]);
         }
       } else {
-        // Use fallback data if API returns empty
-        setEvents(fallbackEvents);
+        setEvents([]);
         setTotalPages(1);
-        setTotalCount(fallbackEvents.length);
+        setTotalCount(0);
+        setError("No events found.");
       }
     } catch (err) {
       console.error('Error loading events:', err);
-      // Use fallback data on error
-      setEvents(fallbackEvents);
-      setTotalPages(1);
-      setTotalCount(fallbackEvents.length);
-      setError("Using offline data. Some features may be limited.");
+      if (mountedRef.current) {
+        setEvents([]);
+        setTotalPages(1);
+        setTotalCount(0);
+        setError("Failed to load events. Please try again later.");
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+      loadingRef.current = false;
     }
-  }
+  };
 
+  // Load filter options once
+  const loadFilterOptions = async () => {
+    try {
+      // This would load venues, divisions, etc.
+      // For now, just set empty arrays
+      setVenues([]);
+      setDivisions([]);
+    } catch (err) {
+      console.error('Error loading filter options:', err);
+    }
+  };
+
+  // Initial load - only run once
+  useEffect(() => {
+    mountedRef.current = true;
+    loadEvents(1);
+    loadFilterOptions();
+    
+    // Cleanup function
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []); // Empty dependency array - only run once
+
+  // Handle page changes
+  const handlePageChange = (page) => {
+    if (page !== currentPage && page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      loadEvents(page);
+    }
+  };
+
+  // Handle filter changes
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
     setCurrentPage(1); // Reset to first page when filters change
+    // Don't automatically reload - let user click search
   };
 
+  // Handle search
+  const handleSearch = () => {
+    setCurrentPage(1);
+    loadEvents(1);
+  };
+
+  // Clear filters
   const clearFilters = () => {
     setFilters({
       search: "",
-      sport_type: "",
-      venue: "",
-      start_date: "",
-      end_date: "",
-      min_fee: "",
-      max_fee: "",
-      registration_open: "",
-      status: "PUBLISHED"
+      sport: "",
+      dateFrom: "",
+      dateTo: "",
+      lifecycleStatus: ""
     });
     setCurrentPage(1);
+    loadEvents(1);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'DRAFT': return 'bg-gray-100 text-gray-800';
-      case 'PUBLISHED': return 'bg-green-100 text-green-800';
-      case 'UPCOMING': return 'bg-blue-100 text-blue-800';
-      case 'ONGOING': return 'bg-yellow-100 text-yellow-800';
-      case 'COMPLETED': return 'bg-purple-100 text-purple-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "TBD";
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  const formatDateTime = (dateTimeString) => {
-    if (!dateTimeString) return "TBD";
-    const date = new Date(dateTimeString);
-    return date.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  // Filter events based on current filters
-  const filteredEvents = events.filter(event => {
-    if (filters.search && !event.name.toLowerCase().includes(filters.search.toLowerCase())) {
-      return false;
-    }
-    if (filters.sport_type && event.sport_type !== filters.sport_type) {
-      return false;
-    }
-    if (filters.venue && event.venue_name !== filters.venue) {
-      return false;
-    }
-    if (filters.registration_open === 'true' && !event.is_registration_open) {
-      return false;
-    }
-    if (filters.registration_open === 'false' && event.is_registration_open) {
-      return false;
-    }
-    return true;
-  });
+  // Render loading state
+  if (loading && events.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading events...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8">
+    <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Sports Events
-          </h1>
-          <p className="mt-3 text-lg text-gray-600 max-w-2xl mx-auto">
-            Discover and join exciting sports events in your area. From football to swimming, we've got you covered! 🏟️⚽🏀🏊‍♂️
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Events</h1>
+          <p className="mt-2 text-gray-600">
+            Discover and participate in upcoming sporting events
           </p>
         </div>
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              <p className="text-yellow-700">{error}</p>
-            </div>
-          </div>
-        )}
-        
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <p className="text-green-700">{success}</p>
-            </div>
-          </div>
-        )}
-
         {/* Filters */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">🔍 Search & Filter</h3>
-            <button
-              onClick={clearFilters}
-              className="mt-3 sm:mt-0 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-500 bg-blue-50 hover:bg-blue-100 rounded-lg transition-all duration-200"
-            >
-              Clear all filters
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Search */}
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Search Events</label>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search
+              </label>
               <input
                 type="text"
                 value={filters.search}
                 onChange={(e) => handleFilterChange("search", e.target.value)}
-                placeholder="Search by event name, sport, or description..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                placeholder="Search events..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-            
+
             {/* Sport Type */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sport Type</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Sport Type
+              </label>
               <select
-                value={filters.sport_type}
-                onChange={(e) => handleFilterChange("sport_type", e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                value={filters.sport}
+                onChange={(e) => handleFilterChange("sport", e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">All Sports</option>
-                {sportTypes.map(sport => (
-                  <option key={sport} value={sport}>{sport}</option>
+                {sportTypes.map((sport) => (
+                  <option key={sport} value={sport}>
+                    {sport}
+                  </option>
                 ))}
               </select>
             </div>
-            
-            {/* Registration Status */}
+
+            {/* Date From */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Registration</label>
-              <select
-                value={filters.registration_open}
-                onChange={(e) => handleFilterChange("registration_open", e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-              >
-                <option value="">All</option>
-                <option value="true">Open</option>
-                <option value="false">Closed</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                From Date
+              </label>
+              <input
+                type="date"
+                value={filters.dateFrom}
+                onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
             </div>
+
+            {/* Date To */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                To Date
+              </label>
+              <input
+                type="date"
+                value={filters.dateTo}
+                onChange={(e) => handleFilterChange("dateTo", e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Filter Actions */}
+          <div className="mt-4 flex gap-3">
+            <button
+              onClick={handleSearch}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              Search
+            </button>
+            <button
+              onClick={clearFilters}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+            >
+              Clear Filters
+            </button>
           </div>
         </div>
 
-        {/* Events Grid */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-2xl font-bold text-gray-900">
-              Available Events ({filteredEvents.length})
-            </h3>
-          </div>
-          
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 animate-pulse">
-                  <div className="h-6 bg-gray-200 rounded-lg mb-4"></div>
-                  <div className="h-4 bg-gray-200 rounded mb-3"></div>
-                  <div className="h-4 bg-gray-200 rounded mb-4"></div>
-                  <div className="h-10 bg-gray-200 rounded-lg"></div>
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+            <div className="flex">
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>{error}</p>
                 </div>
-              ))}
+              </div>
             </div>
-          ) : filteredEvents.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-8xl mb-6">🏟️</div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">No events found</h3>
-              <p className="text-gray-600 text-lg mb-6">Try adjusting your filters or check back later for new events.</p>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {success && (
+          <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
+            <div className="flex">
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-green-800">Success</h3>
+                <div className="mt-2 text-sm text-green-700">
+                  <p>{success}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Events Grid */}
+        {events.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {events.map((event) => (
+              <div key={event.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                      {event.sport_type || event.sport}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {new Date(event.start_datetime).toLocaleDateString()}
+                    </span>
+                  </div>
+                  
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {event.name}
+                  </h3>
+                  
+                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                    {event.description}
+                  </p>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-500">
+                      <p>📍 {event.location}</p>
+                      <p>👥 Capacity: {event.capacity}</p>
+                    </div>
+                    <Link
+                      to={`/events/${event.id}`}
+                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      View Details
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          !loading && (
+            <div className="text-center py-12">
+              <div className="text-gray-400 text-6xl mb-4">🏃‍♂️</div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No events found</h3>
+              <p className="text-gray-500">Try adjusting your search criteria or check back later.</p>
+            </div>
+          )
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-lg">
+            <div className="flex flex-1 justify-between sm:hidden">
               <button
-                onClick={clearFilters}
-                className="px-6 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors duration-200"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Clear Filters
+                Previous
+              </button>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
               </button>
             </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredEvents.map((event) => (
-                  <div key={event.id} className="group bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden">
-                    <div className="p-6">
-                      {/* Event Header */}
-                      <div className="flex items-start justify-between mb-4">
-                        <h3 className="text-xl font-bold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors duration-200">
-                          {event.name}
-                        </h3>
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(event.status)}`}>
-                          {event.status}
-                        </span>
-                      </div>
-                      
-                      {/* Sport & Venue */}
-                      <div className="flex items-center text-sm text-gray-600 mb-4">
-                        <span className="font-semibold text-blue-600">{event.sport_type}</span>
-                        {event.venue_name && (
-                          <>
-                            <span className="mx-2 text-gray-400">•</span>
-                            <span>{event.venue_name}</span>
-                          </>
-                        )}
-                      </div>
-                      
-                      {/* Dates */}
-                      <div className="text-sm text-gray-600 mb-4">
-                        <div className="flex items-center">
-                          <svg className="w-5 h-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          {formatDate(event.start_date)} - {formatDate(event.end_date)}
-                        </div>
-                      </div>
-                      
-                      {/* Registration & Fee */}
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center">
-                          <div className={`w-3 h-3 rounded-full mr-2 ${event.is_registration_open ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                          <span className="text-sm font-medium text-gray-700">
-                            {event.is_registration_open ? 'Registration Open' : 'Registration Closed'}
-                          </span>
-                        </div>
-                        <span className="text-xl font-bold text-blue-600">
-                          ${event.fee_dollars || 0}
-                        </span>
-                      </div>
-                      
-                      {/* Action Button */}
-                      <Link
-                        to={`/events/${event.id}`}
-                        className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 transform hover:scale-105"
-                      >
-                        View Details
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-gray-700">
+                  Showing <span className="font-medium">{(currentPage - 1) * 12 + 1}</span> to{" "}
+                  <span className="font-medium">
+                    {Math.min(currentPage * 12, totalCount)}
+                  </span>{" "}
+                  of <span className="font-medium">{totalCount}</span> results
+                </p>
               </div>
-            </>
-          )}
-        </div>
+              <div>
+                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="sr-only">Previous</span>
+                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                  
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
+                        page === currentPage
+                          ? "z-10 bg-indigo-600 text-white focus:z-20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                          : "text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="sr-only">Next</span>
+                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

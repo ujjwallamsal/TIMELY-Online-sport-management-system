@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from tickets.models import Ticket
-from fixtures.models import Match
+from fixtures.models import Fixture
 from .permissions import IsOrganizerOrAdmin
 
 
@@ -42,7 +42,7 @@ def ticket_sales_report(request):
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def attendance_report(request):
-    data = Match.objects.values("event__name").annotate(total_matches=Count("id"))
+    data = Fixture.objects.values("event__name").annotate(total_matches=Count("id"))
     return Response(list(data))
 
 

@@ -2,15 +2,15 @@ from django.db import models
 from django.conf import settings
 
 from events.models import Event
-from fixtures.models import Match
+from fixtures.models import Fixture
 
 class Album(models.Model):
     """
     Logical grouping of media for an Event (optionally a specific Match).
     """
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="albums")
-    match = models.ForeignKey(Match, on_delete=models.SET_NULL, related_name="albums",
-                              null=True, blank=True)
+    fixture = models.ForeignKey(Fixture, on_delete=models.SET_NULL, related_name="albums",
+                                null=True, blank=True)
     title = models.CharField(max_length=140)
     description = models.TextField(blank=True)
     is_public = models.BooleanField(default=True)

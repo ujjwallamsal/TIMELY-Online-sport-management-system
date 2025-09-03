@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { TrophyIcon } from '@heroicons/react/24/outline';
 
 export default function Login() {
   const [formData, setFormData] = useState({
@@ -35,8 +36,44 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      {/* Navigation Bar */}
+      <nav className="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <TrophyIcon className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                Timely Sports
+              </span>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <Link to="/" className="text-gray-600 hover:text-blue-600 font-medium">
+                Home
+              </Link>
+              <Link to="/events" className="text-gray-600 hover:text-blue-600 font-medium">
+                Events
+              </Link>
+              <Link to="/schedule" className="text-gray-600 hover:text-blue-600 font-medium">
+                Schedule
+              </Link>
+              <Link to="/results" className="text-gray-600 hover:text-blue-600 font-medium">
+                Results
+              </Link>
+              <Link to="/news" className="text-gray-600 hover:text-blue-600 font-medium">
+                News
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
           <div className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6">
@@ -190,6 +227,7 @@ export default function Login() {
           <p className="text-sm text-gray-500">
             © 2025 Timely. All rights reserved.
           </p>
+        </div>
         </div>
       </div>
     </div>

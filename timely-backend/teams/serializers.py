@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Team, TeamMember, AthleteProfile, TeamInvitation
+from .models import Team, TeamMember, AthleteProfile, TeamInvitation, TeamEventEntry
 from venues.serializers import VenueSerializer
 
 User = get_user_model()
@@ -44,7 +44,7 @@ class AthleteProfileSerializer(serializers.ModelSerializer):
 class TeamMemberSerializer(serializers.ModelSerializer):
     """Serializer for team members"""
     user = UserBasicSerializer(read_only=True)
-    user_id = serializers.IntegerField(write_only=True)
+    user_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     team_name = serializers.CharField(source='team.name', read_only=True)
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -52,10 +52,10 @@ class TeamMemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = TeamMember
         fields = [
-            'id', 'team', 'user', 'user_id', 'team_name', 'role', 'role_display',
-            'status', 'status_display', 'jersey_number', 'position', 'joined_date',
-            'left_date', 'can_manage_team', 'can_edit_results', 'is_active_member',
-            'created_at', 'updated_at'
+            'id', 'team', 'user', 'user_id', 'team_name', 'full_name', 'date_of_birth',
+            'role', 'role_display', 'status', 'status_display', 'jersey_number', 
+            'position', 'joined_date', 'left_date', 'can_manage_team', 'can_edit_results', 
+            'is_active_member', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'team', 'user', 'team_name', 'role_display', 
                            'status_display', 'joined_date', 'is_active_member', 
@@ -84,8 +84,12 @@ class TeamSerializer(serializers.ModelSerializer):
     members = TeamMemberSerializer(many=True, read_only=True)
     home_venue = VenueSerializer(read_only=True)
     home_venue_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    manager = UserBasicSerializer(read_only=True)
+    manager_id = serializers.IntegerField(write_only=True)
+    coach = UserBasicSerializer(read_only=True)
+    coach_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     created_by = UserBasicSerializer(read_only=True)
-    created_by_id = serializers.IntegerField(write_only=True)
+    created_by_id = serializers.IntegerField(write_only=True, required=False)
     
     # Computed fields
     total_members = serializers.SerializerMethodField()
@@ -96,11 +100,11 @@ class TeamSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
         fields = [
-            'id', 'name', 'sport', 'description', 'founded_date', 'home_venue',
-            'home_venue_id', 'logo', 'is_active', 'is_public', 'total_matches',
-            'wins', 'losses', 'draws', 'total_members', 'active_members',
-            'win_percentage', 'points', 'created_by', 'created_by_id',
-            'created_at', 'updated_at'
+            'id', 'name', 'sport', 'description', 'manager', 'manager_id', 'coach', 'coach_id',
+            'contact_email', 'contact_phone', 'founded_date', 'home_venue', 'home_venue_id', 
+            'logo', 'is_active', 'is_public', 'total_matches', 'wins', 'losses', 'draws', 
+            'total_members', 'active_members', 'win_percentage', 'points', 'created_by', 
+            'created_by_id', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'total_matches', 'wins', 'losses', 'draws',
                            'win_percentage', 'points', 'created_by', 'created_at', 'updated_at']
@@ -125,8 +129,8 @@ class TeamCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
         fields = [
-            'name', 'sport', 'description', 'founded_date', 'home_venue',
-            'logo', 'is_active', 'is_public'
+            'name', 'sport', 'description', 'manager_id', 'coach_id', 'contact_email', 
+            'contact_phone', 'founded_date', 'home_venue', 'logo', 'is_active', 'is_public'
         ]
 
 
@@ -135,8 +139,8 @@ class TeamUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
         fields = [
-            'name', 'sport', 'description', 'founded_date', 'home_venue',
-            'logo', 'is_active', 'is_public'
+            'name', 'sport', 'description', 'manager_id', 'coach_id', 'contact_email', 
+            'contact_phone', 'founded_date', 'home_venue', 'logo', 'is_active', 'is_public'
         ]
         read_only_fields = ['created_by']
 
@@ -146,15 +150,19 @@ class TeamMemberCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TeamMember
         fields = [
-            'team', 'user', 'role', 'jersey_number', 'position',
-            'can_manage_team', 'can_edit_results'
+            'team', 'user', 'user_id', 'full_name', 'date_of_birth', 'role', 
+            'jersey_number', 'position', 'can_manage_team', 'can_edit_results'
         ]
     
     def validate(self, data):
         """Validate team member creation"""
-        # Check if user is already a member of this team
-        if TeamMember.objects.filter(team=data['team'], user=data['user']).exists():
+        # Check if user is already a member of this team (if user is provided)
+        if data.get('user') and TeamMember.objects.filter(team=data['team'], user=data['user']).exists():
             raise serializers.ValidationError("User is already a member of this team")
+        
+        # Ensure either user or full_name is provided
+        if not data.get('user') and not data.get('full_name'):
+            raise serializers.ValidationError("Either user or full_name must be provided")
         
         return data
 
@@ -164,7 +172,7 @@ class TeamMemberUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TeamMember
         fields = [
-            'role', 'status', 'jersey_number', 'position',
+            'full_name', 'date_of_birth', 'role', 'status', 'jersey_number', 'position',
             'can_manage_team', 'can_edit_results'
         ]
 
@@ -275,3 +283,97 @@ class TeamRosterSerializer(serializers.ModelSerializer):
         """Get active team members with their details"""
         active_members = obj.members.filter(status=TeamMember.Status.ACTIVE)
         return TeamMemberSerializer(active_members, many=True).data
+
+
+class TeamEventEntrySerializer(serializers.ModelSerializer):
+    """Serializer for team event entries"""
+    team = TeamSerializer(read_only=True)
+    team_id = serializers.IntegerField(write_only=True)
+    event_name = serializers.CharField(source='event.name', read_only=True)
+    division_name = serializers.CharField(source='division.name', read_only=True)
+    decided_by_name = serializers.CharField(source='decided_by.get_full_name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = TeamEventEntry
+        fields = [
+            'id', 'team', 'team_id', 'event', 'event_name', 'division', 'division_name',
+            'status', 'status_display', 'note', 'decided_at', 'decided_by', 'decided_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'team', 'event_name', 'division_name', 'status_display',
+                           'decided_at', 'decided_by', 'decided_by_name', 'created_at', 'updated_at']
+
+
+class TeamEventEntryCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating team event entries"""
+    class Meta:
+        model = TeamEventEntry
+        fields = ['team', 'event', 'division', 'note']
+    
+    def validate(self, data):
+        """Validate entry creation"""
+        # Check if team already has an entry for this event/division
+        existing_entry = TeamEventEntry.objects.filter(
+            team=data['team'],
+            event=data['event'],
+            division=data.get('division'),
+            status__in=[TeamEventEntry.Status.PENDING, TeamEventEntry.Status.APPROVED]
+        ).exists()
+        
+        if existing_entry:
+            raise serializers.ValidationError("Team already has an entry for this event/division")
+        
+        return data
+
+
+class TeamEventEntryActionSerializer(serializers.Serializer):
+    """Serializer for entry actions (approve/reject/withdraw)"""
+    note = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate_note(self, value):
+        """Validate note is provided for reject action"""
+        if self.context.get('action') == 'reject' and not value:
+            raise serializers.ValidationError("Note is required when rejecting an entry")
+        return value
+
+
+class EligibilityCheckSerializer(serializers.Serializer):
+    """Serializer for eligibility check requests"""
+    team_id = serializers.IntegerField()
+    event_id = serializers.IntegerField()
+    division_id = serializers.IntegerField(required=False, allow_null=True)
+    
+    def validate_team_id(self, value):
+        """Validate team exists"""
+        try:
+            Team.objects.get(id=value)
+        except Team.DoesNotExist:
+            raise serializers.ValidationError("Team not found")
+        return value
+    
+    def validate_event_id(self, value):
+        """Validate event exists"""
+        try:
+            from events.models import Event
+            Event.objects.get(id=value)
+        except:
+            raise serializers.ValidationError("Event not found")
+        return value
+    
+    def validate_division_id(self, value):
+        """Validate division exists if provided"""
+        if value:
+            try:
+                from events.models import Division
+                Division.objects.get(id=value)
+            except:
+                raise serializers.ValidationError("Division not found")
+        return value
+
+
+class EligibilityResultSerializer(serializers.Serializer):
+    """Serializer for eligibility check results"""
+    eligible = serializers.BooleanField()
+    reasons = serializers.ListField(child=serializers.CharField())
+    team_summary = serializers.DictField(required=False)

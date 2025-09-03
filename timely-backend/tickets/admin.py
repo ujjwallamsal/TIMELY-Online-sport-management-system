@@ -5,43 +5,36 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils import timezone
 
-from .models import TicketType, TicketOrder, Ticket, PaymentRecord
+from .models import TicketType, TicketOrder, Ticket
 
 
 @admin.register(TicketType)
 class TicketTypeAdmin(admin.ModelAdmin):
     list_display = [
-        'name', 'event', 'category', 'price_dollars', 'available_quantity',
-        'total_quantity', 'is_active', 'sale_start', 'sale_end'
+        'name', 'event', 'price_dollars', 'available_quantity',
+        'quantity_total', 'on_sale', 'created_at'
     ]
     list_filter = [
-        'category', 'is_active', 'includes_seating', 'includes_amenities',
-        'is_transferable', 'created_at'
+        'on_sale', 'created_at'
     ]
     search_fields = ['name', 'event__name', 'description']
     readonly_fields = [
-        'sold_quantity', 'available_quantity', 'created_at', 'updated_at'
+        'quantity_sold', 'available_quantity', 'created_at', 'updated_at'
     ]
-    list_editable = ['is_active']
+    list_editable = ['on_sale']
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('event', 'name', 'category', 'description')
+            'fields': ('event', 'fixture', 'name', 'description')
         }),
         ('Pricing', {
             'fields': ('price_cents', 'currency')
         }),
         ('Availability', {
-            'fields': ('total_quantity', 'sold_quantity', 'available_quantity', 'max_per_order')
-        }),
-        ('Timing', {
-            'fields': ('sale_start', 'sale_end')
-        }),
-        ('Features', {
-            'fields': ('includes_seating', 'includes_amenities', 'is_transferable')
+            'fields': ('quantity_total', 'quantity_sold', 'available_quantity')
         }),
         ('Status', {
-            'fields': ('is_active',)
+            'fields': ('on_sale',)
         }),
         ('Audit', {
             'fields': ('created_at', 'updated_at'),
@@ -61,95 +54,77 @@ class TicketTypeAdmin(admin.ModelAdmin):
 @admin.register(TicketOrder)
 class TicketOrderAdmin(admin.ModelAdmin):
     list_display = [
-        'order_number', 'customer_name', 'event', 'status', 'payment_amount_dollars',
-        'total_tickets', 'payment_provider', 'created_at'
+        'id', 'user', 'event', 'status', 'total_dollars',
+        'provider', 'created_at'
     ]
     list_filter = [
-        'status', 'payment_provider', 'payment_currency', 'created_at'
+        'status', 'provider', 'currency', 'created_at'
     ]
     search_fields = [
-        'order_number', 'customer_name', 'customer_email', 'event__name'
+        'id', 'user__email', 'event__name'
     ]
     readonly_fields = [
-        'order_number', 'total_tickets', 'payment_amount_dollars', 'created_at', 'updated_at'
+        'total_dollars', 'created_at', 'updated_at'
     ]
     list_editable = ['status']
     
     fieldsets = (
         ('Order Information', {
-            'fields': ('order_number', 'customer', 'event', 'status')
-        }),
-        ('Customer Details', {
-            'fields': ('customer_name', 'customer_email', 'customer_phone', 'notes')
+            'fields': ('user', 'event', 'fixture', 'status')
         }),
         ('Payment', {
             'fields': (
-                'payment_provider', 'provider_reference', 'payment_amount_cents',
-                'payment_currency', 'payment_date'
+                'provider', 'provider_session_id', 'provider_payment_intent',
+                'total_cents', 'currency'
             )
         }),
         ('Timing', {
-            'fields': ('created_at', 'updated_at', 'expires_at')
-        }),
-        ('Tickets', {
-            'fields': ('total_tickets',)
+            'fields': ('created_at', 'updated_at')
         })
     )
     
-    def payment_amount_dollars(self, obj):
-        return f"${obj.payment_amount_dollars:.2f}"
-    payment_amount_dollars.short_description = 'Amount'
-    
-    def total_tickets(self, obj):
-        return obj.total_tickets
-    total_tickets.short_description = 'Tickets'
+    def total_dollars(self, obj):
+        return f"${obj.total_dollars:.2f}"
+    total_dollars.short_description = 'Amount'
 
 
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = [
-        'ticket_id', 'holder_name', 'order_link', 'event_name', 'ticket_type_name',
-        'status', 'issued_at', 'expires_at', 'is_valid'
+        'serial', 'order_link', 'ticket_type_name', 'status', 'issued_at', 'is_valid'
     ]
     list_filter = [
-        'status', 'issued_at', 'expires_at', 'ticket_type__category'
+        'status', 'issued_at', 'ticket_type__name'
     ]
     search_fields = [
-        'ticket_id', 'holder_name', 'holder_email', 'order__order_number'
+        'serial', 'qr_payload', 'order__id'
     ]
     readonly_fields = [
-        'ticket_id', 'validation_hash', 'issued_at', 'is_valid', 'is_expired'
+        'serial', 'qr_payload', 'issued_at', 'is_valid'
     ]
     list_editable = ['status']
     
     fieldsets = (
         ('Ticket Information', {
-            'fields': ('ticket_id', 'order', 'ticket_type', 'status')
+            'fields': ('serial', 'order', 'ticket_type', 'status')
         }),
-        ('Holder Details', {
-            'fields': ('holder_name', 'holder_email', 'seat_number', 'section')
+        ('QR Code', {
+            'fields': ('qr_payload',)
         }),
         ('Timing', {
-            'fields': ('issued_at', 'used_at', 'expires_at')
+            'fields': ('issued_at', 'used_at')
         }),
         ('Validation', {
-            'fields': ('validation_hash', 'qr_code', 'is_valid', 'is_expired')
-        }),
-        ('Notes', {
-            'fields': ('notes',)
+            'fields': ('is_valid',)
         })
     )
     
     def order_link(self, obj):
         if obj.order:
             url = reverse('admin:tickets_ticketorder_change', args=[obj.order.id])
-            return format_html('<a href="{}">{}</a>', url, obj.order.order_number)
+            return format_html('<a href="{}">{}</a>', url, obj.order.id)
         return '-'
     order_link.short_description = 'Order'
-    
-    def event_name(self, obj):
-        return obj.order.event.name if obj.order else '-'
-    event_name.short_description = 'Event'
     
     def ticket_type_name(self, obj):
         return obj.ticket_type.name if obj.ticket_type else '-'
@@ -159,58 +134,7 @@ class TicketAdmin(admin.ModelAdmin):
         return obj.is_valid
     is_valid.boolean = True
     is_valid.short_description = 'Valid'
-    
-    def is_expired(self, obj):
-        return obj.is_expired
-    is_expired.boolean = True
-    is_expired.short_description = 'Expired'
 
-
-@admin.register(PaymentRecord)
-class PaymentRecordAdmin(admin.ModelAdmin):
-    list_display = [
-        'id', 'order_link', 'provider', 'provider_reference', 'amount_dollars',
-        'currency', 'status', 'created_at', 'processed_at'
-    ]
-    list_filter = [
-        'provider', 'status', 'currency', 'created_at', 'processed_at'
-    ]
-    search_fields = [
-        'provider_reference', 'order__order_number', 'order__customer_name'
-    ]
-    readonly_fields = [
-        'created_at', 'updated_at', 'amount_dollars'
-    ]
-    list_editable = ['status']
-    
-    fieldsets = (
-        ('Payment Information', {
-            'fields': ('order', 'provider', 'provider_reference', 'status')
-        }),
-        ('Amount', {
-            'fields': ('amount_cents', 'currency', 'amount_dollars')
-        }),
-        ('Timing', {
-            'fields': ('created_at', 'updated_at', 'processed_at')
-        }),
-        ('Provider Data', {
-            'fields': ('provider_data',)
-        }),
-        ('Error Information', {
-            'fields': ('error_message', 'error_code')
-        })
-    )
-    
-    def order_link(self, obj):
-        if obj.order:
-            url = reverse('admin:tickets_ticketorder_change', args=[obj.order.id])
-            return format_html('<a href="{}">{}</a>', url, obj.order.order_number)
-        return '-'
-    order_link.short_description = 'Order'
-    
-    def amount_dollars(self, obj):
-        return f"${obj.amount_dollars:.2f}"
-    amount_dollars.short_description = 'Amount'
 
 
 # Custom admin actions

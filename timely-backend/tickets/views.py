@@ -1,478 +1,344 @@
 # tickets/views.py
-from __future__ import annotations
-
-import stripe
-from django.conf import settings
-from django.shortcuts import get_object_or_404
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
-from rest_framework import viewsets, permissions, status, filters
-from rest_framework.decorators import action
+from rest_framework import generics, status, permissions
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
-from django.utils import timezone
+from rest_framework.pagination import PageNumberPagination
+from django.shortcuts import get_object_or_404
+from django.db import transaction
+from django.contrib.auth import get_user_model
 
-from .models import TicketType, TicketOrder, Ticket, PaymentRecord
+from .models import TicketType, TicketOrder, Ticket
 from .serializers import (
     TicketTypeSerializer, TicketTypeCreateSerializer,
-    TicketSerializer, TicketListSerializer,
-    TicketOrderSerializer, TicketOrderCreateSerializer,
-    PaymentRecordSerializer, StripeCheckoutSerializer,
-    PayPalCheckoutSerializer, WebhookSerializer,
-    TicketValidationSerializer
+    TicketOrderSerializer, CreateOrderSerializer,
+    TicketSerializer, MyTicketsListSerializer,
+    TicketDetailSerializer, OrderSummarySerializer
 )
-from .permissions import IsOrganizerOrAdmin
+from .permissions import (
+    IsOrganizerOrAdmin, IsEventOrganizerOrAdmin, IsTicketOwnerOrAdmin,
+    IsOrderOwnerOrAdmin, CanViewTicketTypes, CanPurchaseTickets,
+    IsEventOrganizerForOrder, CanCancelOrder, PublicReadOrAuthenticatedWrite
+)
+from .services.pricing import calculate_order_total, validate_inventory
+from .services.qr import generate_qr_payload
 
-# Configure Stripe
-stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', 'sk_test_...')
+User = get_user_model()
 
 
-class TicketTypeViewSet(viewsets.ModelViewSet):
-    """ViewSet for ticket types"""
-    queryset = TicketType.objects.select_related('event').all()
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['event', 'category', 'is_active']
-    search_fields = ['name', 'description']
-    ordering_fields = ['price_cents', 'created_at']
-    ordering = ['event', 'price_cents']
+class StandardResultsSetPagination(PageNumberPagination):
+    """Standard pagination for ticket views"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return TicketTypeCreateSerializer
-        return TicketTypeSerializer
 
-    def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsOrganizerOrAdmin()]
-        return [permissions.IsAuthenticatedOrReadOnly()]
+# Public/Authenticated Views
 
+class TicketTypeListView(generics.ListAPIView):
+    """
+    List ticket types for an event (public read access)
+    """
+    serializer_class = TicketTypeSerializer
+    permission_classes = [CanViewTicketTypes]
+    pagination_class = StandardResultsSetPagination
+    
     def get_queryset(self):
-        queryset = super().get_queryset()
+        event_id = self.kwargs['event_id']
+        fixture_id = self.request.query_params.get('fixture_id')
         
-        # Filter by event if specified
-        event_id = self.request.query_params.get('event')
-        if event_id:
-            queryset = queryset.filter(event_id=event_id)
+        queryset = TicketType.objects.filter(
+            event_id=event_id,
+            on_sale=True
+        ).select_related('event', 'fixture')
         
-        # Only show active ticket types for public access
-        if self.action in ['list', 'retrieve']:
-            queryset = queryset.filter(is_active=True)
+        if fixture_id:
+            queryset = queryset.filter(fixture_id=fixture_id)
         
-        return queryset
-
-    @action(detail=True, methods=['post'])
-    def toggle_active(self, request, pk=None):
-        """Toggle ticket type active status"""
-        ticket_type = self.get_object()
-        ticket_type.is_active = not ticket_type.is_active
-        ticket_type.save()
-        
-        return Response({
-            'detail': f"Ticket type {'activated' if ticket_type.is_active else 'deactivated'}",
-            'is_active': ticket_type.is_active
-        })
+        return queryset.order_by('price_cents')
 
 
-class TicketOrderViewSet(viewsets.ModelViewSet):
-    """ViewSet for ticket orders"""
-    queryset = TicketOrder.objects.select_related('event', 'customer').prefetch_related('tickets').all()
-    serializer_class = TicketOrderSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['event', 'status', 'payment_provider']
-    search_fields = ['order_number', 'customer_name', 'customer_email']
-    ordering_fields = ['created_at', 'payment_amount_cents']
-    ordering = ['-created_at']
-
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return TicketOrderCreateSerializer
-        return TicketOrderSerializer
-
-    def get_permissions(self):
-        if self.action in ['create']:
-            return [permissions.IsAuthenticated()]
-        elif self.action in ['update', 'partial_update', 'destroy']:
-            return [IsOrganizerOrAdmin()]
-        return [permissions.IsAuthenticatedOrReadOnly()]
-
+class MyTicketsListView(generics.ListAPIView):
+    """
+    List user's tickets
+    """
+    serializer_class = MyTicketsListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    
     def get_queryset(self):
-        queryset = super().get_queryset()
-        
-        # Users can only see their own orders
-        if self.request.user.is_authenticated and not self.request.user.is_staff:
-            if self.request.user.role not in ['ADMIN', 'ORGANIZER']:
-                queryset = queryset.filter(customer=self.request.user)
-        
-        return queryset
+        return Ticket.objects.filter(
+            order__user=self.request.user
+        ).select_related('ticket_type', 'order', 'order__event', 'order__fixture')
 
-    def perform_create(self, serializer):
-        """Create order with current user as customer"""
-        serializer.save(customer=self.request.user)
 
-    @action(detail=True, methods=['post'])
-    def cancel(self, request, pk=None):
-        """Cancel a ticket order"""
-        order = self.get_object()
-        
-        if not order.can_cancel:
-            return Response({
-                'detail': 'This order cannot be cancelled'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        order.cancel()
-        return Response({
-            'detail': 'Order cancelled successfully',
-            'status': order.status
-        })
-
-    @action(detail=True, methods=['post'])
-    def stripe_checkout(self, request, pk=None):
-        """Create Stripe checkout session"""
-        order = self.get_object()
-        
-        if order.status != TicketOrder.Status.PENDING:
-            return Response({
-                'detail': 'Order is not pending payment'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        serializer = StripeCheckoutSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            # Create Stripe checkout session
-            checkout_session = stripe.checkout.Session.create(
-                payment_method_types=['card'],
-                line_items=[{
-                    'price_data': {
-                        'currency': order.payment_currency.lower(),
-                        'product_data': {
-                            'name': f"Tickets for {order.event.name}",
-                            'description': f"Order {order.order_number}",
-                        },
-                        'unit_amount': order.payment_amount_cents,
-                    },
-                    'quantity': 1,
-                }],
-                mode='payment',
-                success_url=serializer.validated_data['success_url'],
-                cancel_url=serializer.validated_data['cancel_url'],
-                metadata={
-                    'order_id': order.id,
-                    'order_number': order.order_number,
-                },
-                expires_at=int((order.expires_at.timestamp())),
-            )
-            
-            # Create payment record
-            PaymentRecord.objects.create(
-                order=order,
-                provider=TicketOrder.PaymentProvider.STRIPE,
-                provider_reference=checkout_session.id,
-                amount_cents=order.payment_amount_cents,
-                currency=order.payment_currency,
-                status=PaymentRecord.Status.PENDING,
-                provider_data={'session_id': checkout_session.id}
-            )
-            
-            return Response({
-                'checkout_url': checkout_session.url,
-                'session_id': checkout_session.id
-            })
-            
-        except Exception as e:
-            return Response({
-                'detail': f'Error creating checkout session: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    @action(detail=True, methods=['post'])
-    def paypal_checkout(self, request, pk=None):
-        """Create PayPal checkout (stub implementation)"""
-        order = self.get_object()
-        
-        if order.status != TicketOrder.Status.PENDING:
-            return Response({
-                'detail': 'Order is not pending payment'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        serializer = PayPalCheckoutSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Create payment record
-        payment_record = PaymentRecord.objects.create(
-            order=order,
-            provider=TicketOrder.PaymentProvider.PAYPAL,
-            provider_reference=f"PAYPAL-{order.order_number}",
-            amount_cents=order.payment_amount_cents,
-            currency=order.payment_currency,
-            status=PaymentRecord.Status.PENDING
+class TicketDetailView(generics.RetrieveAPIView):
+    """
+    Get detailed ticket information (owner only)
+    """
+    serializer_class = TicketDetailSerializer
+    permission_classes = [IsTicketOwnerOrAdmin]
+    
+    def get_queryset(self):
+        return Ticket.objects.select_related(
+            'ticket_type', 'order', 'order__event', 'order__fixture'
         )
-        
-        # For now, return a mock PayPal checkout URL
-        # In production, this would integrate with PayPal's API
-        return Response({
-            'checkout_url': f"https://www.paypal.com/checkout?order={payment_record.id}",
-            'payment_id': payment_record.id
-        })
 
 
-class TicketViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for individual tickets"""
-    queryset = Ticket.objects.select_related('order', 'ticket_type').all()
-    serializer_class = TicketSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['order', 'ticket_type', 'status']
-    search_fields = ['ticket_id', 'holder_name', 'holder_email']
-    ordering_fields = ['issued_at', 'expires_at']
-    ordering = ['-issued_at']
+# Order Management Views
 
-    def get_permissions(self):
-        return [permissions.IsAuthenticated()]
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        
-        # Users can only see their own tickets
-        if not self.request.user.is_staff:
-            if self.request.user.role not in ['ADMIN', 'ORGANIZER']:
-                queryset = queryset.filter(order__customer=self.request.user)
-        
-        return queryset
-
-    @action(detail=True, methods=['post'])
-    def validate(self, request, pk=None):
-        """Validate a ticket"""
-        ticket = self.get_object()
-        
-        if not ticket.is_valid:
-            return Response({
-                'detail': 'Ticket is not valid',
-                'reason': 'expired' if ticket.is_expired else 'invalid_status'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Mark ticket as used
-        if ticket.use_ticket():
-            return Response({
-                'detail': 'Ticket validated successfully',
-                'ticket_id': ticket.ticket_id,
-                'holder_name': ticket.holder_name,
-                'event_name': ticket.order.event.name
-            })
-        else:
-            return Response({
-                'detail': 'Ticket validation failed'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=['get'])
-    def qr_code(self, request, pk=None):
-        """Get ticket QR code"""
-        ticket = self.get_object()
-        
-        if not ticket.qr_code:
-            return Response({
-                'detail': 'QR code not available'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        return Response({
-            'qr_code_url': ticket.get_qr_code_url(),
-            'ticket_id': ticket.ticket_id
-        })
-
-    @action(detail=True, methods=['get'])
-    def download(self, request, pk=None):
-        """Download ticket as PDF (stub)"""
-        ticket = self.get_object()
-        
-        # In production, this would generate and return a PDF
-        # For now, return ticket details as JSON
-        return Response({
-            'ticket_id': ticket.ticket_id,
-            'holder_name': ticket.holder_name,
-            'event_name': ticket.order.event.name,
-            'ticket_type': ticket.ticket_type.name,
-            'issued_at': ticket.issued_at,
-            'expires_at': ticket.expires_at,
-            'qr_code_url': ticket.get_qr_code_url()
-        })
-
-
-class PaymentRecordViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for payment records"""
-    queryset = PaymentRecord.objects.select_related('order').all()
-    serializer_class = PaymentRecordSerializer
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['order', 'provider', 'status']
-    ordering_fields = ['created_at', 'processed_at']
-    ordering = ['-created_at']
-
-    def get_permissions(self):
-        return [permissions.IsAuthenticated()]
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        
-        # Users can only see payments for their own orders
-        if not self.request.user.is_staff:
-            if self.request.user.role not in ['ADMIN', 'ORGANIZER']:
-                queryset = queryset.filter(order__customer=self.request.user)
-        
-        return queryset
-
-
-# Webhook handlers
-@method_decorator(csrf_exempt, name='dispatch')
-class StripeWebhookView(viewsets.ViewSet):
-    """Handle Stripe webhooks"""
-    permission_classes = [permissions.AllowAny]
-
-    @action(detail=False, methods=['post'])
-    def stripe_webhook(self, request):
-        """Handle Stripe webhook events"""
-        payload = request.body
-        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
-        
-        try:
-            event = stripe.Webhook.construct_event(
-                payload, sig_header, getattr(settings, 'STRIPE_WEBHOOK_SECRET', 'whsec_...')
-            )
-        except ValueError as e:
-            return HttpResponse(status=400)
-        except stripe.error.SignatureVerificationError as e:
-            return HttpResponse(status=400)
-        
-        # Handle the event
-        if event['type'] == 'checkout.session.completed':
-            session = event['data']['object']
-            self._handle_checkout_completed(session)
-        elif event['type'] == 'payment_intent.payment_failed':
-            payment_intent = event['data']['object']
-            self._handle_payment_failed(payment_intent)
-        
-        return HttpResponse(status=200)
-
-    def _handle_checkout_completed(self, session):
-        """Handle successful checkout completion"""
-        order_id = session.metadata.get('order_id')
-        if not order_id:
-            return
-        
-        try:
-            order = TicketOrder.objects.get(id=order_id)
-            payment_record = PaymentRecord.objects.get(
-                order=order,
-                provider_reference=session.id
+@api_view(['POST'])
+@permission_classes([CanPurchaseTickets])
+def create_order(request):
+    """
+    Create a new ticket order
+    """
+    serializer = CreateOrderSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    data = serializer.validated_data
+    
+    try:
+        with transaction.atomic():
+            # Calculate total
+            total_cents, currency = calculate_order_total(data['items'])
+            
+            # Create order
+            order = TicketOrder.objects.create(
+                user=request.user,
+                event_id=data['event_id'],
+                fixture_id=data.get('fixture_id'),
+                total_cents=total_cents,
+                currency=currency
             )
             
-            # Mark order as paid
-            order.mark_paid(
-                provider=TicketOrder.PaymentProvider.STRIPE,
-                reference=session.id,
-                amount_cents=session.amount_total
-            )
-            
-            # Mark payment as succeeded
-            payment_record.mark_succeeded()
-            
-        except (TicketOrder.DoesNotExist, PaymentRecord.DoesNotExist):
-            pass
-
-    def _handle_payment_failed(self, payment_intent):
-        """Handle failed payment"""
-        # Find payment record and mark as failed
-        try:
-            payment_record = PaymentRecord.objects.get(
-                provider_reference=payment_intent.id
-            )
-            payment_record.mark_failed(
-                error_message=payment_intent.last_payment_error.message if payment_intent.last_payment_error else "",
-                error_code=payment_intent.last_payment_error.code if payment_intent.last_payment_error else ""
-            )
-        except PaymentRecord.DoesNotExist:
-            pass
-
-
-@method_decorator(csrf_exempt, name='dispatch')
-class PayPalWebhookView(viewsets.ViewSet):
-    """Handle PayPal webhooks (stub implementation)"""
-    permission_classes = [permissions.AllowAny]
-
-    @action(detail=False, methods=['post'])
-    def paypal_webhook(self, request):
-        """Handle PayPal webhook events"""
-        # In production, this would verify PayPal webhook signatures
-        # and process payment confirmations
-        
-        data = request.data
-        serializer = WebhookSerializer(data=data)
-        
-        if serializer.is_valid():
-            provider_ref = serializer.validated_data['provider_reference']
-            status = serializer.validated_data['status']
-            
-            try:
-                payment_record = PaymentRecord.objects.get(
-                    provider_reference=provider_ref
-                )
+            # Create tickets
+            for item in data['items']:
+                ticket_type_id = item['ticket_type_id']
+                quantity = item['qty']
                 
-                if status == 'COMPLETED':
-                    payment_record.mark_succeeded()
-                    payment_record.order.mark_paid(
-                        provider=TicketOrder.PaymentProvider.PAYPAL,
-                        reference=provider_ref,
-                        amount_cents=payment_record.amount_cents
+                for _ in range(quantity):
+                    ticket = Ticket.objects.create(
+                        order=order,
+                        ticket_type_id=ticket_type_id
                     )
-                elif status == 'FAILED':
-                    payment_record.mark_failed()
-                    
-            except PaymentRecord.DoesNotExist:
-                pass
-        
-        return HttpResponse(status=200)
+                    # Generate QR payload
+                    ticket.qr_payload = generate_qr_payload(
+                        ticket.id, order.id, ticket.serial
+                    )
+                    ticket.save()
+            
+            # Return order summary
+            order_serializer = TicketOrderSerializer(order)
+            return Response(order_serializer.data, status=status.HTTP_201_CREATED)
+            
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
-# Public ticket validation endpoint
-class TicketValidationView(viewsets.ViewSet):
-    """Public endpoint for ticket validation"""
-    permission_classes = [permissions.AllowAny]
+class OrderDetailView(generics.RetrieveAPIView):
+    """
+    Get order details (owner only)
+    """
+    serializer_class = TicketOrderSerializer
+    permission_classes = [IsOrderOwnerOrAdmin]
+    
+    def get_queryset(self):
+        return TicketOrder.objects.select_related(
+            'user', 'event', 'fixture'
+        ).prefetch_related('tickets', 'tickets__ticket_type')
 
-    @action(detail=False, methods=['post'])
-    def validate_ticket(self, request):
-        """Validate a ticket using ticket_id and validation_hash"""
-        serializer = TicketValidationSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([CanCancelOrder])
+def cancel_order(request, order_id):
+    """
+    Cancel an order (owner or admin/organizer)
+    """
+    order = get_object_or_404(TicketOrder, id=order_id)
+    
+    # Check permissions
+    if not (request.user.is_superuser or 
+            request.user.is_staff or 
+            order.user == request.user or
+            (request.user.role == User.Role.ORGANIZER and 
+             order.event.created_by == request.user)):
+        return Response(
+            {'error': 'Permission denied'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    if not order.can_cancel:
+        return Response(
+            {'error': 'Order cannot be cancelled'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Cancel order
+    order.cancel()
+    
+    # TODO: Implement refund logic for paid orders
+    if order.status == TicketOrder.Status.PAID:
+        # Stub for refund - in test mode, just mark as cancelled
+        pass
+    
+    return Response(
+        {'message': 'Order cancelled successfully'}, 
+        status=status.HTTP_200_OK
+    )
+
+
+# Organizer/Admin Views
+
+class TicketTypeCreateView(generics.CreateAPIView):
+    """
+    Create ticket types (organizer/admin only)
+    """
+    serializer_class = TicketTypeCreateSerializer
+    permission_classes = [IsEventOrganizerOrAdmin]
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class TicketTypeUpdateView(generics.UpdateAPIView):
+    """
+    Update ticket types (organizer/admin only)
+    """
+    serializer_class = TicketTypeCreateSerializer
+    permission_classes = [IsEventOrganizerOrAdmin]
+    
+    def get_queryset(self):
+        return TicketType.objects.select_related('event', 'fixture')
+
+
+class TicketTypeDeleteView(generics.DestroyAPIView):
+    """
+    Delete ticket types (organizer/admin only)
+    """
+    permission_classes = [IsEventOrganizerOrAdmin]
+    
+    def get_queryset(self):
+        return TicketType.objects.select_related('event', 'fixture')
+
+
+class EventOrdersListView(generics.ListAPIView):
+    """
+    List orders for an event (organizer/admin only)
+    """
+    serializer_class = TicketOrderSerializer
+    permission_classes = [IsEventOrganizerForOrder]
+    pagination_class = StandardResultsSetPagination
+    
+    def get_queryset(self):
+        event_id = self.kwargs['event_id']
+        status_filter = self.request.query_params.get('status')
         
-        ticket_id = serializer.validated_data['ticket_id']
-        validation_hash = serializer.validated_data['validation_hash']
+        queryset = TicketOrder.objects.filter(
+            event_id=event_id
+        ).select_related('user', 'event', 'fixture').prefetch_related('tickets')
         
-        try:
-            ticket = Ticket.objects.get(
-                ticket_id=ticket_id,
-                validation_hash=validation_hash
-            )
-            
-            if not ticket.is_valid:
-                return Response({
-                    'valid': False,
-                    'reason': 'expired' if ticket.is_expired else 'invalid_status',
-                    'message': 'Ticket is not valid for use'
-                })
-            
-            return Response({
-                'valid': True,
-                'ticket_id': ticket.ticket_id,
-                'holder_name': ticket.holder_name,
-                'event_name': ticket.order.event.name,
-                'ticket_type': ticket.ticket_type.name,
-                'issued_at': ticket.issued_at,
-                'expires_at': ticket.expires_at
-            })
-            
-        except Ticket.DoesNotExist:
-            return Response({
-                'valid': False,
-                'reason': 'not_found',
-                'message': 'Ticket not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        return queryset.order_by('-created_at')
+
+
+# Utility Views
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def order_summary(request, order_id):
+    """
+    Get order summary for checkout
+    """
+    order = get_object_or_404(TicketOrder, id=order_id, user=request.user)
+    
+    # Build items summary
+    items = []
+    for ticket in order.tickets.all():
+        items.append({
+            'ticket_type_name': ticket.ticket_type.name,
+            'price_cents': ticket.ticket_type.price_cents,
+            'quantity': 1  # Each ticket is individual
+        })
+    
+    summary_data = {
+        'order_id': order.id,
+        'total_cents': order.total_cents,
+        'total_dollars': order.total_dollars,
+        'currency': order.currency,
+        'items': items,
+        'event_name': order.event.name,
+        'fixture_info': {
+            'id': order.fixture.id,
+            'starts_at': order.fixture.starts_at,
+            'ends_at': order.fixture.ends_at
+        } if order.fixture else None
+    }
+    
+    serializer = OrderSummarySerializer(summary_data)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def ticket_validation(request, ticket_id):
+    """
+    Validate a ticket (for scanning/check-in)
+    """
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    
+    # Check if user has permission to validate this ticket
+    if not (request.user.is_superuser or 
+            request.user.is_staff or
+            ticket.order.event.created_by == request.user):
+        return Response(
+            {'error': 'Permission denied'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    validation_data = {
+        'ticket_id': ticket.id,
+        'serial': ticket.serial,
+        'status': ticket.status,
+        'is_valid': ticket.is_valid,
+        'event_name': ticket.order.event.name,
+        'ticket_type': ticket.ticket_type.name,
+        'issued_at': ticket.issued_at,
+        'used_at': ticket.used_at
+    }
+    
+    return Response(validation_data)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def use_ticket(request, ticket_id):
+    """
+    Mark a ticket as used (for check-in)
+    """
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    
+    # Check if user has permission to use this ticket
+    if not (request.user.is_superuser or 
+            request.user.is_staff or
+            ticket.order.event.created_by == request.user):
+        return Response(
+            {'error': 'Permission denied'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    if ticket.use_ticket():
+        return Response(
+            {'message': 'Ticket marked as used'}, 
+            status=status.HTTP_200_OK
+        )
+    else:
+        return Response(
+            {'error': 'Ticket cannot be used'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )

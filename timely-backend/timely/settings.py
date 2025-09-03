@@ -16,14 +16,19 @@ environ.Env.read_env(BASE_DIR / ".env")
 # --- Core ---
 DEBUG = env.bool("DEBUG", default=True)
 SECRET_KEY = env("SECRET_KEY", default="insecure-key")
-ALLOWED_HOSTS = [h.strip() for h in env("ALLOWED_HOSTS", default="127.0.0.1,localhost,testserver").split(",") if h.strip()]
+ALLOWED_HOSTS = ["*"]
 
 # --- Apps ---
 INSTALLED_APPS = [
-    # Django
-    "django.contrib.admin",
-    "django.contrib.auth",
+    # Django core (order matters for custom user model)
     "django.contrib.contenttypes",
+    "django.contrib.auth",
+    
+    # First-party (Timely) - accounts must come before admin
+    "accounts",          # <- custom user lives here
+    
+    # Django admin (depends on accounts.User)
+    "django.contrib.admin",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
@@ -35,9 +40,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "corsheaders",
     
-
-    # First-party (Timely)
-    "accounts",          # <- custom user lives here
+    # First-party (Timely) - remaining apps
     "venues",
     "events",
     "teams",
@@ -50,19 +53,20 @@ INSTALLED_APPS = [
     "gallery",
     'payments',
     "reports",
+    "public",
 ]
 
 # --- Middleware ---
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
-    "django.middleware.common.CommonMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-    
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "common.middleware.PublicEndpointMiddleware",  # Add our custom middleware
 ]
 
 ROOT_URLCONF = "timely.urls"
@@ -126,15 +130,23 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # --- Auth (custom user) ---
 AUTH_USER_MODEL = "accounts.User"
 
+# Custom authentication backends
+AUTHENTICATION_BACKENDS = [
+    'accounts.backends.EmailOrUsernameModelBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 # --- DRF / Filters / JWT / Schema ---
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "accounts.auth.CookieJWTAuthentication",
-        "rest_framework.authentication.SessionAuthentication",  # for browsable API
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        # Remove global permission requirement - let each view handle its own
     ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
@@ -149,6 +161,7 @@ REST_FRAMEWORK = {
         "anon": "100/min",
         "user": "1000/min",
         "public_checkout": "10/min",
+        "login": "10/min",
     },
 }
 
@@ -214,49 +227,14 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 FRONTEND_ORIGIN = "http://localhost:5173"
 DEFAULT_FROM_EMAIL = "no-reply@timely.local"
 
-
-REST_FRAMEWORK = {
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "accounts.auth.CookieJWTAuthentication",
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-        "rest_framework.authentication.SessionAuthentication",  # for browsable API
-    ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-    ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 20,
-    "DEFAULT_THROTTLE_RATES": {
-        "public_checkout": "5/min",
-        "anon": "60/min",
-        "user": "120/min",
-        "login": "10/min",
-    },
-}
-
-SIMPLE_JWT.setdefault("AUTH_COOKIE", "access")
-SIMPLE_JWT.setdefault("AUTH_COOKIE_REFRESH", "refresh")
-SIMPLE_JWT.setdefault("AUTH_COOKIE_SAMESITE", "Lax")
-SIMPLE_JWT.setdefault("AUTH_COOKIE_SECURE", False)
-SIMPLE_JWT.setdefault("AUTH_COOKIE_PATH", "/")
-
-# Email (dev): console backend prints emails in runserver logs
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "no-reply@timely.local"
-
 # Point to your React app for deep links (change later)
 FRONTEND_URL = "http://localhost:5173"
 
-
-# Throttling rates are configured in REST_FRAMEWORK above
-
+# Redirect URLs
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
-
-# CORS and CSRF settings are configured above
 
 # Channels configuration: use Redis only if REDIS_URL is set; otherwise in-memory for dev
 if os.environ.get("REDIS_URL"):

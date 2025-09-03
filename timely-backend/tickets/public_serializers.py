@@ -4,7 +4,7 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from fixtures.models import Match
+from fixtures.models import Fixture
 from .models import Ticket
 from .serializers import TicketSerializer  # reuse your existing ticket output
 
@@ -15,7 +15,7 @@ class PublicPurchaseSerializer(serializers.Serializer):
     Keeps it gateway-agnostic; you can add fields like payment_intent later.
     """
     email = serializers.EmailField()
-    match = serializers.PrimaryKeyRelatedField(queryset=Match.objects.all())
+    fixture = serializers.PrimaryKeyRelatedField(queryset=Fixture.objects.all())
     quantity = serializers.IntegerField(min_value=1, default=1)
     price_cents = serializers.IntegerField(min_value=0)  # total for this purchase row
 

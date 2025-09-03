@@ -1,483 +1,581 @@
-import { useState, useEffect } from "react";
-import { getResults } from "../lib/api";
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Badge from '../components/ui/Badge';
+import Input from '../components/ui/Input';
+import { 
+  getPublicResults, 
+  getPublicEvents 
+} from '../lib/api';
+import { 
+  TrophyIcon, 
+  CalendarIcon, 
+  ClockIcon, 
+  MapPinIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  EyeIcon,
+  StarIcon,
+  ChartBarIcon,
+  ArrowTrendingUpIcon
+} from '@heroicons/react/24/outline';
 
 export default function Results() {
   const [results, setResults] = useState([]);
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [filters, setFilters] = useState({
-    sport: "",
-    event: "",
-    date: "",
-    outcome: ""
+  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [eventFilter, setEventFilter] = useState('');
+  const [sportFilter, setSportFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [stats, setStats] = useState({
+    totalResults: 0,
+    totalEvents: 0,
+    totalParticipants: 0,
+    averageScore: 0
   });
 
-  // Fallback data for development
-  const fallbackResults = [
-    {
-      id: 1,
-      event_name: "Summer Football Championship",
-      home_team: "Blue Dragons",
-      away_team: "Red Phoenix",
-      home_score: 3,
-      away_score: 1,
-      sport: "Football",
-      venue: "Central Stadium",
-      match_date: "2024-08-20T15:00:00Z",
-      outcome: "HOME_WIN",
-      round_number: 1,
-      match_number: 1,
-      highlights: ["Goal by John Doe (15')", "Goal by Jane Smith (32')", "Goal by Mike Johnson (67')", "Goal by Sarah Wilson (89')"]
-    },
-    {
-      id: 2,
-      event_name: "Basketball Tournament Finals",
-      home_team: "Green Eagles",
-      away_team: "Silver Wolves",
-      home_score: 89,
-      away_score: 92,
-      sport: "Basketball",
-      venue: "Sports Complex",
-      match_date: "2024-08-20T16:30:00Z",
-      outcome: "AWAY_WIN",
-      round_number: 1,
-      match_number: 2,
-      highlights: ["3-pointer by Alex Brown (Q1)", "Dunk by Chris Davis (Q2)", "Fast break by Emma Wilson (Q3)", "Game-winning shot by Tom Lee (Q4)"]
-    },
-    {
-      id: 3,
-      event_name: "Tennis Open Championship",
-      home_team: "Golden Lions",
-      away_team: "Black Panthers",
-      home_score: 6,
-      away_score: 4,
-      sport: "Tennis",
-      venue: "Tennis Center",
-      match_date: "2024-08-21T10:00:00Z",
-      outcome: "HOME_WIN",
-      round_number: 1,
-      match_number: 3,
-      highlights: ["Ace serve (1st set)", "Break point (2nd set)", "Match point (3rd set)"]
-    },
-    {
-      id: 4,
-      event_name: "Swimming Championship",
-      home_team: "White Sharks",
-      away_team: "Blue Dolphins",
-      home_score: 2,
-      away_score: 0,
-      sport: "Swimming",
-      venue: "Aquatic Center",
-      match_date: "2024-08-21T14:00:00Z",
-      outcome: "HOME_WIN",
-      round_number: 1,
-      match_number: 4,
-      highlights: ["100m Freestyle Gold", "200m Butterfly Gold", "4x100m Relay Gold"]
-    },
-    {
-      id: 5,
-      event_name: "Cricket League",
-      home_team: "Orange Tigers",
-      away_team: "Purple Cobras",
-      home_score: 245,
-      away_score: 198,
-      sport: "Cricket",
-      venue: "Cricket Ground",
-      match_date: "2024-08-22T11:00:00Z",
-      outcome: "HOME_WIN",
-      round_number: 1,
-      match_number: 5,
-      highlights: ["Century by David Miller", "5-wicket haul by Sarah Khan", "Man of the Match: David Miller"]
-    },
-    {
-      id: 6,
-      event_name: "Athletics Championship",
-      home_team: "Yellow Bees",
-      away_team: "Green Hornets",
-      home_score: 1,
-      away_score: 0,
-      sport: "Athletics",
-      venue: "Track & Field",
-      match_date: "2024-08-22T15:30:00Z",
-      outcome: "HOME_WIN",
-      round_number: 1,
-      match_number: 6,
-      highlights: ["100m Sprint Gold", "Long Jump Gold", "4x400m Relay Gold"]
-    }
-  ];
-
-  const sports = ["Football", "Basketball", "Tennis", "Swimming", "Cricket", "Athletics"];
-  const events = ["Summer Football Championship", "Basketball Tournament Finals", "Tennis Open Championship", "Swimming Championship", "Cricket League", "Athletics Championship"];
-  const outcomes = ["HOME_WIN", "AWAY_WIN", "DRAW", "CANCELLED"];
-
   useEffect(() => {
-    loadResults();
-  }, []);
+    loadData();
+  }, [currentPage, eventFilter, sportFilter, dateFilter]);
 
-  const loadResults = async () => {
+  async function loadData() {
     try {
       setLoading(true);
-      setError("");
+      setError('');
+
+      const resultsData = await getPublicResults(currentPage, {
+        event: eventFilter,
+        sport: sportFilter,
+        date: dateFilter,
+        search: searchTerm
+      });
       
-      // Try to load from API first
-      const response = await getResults();
-      
-      if (response && (response.results || response.length > 0)) {
-        setResults(response.results || response || []);
-      } else {
-        // Use fallback data if API returns empty
-        setResults(fallbackResults);
+      setResults(resultsData.results || []);
+      setTotalPages(Math.ceil((resultsData.count || 0) / 20));
+
+      // Load events for filter dropdown
+      if (events.length === 0) {
+        const eventsData = await getPublicEvents(1, '', '', '', {});
+        setEvents(eventsData.results || []);
       }
+
+      // Calculate stats
+      if (resultsData.results) {
+        const totalParticipants = resultsData.results.reduce((sum, result) => {
+          return sum + (result.participants?.length || 0);
+        }, 0);
+        
+        const totalScores = resultsData.results.reduce((sum, result) => {
+          return sum + (result.total_score || 0);
+        }, 0);
+        
+        setStats({
+          totalResults: resultsData.count || 0,
+          totalEvents: new Set(resultsData.results.map(r => r.match?.fixture?.event?.id)).size,
+          totalParticipants,
+          averageScore: resultsData.results.length > 0 ? Math.round(totalScores / resultsData.results.length) : 0
+        });
+      }
+
     } catch (err) {
       console.error('Error loading results:', err);
-      // Use fallback data on error
-      setResults(fallbackResults);
-      setError("Using offline data. Some features may be limited.");
+      setError('Failed to load results. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+  const handleSearch = (e) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    loadData();
   };
 
   const clearFilters = () => {
-    setFilters({
-      sport: "",
-      event: "",
-      date: "",
-      outcome: ""
-    });
+    setSearchTerm('');
+    setEventFilter('');
+    setSportFilter('');
+    setDateFilter('');
+    setCurrentPage(1);
   };
 
-  const getOutcomeColor = (outcome) => {
-    switch (outcome) {
-      case 'HOME_WIN': return 'bg-green-100 text-green-800';
-      case 'AWAY_WIN': return 'bg-blue-100 text-blue-800';
-      case 'DRAW': return 'bg-yellow-100 text-yellow-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const getSportEmoji = (sport) => {
+    const sportEmojis = {
+      'Soccer': '⚽',
+      'Football': '🏈',
+      'Basketball': '🏀',
+      'Tennis': '🎾',
+      'Swimming': '🏊',
+      'Athletics': '🏃',
+      'Cricket': '🏏',
+      'Baseball': '⚾',
+      'Volleyball': '🏐',
+      'Hockey': '🏒'
+    };
+    return sportEmojis[sport] || '⚽';
   };
 
-  const getOutcomeIcon = (outcome) => {
-    switch (outcome) {
-      case 'HOME_WIN': return '🏆';
-      case 'AWAY_WIN': return '🥈';
-      case 'DRAW': return '🤝';
-      case 'CANCELLED': return '❌';
-      default: return '❓';
-    }
-  };
-
-  const getOutcomeText = (outcome) => {
-    switch (outcome) {
-      case 'HOME_WIN': return 'Home Win';
-      case 'AWAY_WIN': return 'Away Win';
-      case 'DRAW': return 'Draw';
-      case 'CANCELLED': return 'Cancelled';
-      default: return 'Unknown';
+  const formatDate = (dateString) => {
+    if (!dateString) return 'TBD';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return dateString;
     }
   };
 
   const formatDateTime = (dateTimeString) => {
-    if (!dateTimeString) return "TBD";
+    if (!dateTimeString) return 'TBD';
+    try {
     const date = new Date(dateTimeString);
     return date.toLocaleString('en-US', { 
-      weekday: 'long',
+        weekday: 'short',
       month: 'short', 
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
+    } catch {
+      return dateTimeString;
+    }
   };
 
-  const formatDate = (dateTimeString) => {
-    if (!dateTimeString) return "TBD";
-    const date = new Date(dateTimeString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  // Filter results based on current filters
-  const filteredResults = results.filter(result => {
-    if (filters.sport && result.sport !== filters.sport) {
-      return false;
+  const getResultBadge = (result) => {
+    if (!result) return null;
+    
+    const { winner, participants, scores } = result;
+    
+    if (winner) {
+      return (
+        <Badge variant="success" className="flex items-center gap-1">
+          <TrophyIcon className="w-4 h-4" />
+          Winner: {winner.name || winner}
+        </Badge>
+      );
     }
-    if (filters.event && result.event_name !== filters.event) {
-      return false;
-    }
-    if (filters.outcome && result.outcome !== filters.outcome) {
-      return false;
-    }
-    if (filters.date) {
-      const resultDate = new Date(result.match_date).toDateString();
-      const filterDate = new Date(filters.date).toDateString();
-      if (resultDate !== filterDate) {
-        return false;
+    
+    if (scores && scores.length > 0) {
+      const maxScore = Math.max(...scores.map(s => s.score || 0));
+      const winners = participants?.filter(p => 
+        scores.find(s => s.participant_id === p.id && s.score === maxScore)
+      ) || [];
+      
+      if (winners.length > 0) {
+        return (
+          <Badge variant="success" className="flex items-center gap-1">
+            <TrophyIcon className="w-4 h-4" />
+            Winner: {winners[0].name}
+          </Badge>
+        );
       }
     }
-    return true;
-  });
+    
+    return (
+      <Badge variant="info" className="flex items-center gap-1">
+        <ChartBarIcon className="w-4 h-4" />
+        Results Available
+      </Badge>
+    );
+  };
 
-  const homeWins = filteredResults.filter(result => result.outcome === 'HOME_WIN').length;
-  const awayWins = filteredResults.filter(result => result.outcome === 'AWAY_WIN').length;
-  const draws = filteredResults.filter(result => result.outcome === 'DRAW').length;
-  const totalMatches = filteredResults.length;
+  const renderResultCard = (result) => {
+    const event = result.match?.fixture?.event;
+    const fixture = result.match?.fixture;
+    const match = result.match;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50 to-emerald-100 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <Card key={result.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+        <div className="p-6">
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between">
+            <div className="flex-1">
+              {/* Event Header */}
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="text-3xl">{getSportEmoji(event?.sport_type)}</div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    {event?.name || 'Event Name'}
+                  </h3>
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <span>{event?.sport_type}</span>
+                    {fixture?.division && (
+                      <>
+                        <span>•</span>
+                        <span>{fixture.division.name}</span>
+                      </>
+                    )}
+                    {match?.match_type && (
+                      <>
+                        <span>•</span>
+                        <span>{match.match_type}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+        </div>
+
+              {/* Match Details */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="flex items-center text-sm text-gray-600">
+                  <CalendarIcon className="w-4 h-4 mr-2 text-blue-500" />
+                  {formatDate(match?.scheduled_date)}
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <ClockIcon className="w-4 h-4 mr-2 text-green-500" />
+                  {formatDateTime(match?.scheduled_time)}
+            </div>
+                {match?.venue && (
+                  <div className="flex items-center text-sm text-gray-600">
+                    <MapPinIcon className="w-4 h-4 mr-2 text-purple-500" />
+                    {match.venue.name}
+          </div>
+        )}
+              </div>
+              
+              {/* Results Summary */}
+              <div className="mb-4">
+                {getResultBadge(result)}
+              </div>
+              
+              {/* Participants and Scores */}
+              {result.participants && result.participants.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                  <h4 className="font-medium text-gray-900 mb-3">Participants & Scores</h4>
+                  <div className="space-y-2">
+                    {result.participants.map((participant, index) => {
+                      const score = result.scores?.find(s => s.participant_id === participant.id);
+                      const isWinner = score && result.scores && 
+                        score.score === Math.max(...result.scores.map(s => s.score || 0));
+                      
+                      return (
+                        <div key={participant.id} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            {isWinner ? (
+                              <TrophyIcon className="w-5 h-5 text-yellow-500" />
+                            ) : (
+                              <span className="text-gray-400 font-mono text-sm">
+                                {String(index + 1).padStart(2, '0')}
+                              </span>
+                            )}
+                            <span className="font-medium text-gray-900">
+                              {participant.name || participant.team_name || `Participant ${index + 1}`}
+                            </span>
+                            {isWinner && (
+                              <Badge variant="warning" size="sm">🥇</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {score && (
+                              <span className="text-lg font-bold text-blue-600">
+                                {score.score}
+                              </span>
+                            )}
+                            {score?.unit && (
+                              <span className="text-sm text-gray-500">{score.unit}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+            </div>
+          </div>
+              )}
+              
+              {/* Additional Result Details */}
+              {result.notes && (
+                <div className="bg-blue-50 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-blue-800">{result.notes}</p>
+              </div>
+              )}
+              
+              {/* Result Metadata */}
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <span>Result ID: {result.id}</span>
+                <span>Published: {formatDateTime(result.created_at)}</span>
+            </div>
+          </div>
+
+            <div className="mt-4 lg:mt-0 lg:ml-6">
+              <Button
+                as={Link}
+                to={`/results/${result.id}`}
+                variant="outline"
+                size="sm"
+                className="flex items-center"
+              >
+                <EyeIcon className="w-4 h-4 mr-2" />
+                View Details
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="flex items-center justify-center space-x-2 mt-8">
+        <Button
+          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+          disabled={currentPage === 1}
+          variant="outline"
+          size="sm"
+        >
+          Previous
+        </Button>
+        
+        <div className="flex items-center space-x-1">
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNum;
+            if (totalPages <= 5) {
+              pageNum = i + 1;
+            } else if (currentPage <= 3) {
+              pageNum = i + 1;
+            } else if (currentPage >= totalPages - 2) {
+              pageNum = totalPages - 4 + i;
+            } else {
+              pageNum = currentPage - 2 + i;
+            }
+            
+            return (
+              <Button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                variant={currentPage === pageNum ? 'primary' : 'outline'}
+                size="sm"
+                className="w-10"
+              >
+                {pageNum}
+              </Button>
+            );
+          })}
+          </div>
+
+        <Button
+          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+          disabled={currentPage === totalPages}
+          variant="outline"
+          size="sm"
+        >
+          Next
+        </Button>
+      </div>
+    );
+  };
+
+  const getUniqueSports = () => {
+    const sports = new Set();
+    events.forEach(event => {
+      if (event.sport_type) {
+        sports.add(event.sport_type);
+      }
+    });
+    return Array.from(sports).sort();
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="max-w-7xl mx-auto px-6 py-12">
         {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-4">
-            Match Results
-          </h1>
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">Results & Outcomes</h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            View the latest results and outcomes from completed matches across all sports events! 🏆🥈🤝
+            View all published results, scores, and outcomes from completed matches and events across all sports.
           </p>
         </div>
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              <p className="text-yellow-700">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Stats */}
+        {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-200/50">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
+            <div className="p-6 text-center">
+              <TrophyIcon className="w-8 h-8 mx-auto text-blue-600 mb-3" />
+              <div className="text-2xl font-bold text-blue-900">{stats.totalResults}</div>
+              <div className="text-sm text-blue-700">Total Results</div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Home Wins</p>
-                <p className="text-2xl font-bold text-gray-900">{homeWins}</p>
+          </Card>
+          
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-green-50 to-green-100 border-green-200">
+            <div className="p-6 text-center">
+              <StarIcon className="w-8 h-8 mx-auto text-green-600 mb-3" />
+              <div className="text-2xl font-bold text-green-900">{stats.totalEvents}</div>
+              <div className="text-sm text-green-700">Events with Results</div>
               </div>
+          </Card>
+          
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200">
+            <div className="p-6 text-center">
+              <TrophyIcon className="w-8 h-8 mx-auto text-purple-600 mb-3" />
+              <div className="text-2xl font-bold text-purple-900">{stats.totalParticipants}</div>
+              <div className="text-sm text-purple-700">Total Participants</div>
             </div>
+          </Card>
+          
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
+            <div className="p-6 text-center">
+              <ArrowTrendingUpIcon className="w-8 h-8 mx-auto text-orange-600 mb-3" />
+              <div className="text-2xl font-bold text-orange-900">{stats.averageScore}</div>
+              <div className="text-sm text-orange-700">Average Score</div>
           </div>
-
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-200/50">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Away Wins</p>
-                <p className="text-2xl font-bold text-gray-900">{awayWins}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-200/50">
-            <div className="flex items-center">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Draws</p>
-                <p className="text-2xl font-bold text-gray-900">{draws}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-200/50">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Matches</p>
-                <p className="text-2xl font-bold text-gray-900">{totalMatches}</p>
-              </div>
-            </div>
-          </div>
+          </Card>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">🔍 Search & Filter</h3>
-            <button
-              onClick={clearFilters}
-              className="mt-3 sm:mt-0 px-4 py-2 text-sm font-medium text-green-600 hover:text-green-500 bg-green-50 hover:bg-green-100 rounded-lg transition-all duration-200"
-            >
-              Clear all filters
-            </button>
+        {/* Search and Filters */}
+        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm mb-8">
+          <div className="p-6">
+            <form onSubmit={handleSearch} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="md:col-span-2">
+                  <Input
+                    type="text"
+                    placeholder="Search results, events, or participants..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    icon={MagnifyingGlassIcon}
+                  />
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sport</label>
               <select
-                value={filters.sport}
-                onChange={(e) => handleFilterChange("sport", e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-              >
-                <option value="">All Sports</option>
-                {sports.map(sport => (
-                  <option key={sport} value={sport}>{sport}</option>
+                    value={eventFilter}
+                    onChange={(e) => setEventFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">All Events</option>
+                    {events.map((event) => (
+                      <option key={event.id} value={event.id}>
+                        {event.name}
+                      </option>
                 ))}
               </select>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Event</label>
               <select
-                value={filters.event}
-                onChange={(e) => handleFilterChange("event", e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-              >
-                <option value="">All Events</option>
-                {events.map(event => (
-                  <option key={event} value={event}>{event}</option>
+                    value={sportFilter}
+                    onChange={(e) => setSportFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">All Sports</option>
+                    {getUniqueSports().map((sport) => (
+                      <option key={sport} value={sport}>
+                        {sport}
+                      </option>
                 ))}
               </select>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
               <input
                 type="date"
-                value={filters.date}
-                onChange={(e) => handleFilterChange("date", e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Outcome</label>
-              <select
-                value={filters.outcome}
-                onChange={(e) => handleFilterChange("outcome", e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-              >
-                <option value="">All Outcomes</option>
-                {outcomes.map(outcome => (
-                  <option key={outcome} value={outcome}>{getOutcomeText(outcome)}</option>
-                ))}
-              </select>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Button type="submit" variant="primary" size="sm">
+                    <MagnifyingGlassIcon className="w-4 h-4 mr-2" />
+                    Search
+                  </Button>
+                  <Button type="button" onClick={clearFilters} variant="outline" size="sm">
+                    <FunnelIcon className="w-4 h-4 mr-2" />
+                    Clear Filters
+                  </Button>
             </div>
+            
+                <div className="text-sm text-gray-600">
+                  {results.length > 0 && (
+                    <span>{results.length} result{results.length !== 1 ? 's' : ''} found</span>
+                  )}
+                </div>
+            </div>
+            </form>
           </div>
-        </div>
+        </Card>
 
         {/* Results Content */}
         {loading ? (
-          <div className="text-center py-16">
-            <div className="flex items-center justify-center mb-6">
-              <svg className="animate-spin h-12 w-12 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading results...</p>
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Loading results...</h3>
-            <p className="text-gray-600">Please wait while we fetch the latest match results</p>
           </div>
-        ) : filteredResults.length === 0 ? (
+        ) : error ? (
+          <Card className="border-red-200 bg-red-50">
+            <div className="text-center py-8">
+              <TrophyIcon className="w-12 h-12 mx-auto text-red-400 mb-4" />
+              <h3 className="text-lg font-medium text-red-900 mb-2">Error Loading Results</h3>
+              <p className="text-red-700">{error}</p>
+            </div>
+          </Card>
+        ) : results.length === 0 ? (
+          <Card className="border-gray-200 bg-gray-50">
           <div className="text-center py-16">
-            <div className="text-8xl mb-6">📊</div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">No results found</h3>
-            <p className="text-gray-600 text-lg mb-6">Try adjusting your filters or check back later for new results.</p>
-            <button
-              onClick={clearFilters}
-              className="px-6 py-3 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 transition-colors duration-200"
-            >
+              <TrophyIcon className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Found</h3>
+              <p className="text-gray-600 mb-6">
+                {searchTerm || eventFilter || sportFilter || dateFilter 
+                  ? 'Try adjusting your filters or search terms.'
+                  : 'No results have been published yet.'
+                }
+              </p>
+              {searchTerm || eventFilter || sportFilter || dateFilter ? (
+                <Button onClick={clearFilters} variant="outline">
               Clear Filters
-            </button>
+                </Button>
+              ) : (
+                <Button as={Link} to="/events" variant="primary">
+                  Browse Events
+                </Button>
+              )}
           </div>
+          </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {filteredResults.map((result) => (
-              <div key={result.id} className="group bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden">
-                <div className="p-6">
-                  {/* Result Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getOutcomeColor(result.outcome)}`}>
-                      {getOutcomeIcon(result.outcome)} {getOutcomeText(result.outcome)}
-                    </span>
-                    <span className="text-sm text-gray-500">Round {result.round_number}</span>
+          <>
+            <div className="space-y-6">
+              {results.map(renderResultCard)}
                   </div>
-                  
-                  {/* Event Name */}
-                  <h3 className="text-xl font-bold text-gray-900 mb-4 text-center">
-                    {result.event_name}
-                  </h3>
-                  
-                  {/* Teams & Scores */}
-                  <div className="text-center mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="text-center flex-1">
-                        <div className="text-lg font-bold text-gray-900 mb-2">{result.home_team}</div>
-                        <div className="text-3xl font-bold text-green-600">{result.home_score}</div>
-                      </div>
-                      <div className="text-2xl font-bold text-gray-400 mx-4">VS</div>
-                      <div className="text-center flex-1">
-                        <div className="text-lg font-bold text-gray-900 mb-2">{result.away_team}</div>
-                        <div className="text-3xl font-bold text-blue-600">{result.away_score}</div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Sport & Venue */}
-                  <div className="flex items-center justify-center text-sm text-gray-600 mb-4">
-                    <span className="font-semibold text-purple-600">{result.sport}</span>
-                    <span className="mx-2 text-gray-400">•</span>
-                    <span>{result.venue}</span>
-                  </div>
-                  
-                  {/* Match Date */}
-                  <div className="text-center text-sm text-gray-600 mb-4">
-                    <div className="flex items-center justify-center">
-                      <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      {formatDate(result.match_date)}
-                    </div>
-                  </div>
-                  
-                  {/* Highlights */}
-                  {result.highlights && result.highlights.length > 0 && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">🏆 Key Highlights:</h4>
-                      <ul className="text-xs text-gray-600 space-y-1">
-                        {result.highlights.slice(0, 3).map((highlight, index) => (
-                          <li key={index} className="flex items-center">
-                            <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
-                            {highlight}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  {/* Action Button */}
-                  <button className="w-full px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200 transform hover:scale-105">
-                    View Full Report
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+            {renderPagination()}
+          </>
         )}
+
+        {/* Quick Actions */}
+        <div className="mt-12 text-center">
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-8 border border-blue-200">
+            <h3 className="text-2xl font-bold text-gray-900 mb-4">Explore More</h3>
+            <p className="text-gray-600 mb-6">
+              Check out upcoming matches, browse events, or view your registrations.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button as={Link} to="/matches" variant="primary" size="lg">
+                View Matches
+              </Button>
+              <Button as={Link} to="/events" variant="outline" size="lg">
+                Browse Events
+              </Button>
+              <Button as={Link} to="/dashboard" variant="outline" size="lg">
+                Go to Dashboard
+              </Button>
+              </div>
+          </div>
+        </div>
       </div>
     </div>
   );

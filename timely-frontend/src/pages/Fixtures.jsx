@@ -1,809 +1,477 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { 
-  createFixture, generateFixtures, publishFixtures, regenerateFixtures,
-  checkFixtureConflicts, deleteFixture, getFixtureSchedule
+  generateFixtures, acceptFixtures, getEventFixtures, publishEventFixtures,
+  rescheduleFixture, getFixtureConflicts, getEvents, getTeams
 } from '../lib/api';
-import { useNotifications } from '../components/NotificationSystem';
+import { useToast } from '../hooks/useToast.jsx';
+import { useSocket } from '../hooks/useSocket';
+import FixtureRow from '../components/FixtureRow';
 
-const Fixtures = () => {
-  const { user, isOrganizer } = useAuth();
-  const navigate = useNavigate();
-  const { addNotification } = useNotifications();
+export default function Fixtures() {
+  const { eventId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { showSuccess, showError } = useToast();
   
-  // Create a toast function using the notification system
-  const toast = {
-    success: (message) => addNotification({ type: 'success', title: 'Success', message }),
-    error: (message) => addNotification({ type: 'error', title: 'Error', message }),
-    info: (message) => addNotification({ type: 'info', title: 'Info', message })
-  };
-  const [fixtures, setFixtures] = useState([]);
+  // State
+  const [activeTab, setActiveTab] = useState('generate');
   const [loading, setLoading] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showGenerateForm, setShowGenerateForm] = useState(false);
-  const [selectedFixture, setSelectedFixture] = useState(null);
   const [events, setEvents] = useState([]);
-  const [divisions, setDivisions] = useState([]);
-  const [venues, setVenues] = useState([]);
-
-  // Form states
-  const [createForm, setCreateForm] = useState({
-    event: '',
-    division: '',
-    name: '',
-    tournament_type: 'ROUND_ROBIN',
-    rounds: 1,
-    teams_per_match: 2,
-    start_date: '',
-    end_date: '',
-    match_duration_minutes: 90,
-    break_between_matches_minutes: 30,
-    venues: [],
-    max_matches_per_venue_per_day: 8,
-    earliest_start_time: '09:00',
-    latest_end_time: '22:00'
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [teams, setTeams] = useState([]);
+  const [selectedTeams, setSelectedTeams] = useState([]);
+  const [fixtures, setFixtures] = useState([]);
+  const [proposal, setProposal] = useState(null);
+  const [generationMode, setGenerationMode] = useState('rr');
+  const [slotHints, setSlotHints] = useState({
+    starts_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    spacing_minutes: 60
   });
 
-  const [generateForm, setGenerateForm] = useState({
-    generation_type: 'ROUND_ROBIN',
-    rounds: 1,
-    randomize_seeds: false,
-    seed_teams: false,
-    include_playoffs: false,
-    group_size: 4,
-    teams_per_group: 4,
-    start_time: '09:00',
-    end_time: '22:00',
-    matches_per_day: 8,
-    auto_assign_venues: true,
-    venue_preferences: []
-  });
+  // WebSocket for realtime updates
+  const { isConnected, lastMessage } = useSocket(
+    eventId ? `fixtures:event:${eventId}` : null
+  );
 
+  // Load initial data
   useEffect(() => {
-    if (!isOrganizer) {
-      navigate('/dashboard');
-      return;
+    loadEvents();
+    if (eventId) {
+      loadEventFixtures();
     }
-    loadFixtures();
-    loadFormData();
-  }, [isOrganizer, navigate]);
+  }, [eventId]);
 
-  // Add fallback data for testing
+  // Handle WebSocket messages
   useEffect(() => {
-    if (events.length === 0) {
-      setEvents([
-        { id: 1, name: 'Sample Event 1' },
-        { id: 2, name: 'Sample Event 2' }
-      ]);
-    }
-    if (divisions.length === 0) {
-      setDivisions([
-        { id: 1, name: 'Men\'s Division' },
-        { id: 2, name: 'Women\'s Division' }
-      ]);
-    }
-    if (venues.length === 0) {
-      setVenues([
-        { id: 1, name: 'Main Arena' },
-        { id: 2, name: 'Training Ground' }
-      ]);
-    }
-  }, [events.length, divisions.length, venues.length]);
-
-  const loadFixtures = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/fixtures/');
-      if (response.ok) {
-        const data = await response.json();
-        setFixtures(data);
-      } else {
-        console.error('Failed to load fixtures:', response.status);
-        // Add sample data for testing
-        setFixtures([
-          {
-            id: 1,
-            name: 'Group A',
-            event_name: 'Sample Event 1',
-            division_name: 'Men\'s Division',
-            tournament_type: 'ROUND_ROBIN',
-            status: 'DRAFT',
-            start_date: '2025-01-15',
-            end_date: '2025-01-20',
-            total_matches: 0,
-            created_at: '2025-01-10T10:00:00Z'
-          },
-          {
-            id: 2,
-            name: 'Quarter Finals',
-            event_name: 'Sample Event 2',
-            division_name: 'Women\'s Division',
-            tournament_type: 'KNOCKOUT',
-            status: 'PROPOSED',
-            start_date: '2025-01-25',
-            end_date: '2025-01-30',
-            total_matches: 8,
-            created_at: '2025-01-12T14:00:00Z'
-          }
-        ]);
-        toast.info('Loaded sample fixtures data');
+    if (lastMessage) {
+      const data = JSON.parse(lastMessage);
+      if (data.type === 'fixtures.updated' || data.type === 'fixtures.deleted') {
+        loadEventFixtures();
       }
-    } catch (error) {
-      console.error('Error loading fixtures:', error);
-      // Add sample data for testing
-      setFixtures([
-        {
-          id: 1,
-          name: 'Group A',
-          event_name: 'Sample Event 1',
-          division_name: 'Men\'s Division',
-          tournament_type: 'ROUND_ROBIN',
-          status: 'DRAFT',
-          start_date: '2025-01-15',
-          end_date: '2025-01-20',
-          total_matches: 0,
-          created_at: '2025-01-10T10:00:00Z'
-        },
-        {
-          id: 2,
-          name: 'Quarter Finals',
-          event_name: 'Sample Event 2',
-          division_name: 'Women\'s Division',
-          tournament_type: 'KNOCKOUT',
-          status: 'PROPOSED',
-          start_date: '2025-01-25',
-          end_date: '2025-01-30',
-          total_matches: 8,
-          created_at: '2025-01-12T14:00:00Z'
+    }
+  }, [lastMessage]);
+
+  const loadEvents = async () => {
+    try {
+      const response = await getEvents({ page_size: 100 });
+      setEvents(response.data.results || []);
+      
+      if (eventId) {
+        const event = response.data.results?.find(e => e.id === parseInt(eventId));
+        if (event) {
+          setSelectedEvent(event);
+          loadTeams(event.id);
         }
-      ]);
-      toast.info('Loaded sample fixtures data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadFormData = async () => {
-    try {
-      // Load events, divisions, venues for form dropdowns
-      const [eventsRes, divisionsRes, venuesRes] = await Promise.all([
-        fetch('http://127.0.0.1:8000/api/events/'),
-        fetch('http://127.0.0.1:8000/api/divisions/'),
-        fetch('http://127.0.0.1:8000/api/venues/')
-      ]);
-
-      if (eventsRes.ok) {
-        const eventsData = await eventsRes.json();
-        if (eventsData.length > 0) setEvents(eventsData);
-      }
-      if (divisionsRes.ok) {
-        const divisionsData = await divisionsRes.json();
-        if (divisionsData.length > 0) setDivisions(divisionsData);
-      }
-      if (venuesRes.ok) {
-        const venuesData = await venuesRes.json();
-        if (venuesData.length > 0) setVenues(venuesData);
       }
     } catch (error) {
-      console.error('Error loading form data:', error);
-      // Fallback data will be set by useEffect
+      showError('Failed to load events');
     }
   };
 
-  const handleCreateFixture = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
+  const loadTeams = async (eventId) => {
     try {
-      const response = await createFixture(createForm);
-      if (response && response.ok) {
-        toast.success('Fixture created successfully!');
-        setShowCreateForm(false);
-        setCreateForm({
-          event: '',
-          division: '',
-          name: '',
-          tournament_type: 'ROUND_ROBIN',
-          rounds: 1,
-          teams_per_match: 2,
-          start_date: '',
-          end_date: '',
-          match_duration_minutes: 90,
-          break_between_matches_minutes: 30,
-          venues: [],
-          max_matches_per_venue_per_day: 8,
-          earliest_start_time: '09:00',
-          latest_end_time: '22:00'
-        });
-        loadFixtures();
-      } else {
-        const error = response ? await response.json() : { detail: 'Failed to create fixture' };
-        toast.error(error.detail || 'Failed to create fixture');
-      }
+      const response = await getTeams({ event: eventId, page_size: 100 });
+      setTeams(response.data.results || []);
     } catch (error) {
-      console.error('Error creating fixture:', error);
-      toast.error('Failed to create fixture');
-    } finally {
-      setLoading(false);
+      showError('Failed to load teams');
     }
   };
 
-  const handleGenerateFixtures = async (e) => {
-    e.preventDefault();
-    if (!selectedFixture) return;
-
-    setLoading(true);
-    try {
-      const response = await generateFixtures(selectedFixture.id, generateForm);
-      if (response && response.ok) {
-        const data = await response.json();
-        toast.success(`Generated ${data.matches_count} matches successfully!`);
-        setShowGenerateForm(false);
-        setSelectedFixture(null);
-        loadFixtures();
-      } else {
-        const error = response ? await response.json() : { detail: 'Failed to generate fixtures' };
-        toast.error(error.detail || 'Failed to generate fixtures');
-      }
-    } catch (error) {
-      console.error('Error generating fixtures:', error);
-      toast.error('Failed to generate fixtures');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePublishFixtures = async (fixtureId) => {
-    if (!window.confirm('Are you sure you want to publish these fixtures? This will make them visible to participants.')) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await publishFixtures(fixtureId, {
-        publish_matches: true,
-        send_notifications: true
-      });
-      if (response && response.ok) {
-        toast.success('Fixtures published successfully!');
-        loadFixtures();
-      } else {
-        const error = response ? await response.json() : { detail: 'Failed to publish fixtures' };
-        toast.error(error.detail || 'Failed to publish fixtures');
-      }
-    } catch (error) {
-      console.error('Error publishing fixtures:', error);
-      toast.error('Failed to publish fixtures');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRegenerateFixtures = async (fixtureId) => {
-    if (!window.confirm('Are you sure you want to regenerate fixtures? This will delete all existing matches.')) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await regenerateFixtures(fixtureId);
-      if (response && response.ok) {
-        toast.success('Fixtures reset to draft status');
-        loadFixtures();
-      } else {
-        const error = response ? await response.json() : { detail: 'Failed to regenerate fixtures' };
-        toast.error(error.detail || 'Failed to regenerate fixtures');
-      }
-    } catch (error) {
-      console.error('Error regenerating fixtures:', error);
-      toast.error('Failed to regenerate fixtures');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteFixture = async (fixtureId) => {
-    if (!window.confirm('Are you sure you want to delete this fixture? This action cannot be undone.')) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await deleteFixture(fixtureId);
-      if (response && response.ok) {
-        toast.success('Fixture deleted successfully!');
-        loadFixtures();
-      } else {
-        const error = response ? await response.json() : { detail: 'Failed to delete fixture' };
-        toast.error(error.detail || 'Failed to delete fixture');
-      }
-    } catch (error) {
-      console.error('Error deleting fixture:', error);
-      toast.error('Failed to delete fixture');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      'DRAFT': 'bg-gray-100 text-gray-800',
-      'PROPOSED': 'bg-yellow-100 text-yellow-800',
-      'PUBLISHED': 'bg-green-100 text-green-800',
-      'CANCELLED': 'bg-red-100 text-red-800'
-    };
+  const loadEventFixtures = async () => {
+    if (!eventId) return;
     
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusConfig[status] || 'bg-gray-100 text-gray-800'}`}>
-        {status}
-      </span>
-    );
+    try {
+      setLoading(true);
+      const response = await getEventFixtures(eventId);
+      setFixtures(response.data.results || []);
+    } catch (error) {
+      showError('Failed to load fixtures');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getTournamentTypeBadge = (type) => {
-    const typeConfig = {
-      'ROUND_ROBIN': 'bg-blue-100 text-blue-800',
-      'KNOCKOUT': 'bg-purple-100 text-purple-800',
-      'GROUP_STAGE': 'bg-indigo-100 text-indigo-800',
-      'SWISS': 'bg-pink-100 text-pink-800'
-    };
-    
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeConfig[type] || 'bg-gray-100 text-gray-800'}`}>
-        {type.replace('_', ' ')}
-      </span>
-    );
+  const handleGenerateFixtures = async () => {
+    if (!selectedEvent || selectedTeams.length < 2) {
+      showError('Please select an event and at least 2 teams');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const data = {
+        event_id: selectedEvent.id,
+        mode: generationMode,
+        participants: selectedTeams.map(team => team.id),
+        slot_hints: slotHints
+      };
+
+      const response = await generateFixtures(data);
+      setProposal(response.data);
+      setActiveTab('draft');
+      showSuccess('Fixtures generated successfully');
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to generate fixtures');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (!isOrganizer) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-          <p className="text-gray-600">You need organizer permissions to access this page.</p>
-        </div>
-      </div>
-    );
-  }
+  const handleAcceptFixtures = async () => {
+    if (!proposal) return;
+
+    try {
+      setLoading(true);
+      const data = {
+        event_id: proposal.event_id,
+        fixtures: proposal.fixtures
+      };
+
+      await acceptFixtures(data);
+      setProposal(null);
+      setActiveTab('draft');
+      loadEventFixtures();
+      showSuccess('Fixtures accepted and saved as draft');
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to accept fixtures');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePublishAll = async () => {
+    if (!eventId) return;
+
+    try {
+      setLoading(true);
+      await publishEventFixtures(eventId);
+      loadEventFixtures();
+      showSuccess('All fixtures published successfully');
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to publish fixtures');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReschedule = async (fixtureId, newData) => {
+    try {
+      setLoading(true);
+      await rescheduleFixture(fixtureId, newData);
+      loadEventFixtures();
+      showSuccess('Fixture rescheduled successfully');
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to reschedule fixture');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDateTime = (dateTime) => {
+    if (!dateTime) return 'TBD';
+    return new Date(dateTime).toLocaleString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'draft': return 'bg-gray-100 text-gray-800';
+      case 'published': return 'bg-green-100 text-green-800';
+      case 'completed': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const canManage = selectedEvent && (
+    selectedEvent.created_by === 'current_user' || 
+    'is_staff' in window.currentUser
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Tournament Fixtures</h1>
-              <p className="mt-2 text-gray-600">
-                Create and manage tournament fixtures for your events
-              </p>
-            </div>
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+          <h1 className="text-3xl font-bold text-gray-900">Fixtures & Scheduling</h1>
+          <p className="mt-2 text-gray-600">
+            Generate, manage, and publish tournament fixtures
+          </p>
+        </div>
+
+        {/* Event Selection */}
+        {!eventId && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Event
+            </label>
+            <select
+              value={selectedEvent?.id || ''}
+              onChange={(e) => {
+                const event = events.find(ev => ev.id === parseInt(e.target.value));
+                setSelectedEvent(event);
+                if (event) {
+                  loadTeams(event.id);
+                }
+              }}
+              className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              Create Fixture
-            </button>
+              <option value="">Choose an event...</option>
+              {events.map(event => (
+                <option key={event.id} value={event.id}>
+                  {event.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              {['generate', 'draft', 'published'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm capitalize ${
+                    activeTab === tab
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </nav>
           </div>
         </div>
 
-        {/* Fixtures List */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Your Fixtures</h2>
-          </div>
-          
-          {loading ? (
-            <div className="p-6 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-gray-600">Loading fixtures...</p>
+        {/* Generate Tab */}
+        {activeTab === 'generate' && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold mb-4">Generate Fixtures</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Mode Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tournament Mode
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="rr"
+                      checked={generationMode === 'rr'}
+                      onChange={(e) => setGenerationMode(e.target.value)}
+                      className="mr-2"
+                    />
+                    Round-Robin (everyone plays everyone)
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="ko"
+                      checked={generationMode === 'ko'}
+                      onChange={(e) => setGenerationMode(e.target.value)}
+                      className="mr-2"
+                    />
+                    Knockout (single elimination)
+                  </label>
+                </div>
+              </div>
+
+              {/* Team Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Teams ({selectedTeams.length} selected)
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2">
+                  {teams.map(team => (
+                    <label key={team.id} className="flex items-center mb-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedTeams.some(t => t.id === team.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTeams([...selectedTeams, team]);
+                          } else {
+                            setSelectedTeams(selectedTeams.filter(t => t.id !== team.id));
+                          }
+                        }}
+                        className="mr-2"
+                      />
+                      {team.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
-          ) : fixtures.length === 0 ? (
-            <div className="p-6 text-center">
-              <p className="text-gray-500">No fixtures created yet.</p>
+
+            {/* Slot Hints */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Start Time
+                </label>
+                <input
+                  type="datetime-local"
+                  value={slotHints.starts_at}
+                  onChange={(e) => setSlotHints({...slotHints, starts_at: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Spacing (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={slotHints.spacing_minutes}
+                  onChange={(e) => setSlotHints({...slotHints, spacing_minutes: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min="30"
+                  step="15"
+                />
+              </div>
+            </div>
+
+            {/* Generate Button */}
+            <div className="mt-6">
               <button
-                onClick={() => setShowCreateForm(true)}
-                className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
+                onClick={handleGenerateFixtures}
+                disabled={loading || !selectedEvent || selectedTeams.length < 2}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create your first fixture
+                {loading ? 'Generating...' : 'Generate Fixtures'}
               </button>
             </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {fixtures.map((fixture) => (
-                <div key={fixture.id} className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h3 className="text-lg font-medium text-gray-900">{fixture.name}</h3>
-                        {getStatusBadge(fixture.status)}
-                        {getTournamentTypeBadge(fixture.tournament_type)}
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                        <div>
-                          <span className="font-medium">Event:</span> {fixture.event_name}
-                        </div>
-                        <div>
-                          <span className="font-medium">Division:</span> {fixture.division_name}
-                        </div>
-                        <div>
-                          <span className="font-medium">Dates:</span> {fixture.start_date} - {fixture.end_date}
-                        </div>
-                        <div>
-                          <span className="font-medium">Matches:</span> {fixture.total_matches || 0}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      {fixture.status === 'DRAFT' && (
-                        <button
-                          onClick={() => {
-                            setSelectedFixture(fixture);
-                            setShowGenerateForm(true);
-                          }}
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                        >
-                          Generate
-                        </button>
-                      )}
-                      
-                      {fixture.status === 'PROPOSED' && (
-                        <button
-                          onClick={() => handlePublishFixtures(fixture.id)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                        >
-                          Publish
-                        </button>
-                      )}
-                      
-                      {fixture.status === 'PROPOSED' && (
-                        <button
-                          onClick={() => handleRegenerateFixtures(fixture.id)}
-                          className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                        >
-                          Regenerate
-                        </button>
-                      )}
-                      
-                      <Link
-                        to={`/fixtures/${fixture.id}`}
-                        className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        View
-                      </Link>
-                      
-                      {fixture.status === 'DRAFT' && (
-                        <button
-                          onClick={() => handleDeleteFixture(fixture.id)}
-                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
+          </div>
+        )}
+
+        {/* Draft Tab */}
+        {activeTab === 'draft' && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Draft Fixtures</h2>
+              {canManage && (
+                <button
+                  onClick={handlePublishAll}
+                  disabled={loading || fixtures.filter(f => f.status === 'draft').length === 0}
+                  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Publishing...' : 'Publish All'}
+                </button>
+              )}
+            </div>
+            
+            <div className="p-6">
+              {loading ? (
+                <div className="text-center py-8">Loading fixtures...</div>
+              ) : fixtures.filter(f => f.status === 'draft').length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No draft fixtures found. Generate some fixtures first.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {fixtures.filter(f => f.status === 'draft').map(fixture => (
+                    <FixtureRow
+                      key={fixture.id}
+                      fixture={fixture}
+                      canManage={canManage}
+                      onReschedule={handleReschedule}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Published Tab */}
+        {activeTab === 'published' && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold">Published Fixtures</h2>
+            </div>
+            
+            <div className="p-6">
+              {loading ? (
+                <div className="text-center py-8">Loading fixtures...</div>
+              ) : fixtures.filter(f => f.status === 'published').length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No published fixtures found.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {fixtures.filter(f => f.status === 'published').map(fixture => (
+                    <FixtureRow
+                      key={fixture.id}
+                      fixture={fixture}
+                      canManage={canManage}
+                      onReschedule={handleReschedule}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Proposal Preview */}
+        {proposal && (
+          <div className="mt-6 bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4">Generated Fixtures Preview</h3>
+            <div className="space-y-4">
+              {proposal.fixtures.map((fixture, index) => (
+                <div key={index} className="border border-gray-200 rounded-md p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-medium">Round {fixture.round_no}</span>
+                    <span className="text-sm text-gray-500">
+                      {formatDateTime(fixture.starts_at)} - {formatDateTime(fixture.ends_at)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>{fixture.entries.find(e => e.side === 'home')?.team_name || 'TBD'}</span>
+                    <span className="text-gray-500">vs</span>
+                    <span>{fixture.entries.find(e => e.side === 'away')?.team_name || 'TBD'}</span>
                   </div>
                 </div>
               ))}
             </div>
+            <div className="mt-4 flex space-x-4">
+              <button
+                onClick={handleAcceptFixtures}
+                disabled={loading}
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
+              >
+                Accept & Save as Draft
+              </button>
+              <button
+                onClick={() => setProposal(null)}
+                className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* WebSocket Status */}
+        <div className="mt-4 text-sm text-gray-500">
+          {isConnected ? (
+            <span className="text-green-600">● Live updates enabled</span>
+          ) : (
+            <span className="text-yellow-600">● Using polling fallback</span>
           )}
         </div>
-
-        {/* Create Fixture Modal */}
-        {showCreateForm && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Create New Fixture</h3>
-                <button
-                  onClick={() => setShowCreateForm(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <form onSubmit={handleCreateFixture} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Event</label>
-                    <select
-                      value={createForm.event}
-                      onChange={(e) => setCreateForm({...createForm, event: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="">Select Event</option>
-                      {events.map(event => (
-                        <option key={event.id} value={event.id}>{event.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Division</label>
-                    <select
-                      value={createForm.division}
-                      onChange={(e) => setCreateForm({...createForm, division: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="">Select Division</option>
-                      {divisions.map(division => (
-                        <option key={division.id} value={division.id}>{division.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Fixture Name</label>
-                    <input
-                      type="text"
-                      value={createForm.name}
-                      onChange={(e) => setCreateForm({...createForm, name: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="e.g., Group A, Quarter Finals"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Tournament Type</label>
-                    <select
-                      value={createForm.tournament_type}
-                      onChange={(e) => setCreateForm({...createForm, tournament_type: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="ROUND_ROBIN">Round Robin</option>
-                      <option value="KNOCKOUT">Knockout</option>
-                      <option value="GROUP_STAGE">Group Stage + Knockout</option>
-                      <option value="SWISS">Swiss System</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Start Date</label>
-                    <input
-                      type="date"
-                      value={createForm.start_date}
-                      onChange={(e) => setCreateForm({...createForm, start_date: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">End Date</label>
-                    <input
-                      type="date"
-                      value={createForm.end_date}
-                      onChange={(e) => setCreateForm({...createForm, end_date: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Match Duration (minutes)</label>
-                    <input
-                      type="number"
-                      value={createForm.match_duration_minutes}
-                      onChange={(e) => setCreateForm({...createForm, match_duration_minutes: parseInt(e.target.value)})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      min="30"
-                      max="300"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Break Between Matches (minutes)</label>
-                    <input
-                      type="number"
-                      value={createForm.break_between_matches_minutes}
-                      onChange={(e) => setCreateForm({...createForm, break_between_matches_minutes: parseInt(e.target.value)})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      min="0"
-                      max="120"
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Venues</label>
-                  <div className="mt-2 space-y-2">
-                    {venues.map(venue => (
-                      <label key={venue.id} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={createForm.venues.includes(venue.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCreateForm({...createForm, venues: [...createForm.venues, venue.id]});
-                            } else {
-                              setCreateForm({...createForm, venues: createForm.venues.filter(v => v !== venue.id)});
-                            }
-                          }}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">{venue.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateForm(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
-                  >
-                    {loading ? 'Creating...' : 'Create Fixture'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Generate Fixtures Modal */}
-        {showGenerateForm && selectedFixture && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Generate Fixtures for {selectedFixture.name}</h3>
-                <button
-                  onClick={() => {
-                    setShowGenerateForm(false);
-                    setSelectedFixture(null);
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <form onSubmit={handleGenerateFixtures} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Generation Type</label>
-                    <select
-                      value={generateForm.generation_type}
-                      onChange={(e) => setGenerateForm({...generateForm, generation_type: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="ROUND_ROBIN">Round Robin</option>
-                      <option value="KNOCKOUT">Knockout</option>
-                      <option value="GROUP_STAGE">Group Stage + Knockout</option>
-                      <option value="SWISS">Swiss System</option>
-                    </select>
-                  </div>
-                  
-                  {generateForm.generation_type === 'ROUND_ROBIN' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Number of Rounds</label>
-                        <input
-                          type="number"
-                          value={generateForm.rounds}
-                          onChange={(e) => setGenerateForm({...generateForm, rounds: parseInt(e.target.value)})}
-                          className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                          min="1"
-                          max="10"
-                        />
-                      </div>
-                      
-                      <div className="md:col-span-2">
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={generateForm.randomize_seeds}
-                            onChange={(e) => setGenerateForm({...generateForm, randomize_seeds: e.target.checked})}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">Randomize seeds for variety</span>
-                        </label>
-                      </div>
-                    </>
-                  )}
-                  
-                  {generateForm.generation_type === 'KNOCKOUT' && (
-                    <>
-                      <div className="md:col-span-2">
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={generateForm.seed_teams}
-                            onChange={(e) => setGenerateForm({...generateForm, seed_teams: e.target.checked})}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">Seed teams based on ranking</span>
-                        </label>
-                      </div>
-                      
-                      <div className="md:col-span-2">
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={generateForm.include_playoffs}
-                            onChange={(e) => setGenerateForm({...generateForm, include_playoffs: e.target.checked})}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">Include playoff matches (3rd/4th place)</span>
-                        </label>
-                      </div>
-                    </>
-                  )}
-                  
-                  {generateForm.generation_type === 'GROUP_STAGE' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Number of Groups</label>
-                        <input
-                          type="number"
-                          value={generateForm.group_size}
-                          onChange={(e) => setGenerateForm({...generateForm, group_size: parseInt(e.target.value)})}
-                          className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                          min="2"
-                          max="8"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Teams per Group</label>
-                        <input
-                          type="number"
-                          value={generateForm.teams_per_group}
-                          onChange={(e) => setGenerateForm({...generateForm, teams_per_group: parseInt(e.target.value)})}
-                          className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                          min="2"
-                          max="8"
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowGenerateForm(false);
-                      setSelectedFixture(null);
-                    }}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
-                  >
-                    {loading ? 'Generating...' : 'Generate Fixtures'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
-};
-
-export default Fixtures;
+}

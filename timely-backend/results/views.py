@@ -7,7 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Result
 from .serializers import ResultSerializer
-from fixtures.models import Match
+from fixtures.models import Fixture
 
 
 class IsOrganizerOrStaff(permissions.BasePermission):
@@ -22,12 +22,12 @@ class ResultViewSet(viewsets.ModelViewSet):
     """
     FR31–35: Enter results, update scores, publish for public viewing.
     """
-    queryset = Result.objects.select_related("match", "match__event", "match__venue").all()
+    queryset = Result.objects.select_related("match", "match__event").all()
     serializer_class = ResultSerializer
     permission_classes = [permissions.IsAuthenticated, IsOrganizerOrStaff]
 
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["match__event", "match"]
+    filterset_fields = ["match"]  # Only filter by match ID, not nested fields
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
 
@@ -37,26 +37,26 @@ class ResultViewSet(viewsets.ModelViewSet):
         Upsert a result and mark the match completed.
         Payload: { "match": <id>, "score_a": 1, "score_b": 0, "notes": "" }
         """
-        match_id = request.data.get("match")
-        if not match_id:
-            return Response({"detail": "match is required"}, status=400)
+        fixture_id = request.data.get("fixture")
+        if not fixture_id:
+            return Response({"detail": "fixture is required"}, status=400)
 
         try:
-            match = Match.objects.select_related("event").get(pk=match_id)
-        except Match.DoesNotExist:
-            return Response({"detail": "match not found"}, status=404)
+            fixture = Fixture.objects.select_related("event").get(pk=fixture_id)
+        except Fixture.DoesNotExist:
+            return Response({"detail": "fixture not found"}, status=404)
 
         obj, _ = Result.objects.update_or_create(
-            match=match,
+            fixture=fixture,
             defaults={
                 "score_a": int(request.data.get("score_a") or 0),
                 "score_b": int(request.data.get("score_b") or 0),
                 "notes": request.data.get("notes") or "",
             },
         )
-        # mark match complete
-        match.status = Match.Status.COMPLETED
-        match.end_time = match.end_time or match.start_time  # if not supplied elsewhere
-        match.save(update_fields=["status", "end_time"])
+        # mark fixture complete
+        fixture.status = Fixture.Status.COMPLETED
+        fixture.ends_at = fixture.ends_at or fixture.starts_at  # if not supplied elsewhere
+        fixture.save(update_fields=["status", "ends_at"])
 
         return Response(ResultSerializer(obj).data, status=201)

@@ -1,5 +1,5 @@
 from rest_framework import permissions
-from .models import TeamMember, Team
+from .models import TeamMember, Team, TeamEventEntry
 
 
 class IsTeamManager(permissions.BasePermission):
@@ -162,8 +162,8 @@ class CanEditResults(permissions.BasePermission):
 
 class IsTeamOwner(permissions.BasePermission):
     """
-    Permission to check if user is the team owner/creator.
-    Allows access if user created the team or is admin.
+    Permission to check if user is the team owner/creator or manager.
+    Allows access if user is team manager, created the team, or is admin.
     """
     
     def has_permission(self, request, view):
@@ -182,11 +182,110 @@ class IsTeamOwner(permissions.BasePermission):
         if request.user.is_staff:
             return True
         
-        # Check if user is the team creator
+        # Check if user is the team manager or creator
         if isinstance(obj, Team):
-            return obj.created_by == request.user
+            return (obj.manager == request.user or 
+                   obj.created_by == request.user or
+                   TeamMember.objects.filter(
+                       team=obj,
+                       user=request.user,
+                       can_manage_team=True,
+                       status=TeamMember.Status.ACTIVE
+                   ).exists())
         
         return False
+
+
+class IsOrganizerOrAdmin(permissions.BasePermission):
+    """
+    Permission to check if user is an organizer or admin.
+    Allows access for event organizers and admins.
+    """
+    
+    def has_permission(self, request, view):
+        # Admin users can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user has organizer role
+        role = getattr(request.user, 'role', '').upper()
+        return role in {'ORGANIZER', 'ADMIN'}
+    
+    def has_object_permission(self, request, view, obj):
+        # Admin users can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Check if user has organizer role
+        role = getattr(request.user, 'role', '').upper()
+        return role in {'ORGANIZER', 'ADMIN'}
+
+
+class CanManageTeamEntries(permissions.BasePermission):
+    """
+    Permission to check if user can manage team entries.
+    Allows team managers/coaches to manage their team's entries.
+    """
+    
+    def has_permission(self, request, view):
+        # Admin users can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        return True
+    
+    def has_object_permission(self, request, view, obj):
+        # Admin users can do anything
+        if request.user.is_staff:
+            return True
+        
+        # For team event entries, check if user can manage the team
+        if isinstance(obj, TeamEventEntry):
+            return TeamMember.objects.filter(
+                team=obj.team,
+                user=request.user,
+                can_manage_team=True,
+                status=TeamMember.Status.ACTIVE
+            ).exists() or obj.team.manager == request.user
+        
+        return False
+
+
+class CanApproveTeamEntries(permissions.BasePermission):
+    """
+    Permission to check if user can approve/reject team entries.
+    Allows organizers and admins to approve entries.
+    """
+    
+    def has_permission(self, request, view):
+        # Admin users can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user has organizer role
+        role = getattr(request.user, 'role', '').upper()
+        return role in {'ORGANIZER', 'ADMIN'}
+    
+    def has_object_permission(self, request, view, obj):
+        # Admin users can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Check if user has organizer role
+        role = getattr(request.user, 'role', '').upper()
+        return role in {'ORGANIZER', 'ADMIN'}
 
 
 class CanViewTeamInfo(permissions.BasePermission):

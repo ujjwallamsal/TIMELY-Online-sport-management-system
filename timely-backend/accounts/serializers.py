@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.validators import EmailValidator
 from rest_framework import serializers
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
@@ -172,265 +173,157 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration"""
-    password = serializers.CharField(write_only=True, min_length=8, style={'input_type': 'password'})
-    password_confirm = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    password = serializers.CharField(write_only=True, min_length=8)
+    password_confirm = serializers.CharField(write_only=True)
     
     class Meta:
         model = User
-        fields = [
-            'email', 'first_name', 'last_name', 'password', 'password_confirm',
-            'role'
-        ]
+        fields = ['email', 'password', 'password_confirm', 'first_name', 'last_name', 'role']
         extra_kwargs = {
             'email': {'required': True},
-            'first_name': {'required': False},
-            'last_name': {'required': False},
-            'role': {'required': False, 'default': 'SPECTATOR'}
+            'first_name': {'required': True},
+            'last_name': {'required': True},
         }
     
     def validate_email(self, value):
-        """Validate email format and uniqueness"""
-        try:
-            validate_email(value)
-        except ValidationError:
-            raise serializers.ValidationError("Enter a valid email address.")
-        
+        """Validate email uniqueness"""
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
-        
-        return value.lower()
+        return value
     
-    def validate(self, data):
+    def validate_password_confirm(self, value):
         """Validate password confirmation"""
-        if data['password'] != data['password_confirm']:
-            raise serializers.ValidationError("Passwords do not match.")
-        return data
+        password = self.initial_data.get('password')
+        if password and value and password != value:
+            raise serializers.ValidationError("Passwords don't match.")
+        return value
+    
+    def validate_password(self, value):
+        """Validate password strength"""
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
     
     def create(self, validated_data):
-        """Create new user"""
+        """Create user with validated data"""
         validated_data.pop('password_confirm')
-        role = validated_data.get('role', 'SPECTATOR')
-        
-        # Create user with the specified role
-        user = User.objects.create_user(
-            email=validated_data['email'],
-            password=validated_data['password'],
-            first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', ''),
-            role=role
-        )
-        
-        # Log user creation
-        AuditLog.log_action(
-            user=user,
-            action=AuditLog.ActionType.CREATE,
-            resource_type='User',
-            resource_id=str(user.id),
-            details={'email': user.email, 'method': 'registration', 'role': role}
-        )
-        
+        user = User.objects.create_user(**validated_data)
         return user
 
 
 class UserLoginSerializer(serializers.Serializer):
     """Serializer for user login"""
     email = serializers.EmailField()
-    password = serializers.CharField(style={'input_type': 'password'})
+    password = serializers.CharField(write_only=True)
     
-    def validate(self, data):
+    def validate(self, attrs):
         """Validate login credentials"""
-        email = data.get('email', '').lower()
-        password = data.get('password', '')
+        email = attrs.get('email')
+        password = attrs.get('password')
         
         if email and password:
-            # Django's ModelBackend expects the USERNAME_FIELD kwarg name to be
-            # "username" even if the underlying field is email. Since our
-            # custom User sets USERNAME_FIELD = "email", we should pass the
-            # value via the "username" parameter for compatibility.
+            # Try to authenticate with email
+            user = None
+            # Use email for authentication
             user = authenticate(username=email, password=password)
-            if user:
-                if not user.is_active:
-                    raise serializers.ValidationError("User account is disabled.")
-                data['user'] = user
-                # Best-effort audit; do not fail auth if audit table isn't present
-                try:
-                    AuditLog.log_action(
-                        user=user,
-                        action=AuditLog.ActionType.LOGIN,
-                        resource_type='User',
-                        resource_id=str(user.id),
-                        details={'email': user.email, 'method': 'email_password'}
-                    )
-                except Exception:
-                    pass
-                return data
-            else:
-                raise serializers.ValidationError("Invalid email or password.")
+            
+            if not user:
+                raise serializers.ValidationError("Invalid credentials.")
+            if not user.is_active:
+                raise serializers.ValidationError("User account is disabled.")
+            attrs['user'] = user
         else:
             raise serializers.ValidationError("Must include email and password.")
         
-        return data
+        return attrs
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    """Serializer for user profile display and update"""
-    email = serializers.EmailField(read_only=True)
-    email_verified = serializers.BooleanField(read_only=True)
-    date_joined = serializers.DateTimeField(read_only=True)
-    last_login = serializers.DateTimeField(read_only=True)
+    """Serializer for user profile data"""
+    full_name = serializers.ReadOnlyField()
+    display_name = serializers.ReadOnlyField()
+    is_verified = serializers.ReadOnlyField()
+    primary_role_display = serializers.ReadOnlyField()
     
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'role', 'email_verified',
-            'phone_number', 'date_of_birth', 'address', 'city', 'state',
-            'postal_code', 'country', 'profile_picture', 'bio', 'website',
-            'social_media', 'preferences', 'date_joined', 'last_login',
+            'id', 'email', 'username', 'first_name', 'last_name', 'full_name', 'display_name',
+            'is_active', 'email_verified', 'is_verified', 'date_joined', 'last_login',
+            'phone_number', 'date_of_birth', 'address', 'city', 'state', 'postal_code',
+            'country', 'profile_picture', 'bio', 'website', 'role', 'primary_role_display',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'email', 'email_verified', 'date_joined', 'last_login', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'email', 'is_active', 'email_verified', 'date_joined', 
+                           'last_login', 'created_at', 'updated_at']
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating user profile"""
     
-    def update(self, instance, validated_data):
-        """Update user profile with audit logging"""
-        old_data = {
-            'first_name': instance.first_name,
-            'last_name': instance.last_name,
-            'phone_number': instance.phone_number,
-            'address': instance.address,
-            'city': instance.city,
-            'state': instance.state,
-            'postal_code': instance.postal_code,
-            'country': instance.country,
-            'bio': instance.bio,
-            'website': instance.website,
-        }
-        
-        # Update user
-        user = super().update(instance, validated_data)
-        
-        # Log profile update
-        AuditLog.log_action(
-            user=self.context['request'].user,
-            action=AuditLog.ActionType.UPDATE,
-            resource_type='UserProfile',
-            resource_id=str(user.id),
-            details={
-                'old_data': old_data,
-                'new_data': validated_data,
-                'updated_fields': list(validated_data.keys())
-            }
-        )
-        
-        return user
+    class Meta:
+        model = User
+        fields = [
+            'first_name', 'last_name', 'phone_number', 'date_of_birth',
+            'address', 'city', 'state', 'postal_code', 'country',
+            'profile_picture', 'bio', 'website'
+        ]
+    
+    def validate_phone_number(self, value):
+        """Validate phone number format"""
+        if value:
+            from .models import User
+            phone_regex = User.phone_regex
+            if not phone_regex.regex.match(value):
+                raise serializers.ValidationError("Invalid phone number format.")
+        return value
 
 
 class UserRoleSerializer(serializers.ModelSerializer):
     """Serializer for user roles"""
     role_type_display = serializers.CharField(source='get_role_type_display', read_only=True)
-    assigned_by_display = serializers.CharField(source='assigned_by.display_name', read_only=True)
     
     class Meta:
         model = UserRole
         fields = [
-            'id', 'role_type', 'role_type_display', 'is_primary', 'context_type',
-            'context_id', 'assigned_by', 'assigned_by_display', 'assigned_at',
-            'expires_at', 'is_active', 'created_at', 'updated_at',
+            'id', 'role_type', 'role_type_display', 'is_primary', 'is_active',
             'can_manage_events', 'can_manage_teams', 'can_manage_users',
             'can_manage_fixtures', 'can_manage_results', 'can_manage_payments',
-            'can_manage_content', 'can_view_reports'
+            'can_manage_content', 'can_view_reports', 'context_type', 'context_id',
+            'assigned_at', 'expires_at', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'assigned_by', 'assigned_by_display', 'assigned_at', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'assigned_at', 'created_at', 'updated_at']
 
 
 class UserRoleAssignmentSerializer(serializers.ModelSerializer):
     """Serializer for assigning roles to users"""
-    user_email = serializers.EmailField(write_only=True)
-    role_type = serializers.ChoiceField(choices=UserRole.RoleType.choices)
     
     class Meta:
         model = UserRole
         fields = [
-            'user_email', 'role_type', 'is_primary', 'context_type', 'context_id',
-            'expires_at', 'can_manage_events', 'can_manage_teams', 'can_manage_users',
-            'can_manage_fixtures', 'can_manage_results', 'can_manage_payments',
-            'can_manage_content', 'can_view_reports'
+            'role_type', 'is_primary', 'can_manage_events', 'can_manage_teams',
+            'can_manage_users', 'can_manage_fixtures', 'can_manage_results',
+            'can_manage_payments', 'can_manage_content', 'can_view_reports',
+            'context_type', 'context_id', 'expires_at'
         ]
     
-    def validate_user_email(self, value):
-        """Validate user exists"""
-        try:
-            user = User.objects.get(email=value.lower())
-            return user
-        except User.DoesNotExist:
-            raise serializers.ValidationError("User with this email does not exist.")
-    
-    def validate(self, data):
+    def validate(self, attrs):
         """Validate role assignment"""
-        user = data['user_email']  # This is actually the user object now
-        role_type = data['role_type']
-        context_type = data.get('context_type')
-        context_id = data.get('context_id')
-        
-        # Check if role already exists
-        existing_role = UserRole.objects.filter(
-            user=user,
-            role_type=role_type,
-            context_type=context_type,
-            context_id=context_id,
-            is_active=True
-        ).first()
-        
-        if existing_role:
-            raise serializers.ValidationError("User already has this role in this context.")
-        
-        # If setting as primary, remove other primary roles
-        if data.get('is_primary', False):
-            UserRole.objects.filter(user=user, is_primary=True).update(is_primary=False)
-        
-        return data
-    
-    def create(self, validated_data):
-        """Create user role with audit logging"""
-        user = validated_data.pop('user_email')
-        
-        role = UserRole.objects.create(
-            user=user,
-            assigned_by=self.context['request'].user,
-            **validated_data
-        )
-        
-        # Log role assignment
-        AuditLog.log_action(
-            user=self.context['request'].user,
-            action=AuditLog.ActionType.ROLE_ASSIGNMENT,
-            resource_type='UserRole',
-            resource_id=str(role.id),
-            details={
-                'assigned_user': user.email,
-                'role_type': role.role_type,
-                'context_type': role.context_type,
-                'context_id': role.context_id,
-                'permissions': {
-                    'can_manage_events': role.can_manage_events,
-                    'can_manage_teams': role.can_manage_teams,
-                    'can_manage_users': role.can_manage_users,
-                    'can_manage_fixtures': role.can_manage_fixtures,
-                    'can_manage_results': role.can_manage_results,
-                    'can_manage_payments': role.can_manage_payments,
-                    'can_manage_content': role.can_manage_content,
-                    'can_view_reports': role.can_view_reports,
-                }
-            }
-        )
-        
-        return role
+        if attrs.get('is_primary'):
+            # Check if user already has a primary role
+            user = self.context.get('user')
+            if user and UserRole.objects.filter(user=user, is_primary=True, is_active=True).exists():
+                raise serializers.ValidationError("User already has a primary role.")
+        return attrs
 
 
 class PasswordChangeSerializer(serializers.Serializer):
     """Serializer for password change"""
-    current_password = serializers.CharField(style={'input_type': 'password'})
-    new_password = serializers.CharField(min_length=8, style={'input_type': 'password'})
-    new_password_confirm = serializers.CharField(style={'input_type': 'password'})
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    new_password_confirm = serializers.CharField(write_only=True)
     
     def validate_current_password(self, value):
         """Validate current password"""
@@ -439,11 +332,20 @@ class PasswordChangeSerializer(serializers.Serializer):
             raise serializers.ValidationError("Current password is incorrect.")
         return value
     
-    def validate(self, data):
+    def validate_new_password_confirm(self, value):
         """Validate password confirmation"""
-        if data['new_password'] != data['new_password_confirm']:
-            raise serializers.ValidationError("New passwords do not match.")
-        return data
+        new_password = self.initial_data.get('new_password')
+        if new_password and value and new_password != value:
+            raise serializers.ValidationError("New passwords don't match.")
+        return value
+    
+    def validate_new_password(self, value):
+        """Validate new password strength"""
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
@@ -452,95 +354,79 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     
     def validate_email(self, value):
         """Validate email exists"""
-        if not User.objects.filter(email=value.lower(), is_active=True).exists():
-            raise serializers.ValidationError("No active user found with this email address.")
-        return value.lower()
+        if not User.objects.filter(email=value, is_active=True).exists():
+            raise serializers.ValidationError("No active user found with this email.")
+        return value
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
     """Serializer for password reset confirmation"""
     token = serializers.CharField()
-    new_password = serializers.CharField(min_length=8, style={'input_type': 'password'})
-    new_password_confirm = serializers.CharField(style={'input_type': 'password'})
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    new_password_confirm = serializers.CharField(write_only=True)
     
-    def validate(self, data):
-        """Validate token and password confirmation"""
-        token = data['token']
-        new_password = data['new_password']
-        new_password_confirm = data['new_password_confirm']
-        
-        # Validate token
+    def validate_new_password_confirm(self, value):
+        """Validate password confirmation"""
+        new_password = self.initial_data.get('new_password')
+        if new_password and value and new_password != value:
+            raise serializers.ValidationError("New passwords don't match.")
+        return value
+    
+    def validate_new_password(self, value):
+        """Validate new password strength"""
         try:
-            reset_token = PasswordResetToken.objects.get(
-                token=token,
-                is_used=False,
-                expires_at__gt=timezone.now()
-            )
-            data['reset_token'] = reset_token
-        except PasswordResetToken.DoesNotExist:
-            raise serializers.ValidationError("Invalid or expired reset token.")
-        
-        # Validate password confirmation
-        if new_password != new_password_confirm:
-            raise serializers.ValidationError("Passwords do not match.")
-        
-        return data
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
 
 
 class EmailVerificationSerializer(serializers.Serializer):
     """Serializer for email verification"""
     token = serializers.CharField()
-    
-    def validate_token(self, value):
-        """Validate verification token"""
-        try:
-            verification_token = EmailVerificationToken.objects.get(
-                token=value,
-                is_used=False,
-                expires_at__gt=timezone.now()
-            )
-            return verification_token
-        except EmailVerificationToken.DoesNotExist:
-            raise serializers.ValidationError("Invalid or expired verification token.")
 
 
 class UserListSerializer(serializers.ModelSerializer):
-    """Serializer for user list display (admin use)"""
-    roles = serializers.SerializerMethodField()
-    is_verified = serializers.SerializerMethodField()
+    """Serializer for listing users (admin only)"""
+    full_name = serializers.ReadOnlyField()
+    primary_role_display = serializers.ReadOnlyField()
+    roles_count = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'is_active', 'is_verified',
-            'date_joined', 'last_login', 'roles'
+            'id', 'email', 'full_name', 'first_name', 'last_name', 'is_active',
+            'email_verified', 'role', 'primary_role_display', 'date_joined',
+            'last_login', 'roles_count', 'created_at'
         ]
+        read_only_fields = ['id', 'email', 'date_joined', 'last_login', 'created_at']
     
-    def get_roles(self, obj):
-        """Get user's primary role"""
-        primary_role = getattr(obj, 'roles', None)
-        if hasattr(primary_role, 'filter'):
-            role = primary_role.filter(is_active=True).first()
-            if role:
-                return {
-                    'role_type': role.role_type,
-                    'is_primary': role.is_primary,
-                }
-        return None
-
-    def get_is_verified(self, obj):
-        return bool(getattr(obj, 'email_verified', False))
+    def get_roles_count(self, obj):
+        """Get count of active roles"""
+        return obj.roles.filter(is_active=True).count()
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
     """Serializer for audit logs"""
-    user_email = serializers.CharField(source='user.email', read_only=True)
+    user_display = serializers.CharField(source='user.display_name', read_only=True)
     action_display = serializers.CharField(source='get_action_display', read_only=True)
     
     class Meta:
         model = AuditLog
         fields = [
-            'id', 'user', 'user_email', 'action', 'action_display', 'resource_type',
-            'resource_id', 'details', 'ip_address', 'user_agent', 'created_at'
+            'id', 'user', 'user_display', 'action', 'action_display',
+            'resource_type', 'resource_id', 'details', 'ip_address',
+            'user_agent', 'created_at'
         ]
-        read_only_fields = ['id', 'user', 'user_email', 'action_display', 'created_at']
+        read_only_fields = ['id', 'user', 'created_at']
+
+
+class UserRoleUpdateSerializer(serializers.Serializer):
+    """Serializer for updating user role (admin only)"""
+    role = serializers.ChoiceField(choices=User.Role.choices)
+    
+    def validate_role(self, value):
+        """Validate role choice"""
+        if value not in dict(User.Role.choices):
+            raise serializers.ValidationError("Invalid role choice.")
+        return value

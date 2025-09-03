@@ -1,222 +1,316 @@
-# registrations/views.py
-from __future__ import annotations
-from rest_framework import viewsets, permissions, status, filters
+"""
+Views for registration management
+"""
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.http import HttpResponse, Http404
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from .models import Registration
+from django.db.models import Q
+
+from .models import Registration, RegistrationDocument
 from .serializers import (
-    RegistrationSerializer, RegistrationCreateSerializer, RegistrationUpdateSerializer,
-    RegistrationListSerializer
+    RegistrationListSerializer, RegistrationDetailSerializer, RegistrationCreateSerializer,
+    RegistrationWithdrawSerializer, RegistrationStatusActionSerializer,
+    RegistrationDocumentUploadSerializer, RegistrationDocumentSerializer,
+    PaymentIntentSerializer, PaymentConfirmSerializer
 )
-from .permissions import IsOrganizerOrAdmin
+from .permissions import (
+    IsRegistrationOwnerOrReadOnly, IsRegistrationOwner, IsEventOrganizerOrAdmin,
+    IsRegistrationOwnerOrEventOrganizerOrAdmin, CanCreateRegistration, CanManageRegistration
+)
+from .services.payments import create_payment_intent, confirm_payment, get_payment_status
+from .services.notifications import (
+    send_registration_confirmation, send_payment_confirmation, 
+    send_status_update, send_organizer_notification
+)
+
 
 class RegistrationViewSet(viewsets.ModelViewSet):
-    queryset = Registration.objects.select_related("user", "event", "division").all()
+    """
+    ViewSet for registration management
+    """
+    queryset = Registration.objects.all()
+    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'registration_type', 'event', 'division', 'is_paid']
-    search_fields = ['user__email', 'user__first_name', 'user__last_name', 'team_name']
-    ordering_fields = ['created_at', 'updated_at', 'status']
-    ordering = ['-created_at']
+    filterset_fields = ['status', 'payment_status', 'event', 'type']
+    search_fields = ['team_name', 'user__email', 'user__first_name', 'user__last_name']
+    ordering_fields = ['submitted_at', 'status', 'payment_status']
+    ordering = ['-submitted_at']
 
     def get_serializer_class(self):
-        if self.action == 'create':
-            return RegistrationCreateSerializer
-        elif self.action in ['update', 'partial_update'] and self.request.user.role in ['ORGANIZER', 'ADMIN']:
-            return RegistrationUpdateSerializer
-        elif self.action == 'list':
+        """Return appropriate serializer based on action"""
+        if self.action == 'list':
             return RegistrationListSerializer
-        return RegistrationSerializer
+        elif self.action == 'create':
+            return RegistrationCreateSerializer
+        else:
+            return RegistrationDetailSerializer
 
     def get_permissions(self):
-        if self.action in {'approve', 'reject', 'destroy'}:
-            return [IsOrganizerOrAdmin()]
-        elif self.action in {'update', 'partial_update'}:
-            return [permissions.IsAuthenticated()]
-        elif self.action in {'create'}:
-            return [permissions.IsAuthenticated()]
-        return [permissions.IsAuthenticatedOrReadOnly()]
+        """Return appropriate permissions based on action"""
+        if self.action == 'create':
+            permission_classes = [IsAuthenticated, CanCreateRegistration]
+        elif self.action in ['list', 'retrieve']:
+            permission_classes = [IsAuthenticated]
+        elif self.action in ['update', 'partial_update', 'destroy']:
+            permission_classes = [IsAuthenticated, IsRegistrationOwnerOrReadOnly]
+        elif self.action in ['withdraw']:
+            permission_classes = [IsAuthenticated, IsRegistrationOwner]
+        elif self.action in ['approve', 'reject', 'waitlist', 'request_reupload']:
+            permission_classes = [IsAuthenticated, CanManageRegistration]
+        else:
+            permission_classes = [IsAuthenticated]
+        
+        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        """Filter queryset based on user role and permissions"""
+        user = self.request.user
         
-        # Filter by event if specified
-        event_id = self.request.query_params.get('event')
-        if event_id:
-            queryset = queryset.filter(event_id=event_id)
+        if self.action == 'mine':
+            # Return only user's own registrations
+            return Registration.objects.filter(user=user)
+        elif user.role == 'ADMIN':
+            # Admin can see all registrations
+            return Registration.objects.all()
+        elif user.role == 'ORGANIZER':
+            # Organizer can see registrations for their events
+            return Registration.objects.filter(event__created_by=user)
+        else:
+            # Regular users can only see their own registrations
+            return Registration.objects.filter(user=user)
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new registration"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        registration = serializer.save()
         
-        # Organizers can see registrations for their events
-        if self.request.user.is_authenticated and self.request.user.role == 'ORGANIZER':
-            if self.action in ['list', 'retrieve']:
-                queryset = queryset.filter(event__created_by=self.request.user)
+        # Send confirmation notification
+        send_registration_confirmation(registration)
+        send_organizer_notification(registration, 'created')
         
-        # Users can see their own registrations
-        if self.action in ['list', 'retrieve'] and self.request.user.is_authenticated:
-            if self.request.user.role not in ['ORGANIZER', 'ADMIN']:
-                queryset = queryset.filter(user=self.request.user)
+        return Response(
+            RegistrationDetailSerializer(registration).data,
+            status=status.HTTP_201_CREATED
+        )
+    
+    @action(detail=False, methods=['get'])
+    def mine(self, request):
+        """Get current user's registrations"""
+        registrations = self.get_queryset()
+        page = self.paginate_queryset(registrations)
         
-        return queryset
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    @action(detail=True, methods=['post'], permission_classes=[IsOrganizerOrAdmin])
+        if page is not None:
+            serializer = RegistrationListSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = RegistrationListSerializer(registrations, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['patch'])
+    def withdraw(self, request, pk=None):
+        """Withdraw a registration"""
+        registration = self.get_object()
+        serializer = RegistrationWithdrawSerializer(
+            data=request.data,
+            context={'registration': registration}
+        )
+        serializer.is_valid(raise_exception=True)
+        
+        old_status = registration.status
+        registration.status = 'withdrawn'
+        registration.reason = serializer.validated_data.get('reason', '')
+        registration.decided_at = timezone.now()
+        registration.decided_by = request.user
+        registration.save()
+        
+        # Send notifications
+        send_status_update(registration, old_status, 'withdrawn')
+        send_organizer_notification(registration, 'withdrawn')
+        
+        return Response(RegistrationDetailSerializer(registration).data)
+    
+    @action(detail=True, methods=['patch'])
     def approve(self, request, pk=None):
         """Approve a registration"""
         registration = self.get_object()
+        serializer = RegistrationStatusActionSerializer(
+            data=request.data,
+            context={'registration': registration, 'action': 'approve'}
+        )
+        serializer.is_valid(raise_exception=True)
         
-        if registration.approve(request.user):
-            return Response({
-                'detail': 'Registration approved successfully',
-                'status': registration.status
-            })
-        else:
-            return Response({
-                'detail': 'Registration cannot be approved. Check requirements.',
-                'required_documents_complete': registration.required_documents_complete,
-                'is_paid': registration.is_paid
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=['post'], permission_classes=[IsOrganizerOrAdmin])
+        old_status = registration.status
+        registration.status = 'confirmed'
+        registration.decided_at = timezone.now()
+        registration.decided_by = request.user
+        registration.reason = serializer.validated_data.get('reason', '')
+        registration.save()
+        
+        # Send notifications
+        send_status_update(registration, old_status, 'confirmed')
+        
+        return Response(RegistrationDetailSerializer(registration).data)
+    
+    @action(detail=True, methods=['patch'])
     def reject(self, request, pk=None):
         """Reject a registration"""
         registration = self.get_object()
-        reason = request.data.get('reason', '')
+        serializer = RegistrationStatusActionSerializer(
+            data=request.data,
+            context={'registration': registration, 'action': 'reject'}
+        )
+        serializer.is_valid(raise_exception=True)
         
-        registration.reject(request.user, reason)
-        return Response({
-            'detail': 'Registration rejected',
-            'status': registration.status,
-            'reason': reason
-        })
-
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
-    def withdraw(self, request, pk=None):
-        """Withdraw a registration (participant only)"""
+        old_status = registration.status
+        registration.status = 'rejected'
+        registration.decided_at = timezone.now()
+        registration.decided_by = request.user
+        registration.reason = serializer.validated_data.get('reason', '')
+        registration.save()
+        
+        # Send notifications
+        send_status_update(registration, old_status, 'rejected')
+        
+        return Response(RegistrationDetailSerializer(registration).data)
+    
+    @action(detail=True, methods=['patch'])
+    def waitlist(self, request, pk=None):
+        """Waitlist a registration"""
         registration = self.get_object()
+        serializer = RegistrationStatusActionSerializer(
+            data=request.data,
+            context={'registration': registration, 'action': 'waitlist'}
+        )
+        serializer.is_valid(raise_exception=True)
         
-        # Only the participant can withdraw their own registration
-        if registration.user != request.user:
+        old_status = registration.status
+        registration.status = 'waitlisted'
+        registration.decided_at = timezone.now()
+        registration.decided_by = request.user
+        registration.reason = serializer.validated_data.get('reason', '')
+        registration.save()
+        
+        # Send notifications
+        send_status_update(registration, old_status, 'waitlisted')
+        
+        return Response(RegistrationDetailSerializer(registration).data)
+    
+    @action(detail=True, methods=['patch'])
+    def request_reupload(self, request, pk=None):
+        """Request document reupload"""
+        registration = self.get_object()
+        serializer = RegistrationStatusActionSerializer(
+            data=request.data,
+            context={'registration': registration, 'action': 'request_reupload'}
+        )
+        serializer.is_valid(raise_exception=True)
+        
+        # Add note to registration
+        registration.reason = serializer.validated_data.get('reason', '')
+        registration.save()
+        
+        # Send notification
+        send_organizer_notification(registration, 'reupload_requested')
+        
+        return Response(RegistrationDetailSerializer(registration).data)
+    
+    @action(detail=True, methods=['post'])
+    def pay_intent(self, request, pk=None):
+        """Create payment intent for registration"""
+        registration = self.get_object()
+        serializer = PaymentIntentSerializer(
+            data=request.data,
+            context={'registration': registration}
+        )
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            payment_data = create_payment_intent(registration)
+            return Response(payment_data)
+        except Exception as e:
             return Response(
-                {'detail': 'You can only withdraw your own registrations'}, 
-                status=status.HTTP_403_FORBIDDEN
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=True, methods=['post'])
+    def pay_confirm(self, request, pk=None):
+        """Confirm payment for registration"""
+        registration = self.get_object()
+        serializer = PaymentConfirmSerializer(
+            data=request.data,
+            context={'registration': registration}
+        )
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            payment_data = confirm_payment(
+                registration,
+                serializer.validated_data['client_secret']
+            )
+            
+            # Send payment confirmation
+            send_payment_confirmation(registration)
+            
+            return Response(payment_data)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=True, methods=['get'])
+    def payment_status(self, request, pk=None):
+        """Get payment status for registration"""
+        registration = self.get_object()
+        payment_data = get_payment_status(registration)
+        return Response(payment_data)
+
+
+class RegistrationDocumentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for registration document management
+    """
+    queryset = RegistrationDocument.objects.all()
+    permission_classes = [IsAuthenticated, IsRegistrationOwnerOrEventOrganizerOrAdmin]
+    serializer_class = RegistrationDocumentSerializer
+    
+    def get_queryset(self):
+        """Filter documents by registration"""
+        registration_id = self.kwargs.get('registration_pk')
+        if registration_id:
+            return RegistrationDocument.objects.filter(registration_id=registration_id)
+        return RegistrationDocument.objects.none()
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action"""
+        if self.action == 'create':
+            return RegistrationDocumentUploadSerializer
+        return RegistrationDocumentSerializer
+    
+    def create(self, request, *args, **kwargs):
+        """Upload a document for registration"""
+        registration_id = self.kwargs.get('registration_pk')
+        try:
+            registration = Registration.objects.get(id=registration_id)
+        except Registration.DoesNotExist:
+            return Response(
+                {'error': 'Registration not found'},
+                status=status.HTTP_404_NOT_FOUND
             )
         
-        if registration.withdraw():
-            return Response({
-                'detail': 'Registration withdrawn successfully',
-                'status': registration.status
-            })
-        else:
-            return Response({
-                'detail': 'Registration cannot be withdrawn in current status'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
-    def my_registrations(self, request):
-        """Get current user's registrations"""
-        registrations = self.get_queryset().filter(user=request.user)
-        serializer = RegistrationListSerializer(registrations, many=True)
-        return Response(serializer.data)
-
-    # Document functionality temporarily commented out for migration
-    # @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
-    # def upload_document(self, request, pk=None):
-    #     """Upload a document for this registration"""
-    #     registration = self.get_object()
-    #     
-    #     # Only the participant can upload documents for their registration
-    #     if registration.user != request.user:
-    #         return Response(
-    #             {'detail': 'You can only upload documents for your own registrations'}, 
-    #             status=status.HTTP_403_FORBIDDEN
-    #         )
-    #     
-    #     serializer = DocumentUploadSerializer(data=request.data)
-    #     if serializer.is_valid():
-    #         serializer.save(registration=registration)
-    #         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-# Document functionality temporarily commented out for migration
-# class DocumentViewSet(viewsets.ReadOnlyModelViewSet):
-#     """ViewSet for document management"""
-#     queryset = Document.objects.select_related('registration__user', 'registration__event').all()
-#     serializer_class = DocumentSerializer
-#     permission_classes = [permissions.IsAuthenticated]
-#     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-#     filterset_fields = ['document_type', 'status', 'registration']
-#     ordering = ['-uploaded_at']
-
-#     def get_queryset(self):
-#         queryset = super().get_queryset()
+        serializer = self.get_serializer(
+            data=request.data,
+            context={'registration': registration}
+        )
+        serializer.is_valid(raise_exception=True)
+        document = serializer.save()
         
-#         # Users can only see their own documents
-#         if self.request.user.role not in ['ORGANIZER', 'ADMIN']:
-#             queryset = queryset.filter(registration__user=self.request.user)
-#         # Organizers can see documents for their events
-#         elif self.request.user.role == 'ORGANIZER':
-#             queryset = queryset.filter(registration__event__created_by=self.request.user)
-        
-#         return queryset
-
-#     @action(detail=True, methods=['get'])
-#     def download(self, request, pk=None):
-#         """Secure document download"""
-#         document = self.get_object()
-        
-#         # Check permissions
-#         if (document.registration.user != request.user and 
-#             request.user.role not in ['ORGANIZER', 'ADMIN'] and
-#             (request.user.role == 'ORGANIZER' and document.registration.event.created_by != request.user)):
-#             return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-        
-#         try:
-#             response = HttpResponse(document.file.read(), content_type=document.content_type)
-#             response['Content-Disposition'] = f'attachment; filename="{document.original_filename}"'
-#             return response
-#         except FileNotFoundError:
-#             raise Http404("Document file not found")
-
-#     @action(detail=True, methods=['post'], permission_classes=[IsOrganizerOrAdmin])
-#     def approve_document(self, request, pk=None):
-#         """Approve a document"""
-#         document = self.get_object()
-#         notes = request.data.get('notes', '')
-        
-#         document.status = Document.Status.APPROVED
-#         document.reviewed_by = request.user
-#         document.reviewed_at = timezone.now()
-#         document.review_notes = notes
-#         document.save()
-        
-#         return Response({
-#             'detail': 'Document approved',
-#             'status': document.status
-#         })
-
-#     @action(detail=True, methods=['post'], permission_classes=[IsOrganizerOrAdmin])
-#     def reject_document(self, request, pk=None):
-#         """Reject a document"""
-#         document = self.get_object()
-#         notes = request.data.get('notes', '')
-        
-#         document.status = Document.Status.REJECTED
-#         document.reviewed_by = request.user
-#         document.reviewed_at = timezone.now()
-#         document.review_notes = notes
-#         document.save()
-        
-#         return Response({
-#             'detail': 'Document rejected',
-#             'status': document.status,
-#             'notes': notes
-#         })
-
-# Secure document download view (using access token) - temporarily commented out
-def secure_document_download(request, token):
-    """Download document using secure access token - temporarily disabled"""
-    return HttpResponse("Document functionality temporarily disabled", status=503)
+        return Response(
+            RegistrationDocumentSerializer(document).data,
+            status=status.HTTP_201_CREATED
+        )

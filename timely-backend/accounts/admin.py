@@ -47,10 +47,10 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('date_joined', 'last_login', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
-        ('Audit', {
-            'fields': ('created_by', 'updated_by'),
-            'classes': ('collapse',)
-        }),
+        # ('Audit', {
+        #     'fields': ('created_by', 'updated_by'),
+        #     'classes': ('collapse',)
+        # }),
         ('Stripe', {
             'fields': ('stripe_customer_id',),
             'classes': ('collapse',)
@@ -90,7 +90,7 @@ class UserRoleAdmin(admin.ModelAdmin):
     """Admin configuration for UserRole model"""
     list_display = [
         'user_email', 'role_type', 'is_primary', 'context_info',
-        'assigned_by', 'assigned_at', 'is_active', 'expires_info'
+        'assigned_at', 'is_active', 'expires_info'
     ]
     list_filter = [
         'role_type', 'is_primary', 'is_active', 'context_type',

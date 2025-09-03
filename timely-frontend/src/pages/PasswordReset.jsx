@@ -17,7 +17,7 @@ export default function PasswordReset() {
     setMessage('');
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/accounts/password/reset/request/', {
+      const response = await fetch('http://127.0.0.1:8000/api/accounts/password/forgot/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -44,7 +44,7 @@ export default function PasswordReset() {
     setMessage('');
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/accounts/password/reset/confirm/', {
+      const response = await fetch('http://127.0.0.1:8000/api/accounts/auth/password/reset/confirm/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password: newPassword }),

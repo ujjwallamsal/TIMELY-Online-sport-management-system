@@ -1,397 +1,259 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { getEvents, getVenues, getDivisions } from '../lib/api';
+import { PlusIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../context/AuthContext';
+import { listEvents } from '../lib/api';
+import EventCard from '../components/EventCard';
+import EventFilters from '../components/EventFilters';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
-export default function EventsList() {
+const EventsList = () => {
+  const { user } = useAuth();
   const [events, setEvents] = useState([]);
-  const [venues, setVenues] = useState([]);
-  const [divisions, setDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSport, setSelectedSport] = useState('');
-  const [selectedVenue, setSelectedVenue] = useState('');
-  const [selectedDivision, setSelectedDivision] = useState('');
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [priceRange, setPriceRange] = useState({ min: '', max: '' });
-  const [showRegistrationOpen, setShowRegistrationOpen] = useState(false);
-  const [stats, setStats] = useState({ total: 0, upcoming: 0, ongoing: 0 });
+  const [error, setError] = useState(null);
+  const [filters, setFilters] = useState({});
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 12,
+    total: 0,
+    totalPages: 0
+  });
 
-  useEffect(() => {
-    loadData();
-  }, [currentPage, searchTerm, selectedSport, selectedVenue, selectedDivision, dateRange, priceRange, showRegistrationOpen]);
+  // Available sports for filter dropdown
+  const [sports, setSports] = useState([]);
 
-  async function loadData(isBackground = false) {
+  const fetchEvents = useCallback(async (page = 1, currentFilters = {}) => {
     try {
-      if (!isBackground) {
-        setLoading(true);
-        setError(null);
-      }
-
-      const filters = {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
-        min_fee: priceRange.min,
-        max_fee: priceRange.max,
-        registration_open: showRegistrationOpen
+      setLoading(true);
+      setError(null);
+      
+      const params = {
+        page,
+        page_size: pagination.pageSize,
+        ...currentFilters
       };
 
-      const [eventsData, venuesData, divisionsData] = await Promise.all([
-        getEvents(currentPage, searchTerm, selectedSport, selectedVenue, filters),
-        getVenues(),
-        getDivisions()
-      ]);
-
-      setEvents(eventsData?.results || []);
-      setVenues(venuesData?.results || venuesData || []);
-      setDivisions(divisionsData?.results || divisionsData || []);
-
-      // Calculate stats based on fetched data
-      const allEvents = eventsData.results || [];
-      setStats({
-        total: allEvents.length,
-        upcoming: allEvents.filter(e => e.status === 'UPCOMING').length,
-        ongoing: allEvents.filter(e => e.status === 'ONGOING').length
+      const response = await listEvents(params);
+      const data = response.data;
+      
+      setEvents(data.results || []);
+      setPagination({
+        page: data.page || 1,
+        pageSize: data.page_size || 12,
+        total: data.count || 0,
+        totalPages: Math.ceil((data.count || 0) / (data.page_size || 12))
       });
-    } catch (err) {
-      if (!isBackground) {
-        setError("Failed to load events. Please try again.");
+
+      // Extract unique sports for filter dropdown
+      if (data.results) {
+        const uniqueSports = [...new Set(data.results.map(event => event.sport))];
+        setSports(uniqueSports.sort());
       }
-      console.error("Error loading data:", err);
+    } catch (err) {
+      console.error('Error fetching events:', err);
+      setError('Failed to load events. Please try again.');
     } finally {
-      if (!isBackground) setLoading(false);
+      setLoading(false);
     }
+  }, [pagination.pageSize]);
+
+  useEffect(() => {
+    fetchEvents(1, filters);
+  }, [fetchEvents, filters]);
+
+  const handleFiltersChange = (newFilters) => {
+    setFilters(newFilters);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const handlePageChange = (newPage) => {
+    fetchEvents(newPage, filters);
+  };
+
+  const canCreateEvents = user && ['ORGANIZER', 'ADMIN'].includes(user.role);
+
+  if (loading && events.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-center items-center h-64">
+            <LoadingSpinner size="lg" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setCurrentPage(1);
-    loadData();
-  };
-
-  const clearFilters = () => {
-    setSearchTerm('');
-    setSelectedSport('');
-    setSelectedVenue('');
-    setSelectedDivision('');
-    setDateRange({ start: '', end: '' });
-    setPriceRange({ min: '', max: '' });
-    setShowRegistrationOpen(false);
-    setCurrentPage(1);
-  };
-
-  const getStatusClass = (status) => {
-    const statusClasses = {
-      'DRAFT': 'bg-gray-100 text-gray-800',
-      'PUBLISHED': 'bg-blue-100 text-blue-800',
-      'UPCOMING': 'bg-green-100 text-green-800',
-      'ONGOING': 'bg-yellow-100 text-yellow-800',
-      'COMPLETED': 'bg-purple-100 text-purple-800',
-      'CANCELLED': 'bg-red-100 text-red-800'
-    };
-    return statusClasses[status] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getSportEmoji = (sport) => {
-    const sportEmojis = {
-      'Soccer': '⚽',
-      'Football': '🏈',
-      'Basketball': '🏀',
-      'Tennis': '🎾',
-      'Swimming': '🏊',
-      'Athletics': '🏃',
-      'Cricket': '🏏',
-      'Baseball': '⚾',
-      'Volleyball': '🏐',
-      'Hockey': '🏒'
-    };
-    return sportEmojis[sport] || '⚽';
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'TBD';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        year: 'numeric'
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
-  const formatPrice = (feeCents) => {
-    if (!feeCents || feeCents === 0) return 'Free';
-    return `$${(feeCents / 100).toFixed(2)}`;
-  };
-
   return (
-    <div className="page-wrap">
-      {/* Hero Section */}
-      <div className="hero mb-8">
-        <div className="hero-content">
-          <h1 className="text-white">Sports Events</h1>
-          <p className="text-white/90">Discover and join exciting sports competitions</p>
-        </div>
-      </div>
-
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">🎯</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.total}</div>
-            <div className="text-gray-600">Total Events</div>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Events</h1>
+            <p className="mt-2 text-gray-600">
+              Discover and participate in sports events
+            </p>
           </div>
-        </div>
-        
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">🚀</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.upcoming}</div>
-            <div className="text-gray-600">Upcoming</div>
-          </div>
-        </div>
-        
-        <div className="card">
-          <div className="card-body text-center">
-            <div className="text-3xl mb-2">⚡</div>
-            <div className="text-2xl font-bold text-gray-800">{stats.ongoing}</div>
-            <div className="text-gray-600">Live Now</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="card mb-6">
-        <div className="card-body">
-          <form onSubmit={handleSearch} className="space-y-4">
-            {/* Search Bar */}
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search events by name, sport, or description..."
-                className="form-input flex-1"
-              />
-              <button type="submit" className="btn btn-primary">
-                Search
-              </button>
+          
+          {canCreateEvents && (
+            <div className="mt-4 sm:mt-0">
+              <Link
+                to="/events/create"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+              >
+                <PlusIcon className="h-4 w-4 mr-2" />
+                Create Event
+              </Link>
             </div>
+          )}
+        </div>
 
-            {/* Filter Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <select
-                value={selectedSport}
-                onChange={(e) => setSelectedSport(e.target.value)}
-                className="form-input"
-              >
-                <option value="">All Sports</option>
-                {Array.from(new Set(events.map(e => e.sport_type))).map(sport => (
-                  <option key={sport} value={sport}>{sport}</option>
-                ))}
-              </select>
+        {/* Filters */}
+        <EventFilters
+          onFiltersChange={handleFiltersChange}
+          sports={sports}
+        />
 
-              <select
-                value={selectedVenue}
-                onChange={(e) => setSelectedVenue(e.target.value)}
-                className="form-input"
-              >
-                <option value="">All Venues</option>
-                {venues && venues.length > 0 && venues.map(venue => (
-                  <option key={venue.id} value={venue.id}>{venue.name}</option>
-                ))}
-              </select>
-
-              <select
-                value={selectedDivision}
-                onChange={(e) => setSelectedDivision(e.target.value)}
-                className="form-input"
-              >
-                <option value="">All Divisions</option>
-                {divisions && divisions.length > 0 && divisions.map(division => (
-                  <option key={division.id} value={division.id}>{division.name}</option>
-                ))}
-              </select>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="registration-open"
-                  checked={showRegistrationOpen}
-                  onChange={(e) => setShowRegistrationOpen(e.target.checked)}
-                  className="form-checkbox"
-                />
-                <label htmlFor="registration-open" className="text-sm">Registration Open</label>
+        {/* Error state */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+            <div className="flex">
+              <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <p className="mt-1 text-sm text-red-700">{error}</p>
               </div>
             </div>
-
-            {/* Advanced Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <input
-                type="date"
-                value={dateRange.start}
-                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                placeholder="Start Date"
-                className="form-input"
-              />
-              
-              <input
-                type="date"
-                value={dateRange.end}
-                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                placeholder="End Date"
-                className="form-input"
-              />
-              
-              <input
-                type="number"
-                value={priceRange.min}
-                onChange={(e) => setPriceRange(prev => ({ ...prev, min: e.target.value }))}
-                placeholder="Min Price ($)"
-                className="form-input"
-                min="0"
-                step="0.01"
-              />
-              
-              <input
-                type="number"
-                value={priceRange.max}
-                onChange={(e) => setPriceRange(prev => ({ ...prev, max: e.target.value }))}
-                placeholder="Max Price ($)"
-                className="form-input"
-                min="0"
-                step="0.01"
-              />
-            </div>
-
-            {/* Filter Actions */}
-            <div className="flex justify-between items-center">
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="btn btn-secondary"
-              >
-                Clear Filters
-              </button>
-              
-              <div className="text-sm text-gray-600">
-                {events.length} events found
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      {/* Events Grid */}
-      {loading ? (
-        <div className="card">
-          <div className="card-body text-center py-8">
-            <div className="loading-spinner"></div>
-            <p className="mt-3">Loading events...</p>
           </div>
-        </div>
-      ) : error ? (
-        <div className="error-message"><p>{error}</p></div>
-      ) : events.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">🎯</div>
-          <h3 className="empty-state-title">No events found</h3>
-          <p className="empty-state-description">Try adjusting your search criteria or check back later.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {events.map(event => (
-            <div key={event.id} className="event-card">
-              <div className="event-card-header">
-                <div className="event-sport-icon">
-                  {getSportEmoji(event.sport_type)}
-                </div>
-                <div className="event-status">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(event.status)}`}>
-                    {event.status}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="event-card-body">
-                <h3 className="event-title">{event.name}</h3>
-                <p className="event-sport">{event.sport_type}</p>
-                
-                <div className="event-details">
-                  <div className="event-detail">
-                    <span className="event-detail-label">📅 Dates:</span>
-                    <span>{formatDate(event.start_date)} - {formatDate(event.end_date)}</span>
-                  </div>
-                  
-                  <div className="event-detail">
-                    <span className="event-detail-label">🏟️ Venue:</span>
-                    <span>{event.venue_name}</span>
-                  </div>
-                  
-                  <div className="event-detail">
-                    <span className="event-detail-label">👥 Capacity:</span>
-                    <span>{event.capacity} participants</span>
-                  </div>
-                  
-                  <div className="event-detail">
-                    <span className="event-detail-label">💰 Fee:</span>
-                    <span>{formatPrice(event.fee_cents)}</span>
-                  </div>
-                  
-                  {event.days_until_start > 0 && (
-                    <div className="event-detail">
-                      <span className="event-detail-label">⏰ Starts in:</span>
-                      <span>{event.days_until_start} days</span>
-                    </div>
-                  )}
+        )}
+
+        {/* Events grid */}
+        {events.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {events.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-lg">
+                <div className="flex flex-1 justify-between sm:hidden">
+                  <button
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page === 1}
+                    className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page === pagination.totalPages}
+                    className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
                 </div>
                 
-                {event.is_registration_open && (
-                  <div className="event-registration-open">
-                    <span className="text-green-600 text-sm font-medium">✅ Registration Open</span>
+                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      Showing{' '}
+                      <span className="font-medium">
+                        {(pagination.page - 1) * pagination.pageSize + 1}
+                      </span>{' '}
+                      to{' '}
+                      <span className="font-medium">
+                        {Math.min(pagination.page * pagination.pageSize, pagination.total)}
+                      </span>{' '}
+                      of{' '}
+                      <span className="font-medium">{pagination.total}</span>{' '}
+                      results
+                    </p>
                   </div>
-                )}
+                  
+                  <div>
+                    <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                      <button
+                        onClick={() => handlePageChange(pagination.page - 1)}
+                        disabled={pagination.page === 1}
+                        className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      
+                      {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                        const pageNum = Math.max(1, pagination.page - 2) + i;
+                        if (pageNum > pagination.totalPages) return null;
+                        
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => handlePageChange(pageNum)}
+                            className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
+                              pageNum === pagination.page
+                                ? 'z-10 bg-blue-600 text-white focus:z-20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
+                                : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                      
+                      <button
+                        onClick={() => handlePageChange(pagination.page + 1)}
+                        disabled={pagination.page === pagination.totalPages}
+                        className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </nav>
+                  </div>
+                </div>
               </div>
-              
-              <div className="event-card-footer">
-                <Link to={`/events/${event.id}`} className="btn btn-primary w-full">
-                  View Details
+            )}
+          </>
+        ) : (
+          /* Empty state */
+          <div className="text-center py-12">
+            <div className="mx-auto h-24 w-24 text-gray-400">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-full h-full">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h3 className="mt-4 text-lg font-medium text-gray-900">No events found</h3>
+            <p className="mt-2 text-gray-500">
+              {Object.values(filters).some(value => value !== '')
+                ? 'Try adjusting your filters to see more events.'
+                : 'No events are available at the moment.'}
+            </p>
+            {canCreateEvents && (
+              <div className="mt-6">
+                <Link
+                  to="/events/create"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                >
+                  <PlusIcon className="h-4 w-4 mr-2" />
+                  Create the first event
                 </Link>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {events.length > 0 && (
-        <div className="flex justify-center mt-8">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="btn btn-secondary"
-            >
-              Previous
-            </button>
-            <span className="px-4 py-2 text-gray-600">Page {currentPage}</span>
-            <button
-              onClick={() => setCurrentPage(p => p + 1)}
-              disabled={events.length < 12}
-              className="btn btn-secondary"
-            >
-              Next
-            </button>
+            )}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Loading overlay for pagination */}
+        {loading && events.length > 0 && (
+          <div className="fixed inset-0 bg-black bg-opacity-25 flex items-center justify-center z-50">
+            <LoadingSpinner size="lg" />
+          </div>
+        )}
+      </div>
     </div>
   );
-}
+};
 
-
+export default EventsList;

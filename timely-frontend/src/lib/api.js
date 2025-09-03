@@ -1,445 +1,309 @@
-// API configuration
-const HOST = '127.0.0.1';
-const API_BASE = (import.meta.env.VITE_API_BASE || `http://${HOST}:8000`) + '/api';
-
 import axios from 'axios';
 
-export const api = axios.create({
-  baseURL: API_BASE,
-  withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-// Add an interceptor to include CSRF token for non-GET requests
-api.interceptors.request.use(config => {
-  // Get CSRF token from cookies if available
-  const csrfToken = document.cookie
-    .split('; ')
-    .find(row => row.startsWith('csrftoken='))
-    ?.split('=')[1];
-
-  if (csrfToken && config.method !== 'get') {
-    config.headers['X-CSRFToken'] = csrfToken;
-  }
-  return config;
-}, error => {
-  return Promise.reject(error);
-});
-
-// Cookie-based authentication doesn't need manual token refresh
-// The backend handles JWT refresh automatically via cookies
-
-// Helper functions for cookie-based authentication (no longer directly used for CSRF in api instance)
-function getHeaders(includeAuth = true) {
-  const headers = {
+// Create axios instance with base configuration
+const api = axios.create({
+  baseURL: 'http://127.0.0.1:8000/api',
+  withCredentials: true,  // Enable cookies for JWT authentication
+  headers: {
     'Content-Type': 'application/json',
-  };
-  
-  // Get CSRF token from cookies if available
-  const csrfToken = document.cookie
-    .split('; ')
-    .find(row => row.startsWith('csrftoken='))
-    ?.split('=')[1];
-  
-  if (csrfToken) {
-    headers['X-CSRFToken'] = csrfToken;
-  }
-  
-  return headers;
-}
+  },
+});
 
-async function makeApiCall(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
-  const config = {
-    headers: getHeaders(),
-    credentials: 'include',
-    ...options,
-  };
-  try {
-    const method = (config.method || 'GET').toUpperCase();
-    const axiosConfig = { url, method, withCredentials: true, headers: config.headers };
-    if (config.body) {
-      if (config.headers && config.headers['Content-Type'] === 'application/json') {
-        axiosConfig.data = JSON.parse(config.body);
-      } else {
-        axiosConfig.data = config.body;
+// Request interceptor to normalize URLs (cookies are handled automatically)
+api.interceptors.request.use((config) => {
+  // Normalize URL to prevent double /api/
+  if (config.url) {
+    config.url = config.url.replace(/^\/+/, '').replace(/^api\//, '');
+  }
+
+  // Log final URL for debugging
+  const finalUrl = api.defaults.baseURL + '/' + config.url;
+  console.log('API →', config.method?.toUpperCase(), finalUrl);
+
+  return config;
+});
+
+// Response interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      // Don't try to refresh token for /accounts/users/me/ endpoint
+      // as it's used for auth status checking
+      if (error.config?.url?.includes('/accounts/users/me/')) {
+        return Promise.reject(error);
       }
+      
+      // For now, don't automatically redirect to login to prevent refresh loops
+      // Let individual components handle 401 errors as needed
+      console.log('401 error on:', error.config?.url);
     }
-    const resp = await api.request(axiosConfig);
-    return resp.data;
-  } catch (error) {
-    if (error.response) {
-      const { status, data } = error.response;
-      if (status === 401) {
-        throw new Error('Authentication failed');
-      }
-      throw new Error(data?.detail || `HTTP ${status}`);
-    }
-    console.error('API call failed:', error);
-    throw error;
+    return Promise.reject(error);
   }
-}
+);
 
-async function postApi(endpoint, data, isMultipart = false) {
-  const options = {
-    method: 'POST',
-    credentials: 'include',
-    body: isMultipart ? data : JSON.stringify(data),
-  };
-  
-  if (!isMultipart) {
-    options.headers = getHeaders();
-  } else {
-    // For multipart, don't set Content-Type header
-    const headers = getHeaders();
-    delete headers['Content-Type'];
-    options.headers = headers;
-  }
-  
-  return makeApiCall(endpoint, options);
-}
+// ===== AUTHENTICATION =====
+export const login = (credentials) => api.post('accounts/auth/login/', credentials);
+export const register = (userData) => api.post('accounts/auth/register/', userData);
+export const refreshToken = () => api.post('accounts/auth/refresh/');
+export const logout = () => api.post('accounts/auth/logout/');
+export const getCurrentUser = () => api.get('accounts/users/me/');
+export const updateProfile = (userData) => api.patch('accounts/users/me/', userData);
+export const changePassword = (passwordData) => api.post('accounts/auth/change-password/', passwordData);
 
-async function patchApi(endpoint, data) {
-  return makeApiCall(endpoint, {
-    method: 'PATCH',
-    credentials: 'include',
-    body: JSON.stringify(data),
-  });
-}
+// ===== EVENTS =====
+export const listEvents = (params = {}) => 
+  api.get('events/', { params: { page: 1, page_size: 12, ...params } });
+export const getEvents = listEvents; // Alias for listEvents
+export const getEvent = (id) => api.get(`events/${id}/`);
+export const createEvent = (eventData) => api.post('events/', eventData);
+export const updateEvent = (id, eventData) => api.patch(`events/${id}/`, eventData);
+export const deleteEvent = (id) => api.delete(`events/${id}/`);
+export const publishEvent = (id) => api.post(`events/${id}/publish/`);
+export const unpublishEvent = (id) => api.post(`events/${id}/unpublish/`);
+export const cancelEvent = (id, reason = '') => api.post(`events/${id}/cancel/`, { reason });
 
-// Account APIs
-export async function changePassword({ current_password, new_password, new_password_confirm }) {
-  return makeApiCall('/accounts/users/change_password/', {
-    method: 'POST',
-    credentials: 'include',
-    body: JSON.stringify({ current_password, new_password, new_password_confirm }),
-  });
-}
+// ===== PUBLIC EVENTS =====
+export const getPublicEvents = (page = 1, search = '', sport = '', venue = '', filters = {}) => 
+  api.get('main-public/events/', { params: { page, search, sport_type: sport, venue, ...filters } });
 
-// Fallback data for offline development
-function getFallbackData(endpoint) {
-  const fallbackData = {
-    '/public/events/': {
-      count: 3,
-      results: [
-        {
-          id: 1,
-          name: "Summer Football Championship",
-          sport_type: "Football",
-          start_date: "2024-07-15",
-          end_date: "2024-07-20",
-          venue: "Central Stadium",
-          status: "UPCOMING",
-          fee_cents: 5000,
-          capacity: 200,
-          registration_open: "2024-06-01",
-          registration_close: "2024-07-10"
-        },
-        {
-          id: 2,
-          name: "Basketball Tournament",
-          sport_type: "Basketball",
-          start_date: "2024-08-10",
-          end_date: "2024-08-15",
-          venue: "Sports Complex",
-          status: "UPCOMING",
-          fee_cents: 3000,
-          capacity: 150,
-          registration_open: "2024-07-01",
-          registration_close: "2024-08-05"
-        },
-        {
-          id: 3,
-          name: "Swimming Meet",
-          sport_type: "Swimming",
-          start_date: "2024-09-05",
-          end_date: "2024-09-07",
-          venue: "Aquatic Center",
-          status: "UPCOMING",
-          fee_cents: 2500,
-          capacity: 100,
-          registration_open: "2024-08-01",
-          registration_close: "2024-09-01"
-        }
-      ]
-    },
-    '/venues/': [
-      { id: 1, name: "Central Stadium", address: "123 Main St", capacity: 200 },
-      { id: 2, name: "Sports Complex", address: "456 Oak Ave", capacity: 150 },
-      { id: 3, name: "Aquatic Center", address: "789 Pine Rd", capacity: 100 }
-    ],
-    '/divisions/': [
-      { id: 1, name: "U18", description: "Under 18 years", min_age: 0, max_age: 18, gender: "ALL" },
-      { id: 2, name: "U21", description: "Under 21 years", min_age: 0, max_age: 21, gender: "ALL" },
-      { id: 3, name: "Open", description: "Open to all ages", min_age: 0, max_age: 999, gender: "ALL" },
-      { id: 4, name: "Masters", description: "35+ years", min_age: 35, max_age: 999, gender: "ALL" }
-    ]
-  };
-  
-  return fallbackData[endpoint] || { count: 0, results: [] };
-}
+// ===== VENUES =====
+export const listVenues = (params = {}) => 
+  api.get('venues/', { params: { page: 1, page_size: 12, ...params } });
+export const getVenue = (id) => api.get(`venues/${id}/`);
+export const createVenue = (venueData) => api.post('venues/', venueData);
+export const updateVenue = (id, venueData) => api.patch(`venues/${id}/`, venueData);
+export const deleteVenue = (id) => api.delete(`venues/${id}/`);
 
-// Authentication APIs
-export async function login(email, password) {
-  const { data } = await api.post('/accounts/auth/login/', { email, password });
-  return data;
-}
+// ===== VENUE AVAILABILITY =====
+export const getVenueAvailability = (id, params = {}) => 
+  api.get(`venues/${id}/availability/`, { params });
+export const createVenueAvailability = (id, payloadOrArray) => 
+  api.post(`venues/${id}/availability/`, payloadOrArray);
+export const updateVenueAvailability = (id, slotId, payload) => 
+  api.patch(`venues/${id}/availability/${slotId}/`, payload);
+export const deleteVenueAvailability = (id, slotId) => 
+  api.delete(`venues/${id}/availability/${slotId}/`);
+export const blockVenue = (id, payload) => 
+  api.post(`venues/${id}/block/`, payload);
+export const getVenueConflicts = (id, params) => 
+  api.get(`venues/${id}/conflicts/`, { params });
 
-export async function logout() {
-  const { data } = await api.post('/accounts/auth/logout/');
-  return data;
-}
+// ===== DIVISIONS =====
+export const listDivisions = (eventId) => api.get(`events/${eventId}/divisions/`);
+export const getDivision = (eventId, divisionId) => api.get(`events/${eventId}/divisions/${divisionId}/`);
+export const createDivision = (eventId, divisionData) => api.post(`events/${eventId}/divisions/`, divisionData);
+export const updateDivision = (eventId, divisionId, divisionData) => api.patch(`events/${eventId}/divisions/${divisionId}/`, divisionData);
+export const deleteDivision = (eventId, divisionId) => api.delete(`events/${eventId}/divisions/${divisionId}/`);
 
-export async function signup({ email, password, password_confirm, first_name = '', last_name = '', role = 'SPECTATOR' }) {
-  const { data } = await api.post('/accounts/auth/register/', { email, password, password_confirm, first_name, last_name, role });
-  return data;
-}
+// ===== REGISTRATIONS =====
+export const createRegistration = (registrationData) => api.post('registrations/', registrationData);
+export const getMyRegistrations = (params = {}) => api.get('registrations/mine/', { params });
+export const getRegistration = (id) => api.get(`registrations/${id}/`);
+export const withdrawRegistration = (id, reason = '') => api.patch(`registrations/${id}/withdraw/`, { reason });
+export const uploadRegistrationDoc = (id, formData) => api.post(`registrations/${id}/documents/`, formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
+export const getRegistrationDocuments = (id) => api.get(`registrations/${id}/documents/`);
+export const createRegPaymentIntent = (id) => api.post(`registrations/${id}/pay/intent/`);
+export const confirmRegPayment = (id, payload) => api.post(`registrations/${id}/pay/confirm/`, payload);
+export const getRegPaymentStatus = (id) => api.get(`registrations/${id}/payment_status/`);
 
-// User Management APIs
-export async function getMe() {
-  return makeApiCall('/accounts/users/me/');
-}
+// Document management functions
+export const getDocuments = (registrationId) => api.get(`registrations/${registrationId}/documents/`);
+export const approveDocument = (documentId) => api.patch(`documents/${documentId}/approve/`);
+export const rejectDocument = (documentId, reason) => api.patch(`documents/${documentId}/reject/`, { reason });
+export const downloadDocument = (documentId) => api.get(`documents/${documentId}/download/`, { responseType: 'blob' });
 
-export async function updateProfile(data) {
-  return patchApi('/accounts/users/me/', data);
-}
+// Organizer/Admin registration management
+export const listRegistrations = (params = {}) => api.get('registrations/', { params });
+export const getEventRegistrations = (eventId, page = 1, filters = {}) => 
+  api.get(`events/${eventId}/registrations/`, { params: { page, ...filters } });
+export const approveRegistration = (id, reason = '') => api.patch(`registrations/${id}/approve/`, { reason });
+export const rejectRegistration = (id, reason = '') => api.patch(`registrations/${id}/reject/`, { reason });
+export const waitlistRegistration = (id, reason = '') => api.patch(`registrations/${id}/waitlist/`, { reason });
+export const requestReupload = (id, reason = '') => api.patch(`registrations/${id}/request_reupload/`, { reason });
 
-export async function listUsers({ page = 1, search = "", ordering = "-date_joined" } = {}) {
-  const params = new URLSearchParams({ page, search, ordering });
-  return makeApiCall(`/accounts/admin/users/?${params}`);
-}
+// ===== FIXTURES & MATCHES =====
+// Match CRUD operations
+export const getMatches = (page = 1, filters = {}) => 
+  api.get('fixtures/', { params: { page, ...filters } });
+export const getMatch = (id) => api.get(`fixtures/${id}/`);
+export const createMatch = (matchData) => api.post('fixtures/', matchData);
+export const updateMatch = (id, matchData) => api.patch(`fixtures/${id}/`, matchData);
+export const deleteMatch = (id) => api.delete(`fixtures/${id}/`);
 
-export async function updateUserRole(userId, role) {
-  return patchApi(`/accounts/users/${userId}/update_role/`, { role });
-}
+// Event fixtures operations
+export const listEventFixtures = (eventId, params = {}) => 
+  api.get(`fixtures/events/${eventId}/`, { params });
+export const generateFixtures = (eventId, payload) => 
+  api.post(`fixtures/events/${eventId}/generate/`, payload);
+export const publishFixtures = (eventId) => 
+  api.post(`fixtures/events/${eventId}/publish/`);
+export const unpublishFixtures = (eventId) => 
+  api.post(`fixtures/events/${eventId}/unpublish/`);
+export const rescheduleMatch = (matchId, payload) => 
+  api.post(`fixtures/${matchId}/reschedule/`, payload);
+export const getEventFixtureConflicts = (eventId, params) => 
+  api.get(`fixtures/events/${eventId}/conflicts/`, { params });
 
-export async function deleteUser(userId) {
-  return makeApiCall(`/accounts/users/${userId}/delete_user/`, { method: 'DELETE' });
-}
+// Public fixtures
+export const getPublicFixtures = (page = 1, filters = {}) => 
+  api.get('fixtures/public/matches/', { params: { page, ...filters } });
 
-// Event APIs
-export async function getEvents(page = 1, search = "", sport = "", venue = "", filters = {}) {
-  const params = new URLSearchParams({ page, search, sport, venue });
-  
-  // Add filter parameters
-  if (filters.start_date) params.append('start_date', filters.start_date);
-  if (filters.end_date) params.append('end_date', filters.end_date);
-  if (filters.min_fee) params.append('min_fee', filters.min_fee);
-  if (filters.max_fee) params.append('max_fee', filters.max_fee);
-  if (filters.registration_open !== undefined) params.append('registration_open', filters.registration_open);
-  if (filters.status) params.append('status', filters.status);
-  
-  return makeApiCall(`/events/?${params}`);
-}
+// ===== RESULTS =====
+export const getResults = (page = 1, filters = {}) => 
+  api.get('results/', { params: { page, ...filters } });
+export const getResult = (id) => api.get(`results/${id}/`);
+export const createResult = (resultData) => api.post('results/', resultData);
+export const updateResult = (id, resultData) => api.patch(`results/${id}/`, resultData);
+export const deleteResult = (id) => api.delete(`results/${id}/`);
+
+// ===== PUBLIC RESULTS =====
+export const getPublicResults = (page = 1, filters = {}) => 
+  api.get('main-public/results/', { params: { page, ...filters } });
+
+// ===== NEWS & ANNOUNCEMENTS =====
+export const getAnnouncements = (page = 1, filters = {}) => 
+  api.get('content/announcements/', { params: { page, ...filters } });
+export const getAnnouncement = (id) => api.get(`content/announcements/${id}/`);
+export const createAnnouncement = (announcementData) => api.post('content/announcements/', announcementData);
+export const updateAnnouncement = (id, announcementData) => api.patch(`content/announcements/${id}/`, announcementData);
+export const deleteAnnouncement = (id) => api.delete(`content/announcements/${id}/`);
+
+// ===== PUBLIC NEWS =====
+export const getPublicNews = (page = 1, filters = {}) => 
+  api.get('main-public/announcements/', { params: { page, ...filters } });
 
 
 
-// Legacy function for backward compatibility (used in Events.jsx)
-export async function listPublicEvents() {
-  return makeApiCall('/public/events/');
-}
+// ===== TICKETS =====
+export const getTickets = (page = 1, filters = {}) => 
+  api.get('tickets/', { params: { page, ...filters } });
+export const getMyTickets = (page = 1, filters = {}) => 
+  api.get('tickets/my-tickets/', { params: { page, ...filters } });
+export const getTicket = (id) => api.get(`tickets/${id}/`);
+export const createTicket = (ticketData) => api.post('tickets/', ticketData);
+export const updateTicket = (id, ticketData) => api.patch(`tickets/${id}/`, ticketData);
+export const deleteTicket = (id) => api.delete(`tickets/${id}/`);
 
-export async function getDivisions() {
-  return makeApiCall('/divisions/');
-}
+// ===== TICKET TYPES =====
+export const listTicketTypes = (eventId) => api.get(`events/${eventId}/ticket-types/`);
+export const createTicketOrder = (orderData) => api.post('tickets/orders/', orderData);
+export const createStripeCheckout = (orderId) => api.post(`tickets/orders/${orderId}/stripe-checkout/`);
+export const createPayPalCheckout = (orderId) => api.post(`tickets/orders/${orderId}/paypal-checkout/`);
+export const listMyTickets = (page = 1, filters = {}) => api.get('tickets/my-tickets/', { params: { page, ...filters } });
 
-export async function getVenues() {
-  return makeApiCall('/venues/');
-}
+// ===== TEAMS =====
+export const listTeams = (params = {}) => api.get('teams/', { params });
+export const getTeams = listTeams; // Alias for listTeams
+export const getTeam = (id) => api.get(`teams/${id}/`);
+export const createTeam = (teamData) => api.post('teams/', teamData);
+export const updateTeam = (id, teamData) => api.patch(`teams/${id}/`, teamData);
+export const deleteTeam = (id) => api.delete(`teams/${id}/`);
 
-export async function createEvent(eventData) {
-  return postApi('/events/', eventData);
-}
+// ===== TEAM MEMBERS =====
+export const getTeamMembers = (teamId) => api.get(`teams/${teamId}/members/`);
+export const addTeamMember = (teamId, memberData) => api.post(`teams/${teamId}/members/`, memberData);
+export const updateTeamMember = (memberId, memberData) => api.patch(`teams/members/${memberId}/`, memberData);
+export const deleteTeamMember = (memberId) => api.delete(`teams/members/${memberId}/`);
 
-export async function updateEvent(eventId, eventData) {
-  return patchApi(`/events/${eventId}/`, eventData);
-}
+// ===== TEAM EVENT ENTRIES =====
+export const getTeamEntries = (teamId) => api.get(`teams/${teamId}/entries/`);
+export const createTeamEntry = (teamId, entryData) => api.post(`teams/${teamId}/entries/`, entryData);
+export const withdrawTeamEntry = (entryId, note = '') => api.patch(`teams/entries/${entryId}/withdraw/`, { note });
+export const approveTeamEntry = (entryId, note = '') => api.patch(`teams/entries/${entryId}/approve/`, { note });
+export const rejectTeamEntry = (entryId, note = '') => api.patch(`teams/entries/${entryId}/reject/`, { note });
 
-export async function publishEvent(eventId) {
-  return postApi(`/events/${eventId}/publish/`, {});
-}
+// ===== ELIGIBILITY =====
+export const checkTeamEligibility = (teamId, eventId, divisionId = null) => 
+  api.post('teams/eligibility/check/', { team_id: teamId, event_id: eventId, division_id: divisionId });
 
-export async function unpublishEvent(eventId) {
-  return postApi(`/events/${eventId}/unpublish/`, {});
-}
+export const downloadTicket = (ticketId) => api.get(`tickets/${ticketId}/download/`, { responseType: 'blob' });
 
-export async function cancelEvent(eventId) {
-  return postApi(`/events/${eventId}/cancel/`, {});
-}
+// ===== ADMIN & REPORTS =====
+export const getUsers = (page = 1, filters = {}) => 
+  api.get('admin/users/', { params: { page, ...filters } });
+export const getUser = (id) => api.get(`admin/users/${id}/`);
+export const createUser = (userData) => api.post('admin/users/', userData);
+export const updateUser = (id, userData) => api.patch(`admin/users/${id}/`, userData);
+export const deleteUser = (id) => api.delete(`admin/users/${id}/`);
+export const getSystemStats = () => api.get('admin/stats/');
+export const getEventReports = (filters = {}) => api.get('admin/reports/events/', { params: filters });
+export const getUserReports = (filters = {}) => api.get('admin/reports/users/', { params: filters });
 
-export async function getMyEvents() {
-  return makeApiCall('/events/my_events/');
-}
+// ===== PAYMENTS =====
+export const createPaymentIntent = (amount, currency = 'usd') => 
+  api.post('payments/create-intent/', { amount, currency });
+export const confirmPayment = (paymentIntentId) => 
+  api.post('payments/confirm/', { payment_intent_id: paymentIntentId });
+export const getPaymentHistory = (page = 1) => 
+  api.get('payments/history/', { params: { page } });
 
-// Registration APIs
-export async function createRegistration(registrationData) {
-  return postApi('/registrations/', registrationData);
-}
+// ===== NOTIFICATIONS =====
+export const getNotifications = (page = 1) => 
+  api.get('notifications/', { params: { page } });
+export const markNotificationRead = (id) => api.patch(`notifications/${id}/read/`);
+export const markAllNotificationsRead = () => api.post('notifications/mark-all-read/');
 
-export async function getRegistration(registrationId) {
-  return makeApiCall(`/registrations/${registrationId}/`);
-}
-
-export async function updateRegistration(registrationId, data) {
-  return patchApi(`/registrations/${registrationId}/`, data);
-}
-
-export async function withdrawRegistration(registrationId) {
-  return postApi(`/registrations/${registrationId}/withdraw/`, {});
-}
-
-export async function getMyRegistrations() {
-  return makeApiCall('/registrations/my_registrations/');
-}
-
-export async function getEventRegistrations(eventId) {
-  return makeApiCall(`/registrations/?event=${eventId}`);
-}
-
-// Organizer: approve/reject registrations
-export async function approveRegistration(registrationId) {
-  return postApi(`/registrations/${registrationId}/approve/`, {});
-}
-
-export async function rejectRegistration(registrationId, reason = '') {
-  return postApi(`/registrations/${registrationId}/reject/`, { reason });
-}
-
-// Document APIs
-export async function uploadDocument(registrationId, file, documentType, title, description = '') {
+// ===== UPLOADS =====
+export const uploadFile = (file, type = 'document') => {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('document_type', documentType);
-  formData.append('title', title);
-  formData.append('description', description);
-  
-  return postApi(`/registrations/${registrationId}/upload_document/`, formData, true);
-}
-
-export async function getDocuments(registrationId) {
-  return makeApiCall(`/documents/?registration=${registrationId}`);
-}
-
-export async function downloadDocument(documentId) {
-  const response = await fetch(`${API_BASE}/documents/${documentId}/download/`, {
-    method: 'GET',
-    credentials: 'include',
+  formData.append('type', type);
+  return api.post('uploads/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
   });
-  
-  if (!response.ok) {
-    throw new Error('Failed to download document');
-  }
-  
-  return response.blob();
-}
-
-export async function approveDocument(documentId, notes = '') {
-  return postApi(`/documents/${documentId}/approve_document/`, { notes });
-}
-
-export async function rejectDocument(documentId, notes = '') {
-  return postApi(`/documents/${documentId}/reject_document/`, { notes });
-}
-
-// Get single event by ID
-export async function getEvent(id) {
-  try {
-    return await makeApiCall(`/public/events/${id}/`);
-  } catch (error) {
-    // Return fallback event data
-    const fallbackEvents = getFallbackData('/public/events/').results;
-    const event = fallbackEvents.find(e => e.id === parseInt(id));
-    if (event) {
-      return {
-        ...event,
-        venue_detail: { name: event.venue, address: "Address TBD" },
-        eligibility_notes: "Open to all participants. Basic equipment required."
-      };
-    }
-    throw new Error("Event not found");
-  }
-}
-
-// Expose a tiny auth API for UI
-export const auth = {
-  // getAccessToken, // Removed as per new cookie-based auth
-  // setAccessToken, // Removed as per new cookie-based auth
-  // setRefreshToken, // Removed as per new cookie-based auth
 };
 
-// Public data APIs
-export async function getMatches(page = 1) {
-  return makeApiCall(`/public/matches/?page=${page}&page_size=12`);
-}
+// ===== VENUES =====
+export const getVenues = (params = {}) =>
+  api.get('venues/', { params });
 
-export async function getResults(page = 1) {
-  return makeApiCall(`/public/results/?page=${page}&page_size=12`);
-}
+export const addVenueSlots = (venueId, slotsData) =>
+  api.post(`venues/${venueId}/slots/`, { slots: slotsData });
 
-export async function getNews(page = 1) {
-  return makeApiCall(`/public/news/?page=${page}&page_size=12`);
-}
+export const checkVenueConflicts = (conflictData) =>
+  api.post('venues/check-conflicts/', conflictData);
 
-// Ticketing APIs
-export async function listTicketTypes(eventId = null) {
-  const params = eventId ? `?event=${eventId}` : '';
-  return makeApiCall(`/ticket-types/${params}`);
-}
+export const getVenueSlots = (params = {}) =>
+  api.get('slots/', { params });
 
-export async function createTicketOrder(orderData) {
-  return postApi('/ticket-orders/', orderData);
-}
+export const getVenueSlot = (slotId) =>
+  api.get(`slots/${slotId}/`);
 
-export async function createStripeCheckout(orderId, successUrl, cancelUrl) {
-  return postApi(`/ticket-orders/${orderId}/stripe_checkout/`, {
-    order_id: orderId,
-    success_url: successUrl,
-    cancel_url: cancelUrl
-  });
-}
+export const updateVenueSlot = (slotId, slotData) =>
+  api.patch(`slots/${slotId}/`, slotData);
 
-export async function createPayPalCheckout(orderId, returnUrl, cancelUrl) {
-  return postApi(`/ticket-orders/${orderId}/paypal_checkout/`, {
-    order_id: orderId,
-    return_url: returnUrl,
-    cancel_url: cancelUrl
-  });
-}
+export const deleteVenueSlot = (slotId) =>
+  api.delete(`slots/${slotId}/`);
 
-export async function listMyTickets() {
-  return makeApiCall('/tickets/');
-}
+// ===== FIXTURES =====
+export const getFixtures = (params = {}) => 
+  api.get('fixtures/', { params });
+export const getFixture = (id) => api.get(`fixtures/${id}/`);
+export const createFixture = (fixtureData) => api.post('fixtures/', fixtureData);
+export const updateFixture = (id, fixtureData) => api.patch(`fixtures/${id}/`, fixtureData);
+export const deleteFixture = (id) => api.delete(`fixtures/${id}/`);
 
-export async function downloadTicket(ticketId) {
-  return makeApiCall(`/tickets/${ticketId}/download/`);
-}
+// Fixture generation and management
+export const acceptFixtures = (data) => api.post('fixtures/accept/', data);
+export const publishFixture = (id) => api.post(`fixtures/${id}/publish/`);
+export const rescheduleFixture = (id, data) => api.post(`fixtures/${id}/reschedule/`, data);
+export const swapFixtureEntries = (id, data) => api.post(`fixtures/${id}/swap-entries/`, data);
+export const getFixtureConflicts = (id) => api.get(`fixtures/${id}/conflicts/`);
 
-// Fixture APIs
-export async function createFixture(fixtureData) {
-  return postApi('/fixtures/', fixtureData);
-}
+// Event-specific fixtures
+export const getEventFixtures = (eventId, params = {}) => 
+  api.get(`events/${eventId}/fixtures/`, { params });
+export const publishEventFixtures = (eventId) => 
+  api.post(`events/${eventId}/fixtures/publish/`);
 
-export async function generateFixtures(fixtureId, generationData) {
-  return postApi(`/fixtures/${fixtureId}/generate/`, generationData);
-}
+// Public fixtures (read-only)
+export const getPublicEventFixtures = (eventId, params = {}) => 
+  api.get(`public/events/${eventId}/fixtures/`, { params });
 
-export async function publishFixtures(fixtureId, publishData) {
-  return postApi(`/fixtures/${fixtureId}/publish/`, publishData);
-}
+// ===== HEALTH & STATUS =====
+export const getHealth = () => api.get('');
 
-export async function regenerateFixtures(fixtureId) {
-  return postApi(`/fixtures/${fixtureId}/regenerate/`);
-}
-
-export async function checkFixtureConflicts(fixtureId) {
-  return makeApiCall(`/fixtures/${fixtureId}/conflicts/`);
-}
-
-export async function deleteFixture(fixtureId) {
-  return makeApiCall(`/fixtures/${fixtureId}/`, { method: 'DELETE' });
-}
-
-export async function getFixtureSchedule(fixtureId) {
-  return makeApiCall(`/fixtures/${fixtureId}/schedule/`);
-}
-
+export default api;
