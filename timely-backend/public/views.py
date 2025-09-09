@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from common.auth import NoAuthentication
 from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.utils import timezone
@@ -19,6 +20,7 @@ from tickets.models import TicketOrder
 
 
 @api_view(['GET'])
+@authentication_classes([NoAuthentication])
 @permission_classes([AllowAny])
 def public_home(request) -> Response:
     """
@@ -98,6 +100,7 @@ def public_home(request) -> Response:
 
 
 @api_view(['GET'])
+@authentication_classes([NoAuthentication])
 @permission_classes([AllowAny])
 def public_events_list(request) -> Response:
     """
@@ -181,6 +184,7 @@ def public_events_list(request) -> Response:
 
 
 @api_view(['GET'])
+@authentication_classes([NoAuthentication])
 @permission_classes([AllowAny])
 def public_event_detail(request, event_id: int) -> Response:
     """
@@ -238,6 +242,7 @@ def public_event_detail(request, event_id: int) -> Response:
 
 
 @api_view(['GET'])
+@authentication_classes([NoAuthentication])
 @permission_classes([AllowAny])
 def public_event_fixtures(request, event_id: int) -> Response:
     """
@@ -317,6 +322,7 @@ def public_event_fixtures(request, event_id: int) -> Response:
 
 
 @api_view(['GET'])
+@authentication_classes([NoAuthentication])
 @permission_classes([AllowAny])
 def public_event_results(request, event_id: int) -> Response:
     """
@@ -434,6 +440,7 @@ def public_event_results(request, event_id: int) -> Response:
 
 
 @api_view(['GET'])
+@authentication_classes([NoAuthentication])
 @permission_classes([AllowAny])
 def public_news_list(request) -> Response:
     """

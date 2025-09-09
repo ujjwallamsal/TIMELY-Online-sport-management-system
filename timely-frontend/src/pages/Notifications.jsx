@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { notifyAPI } from '../api';
+import { notifyAPI } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import Toast from '../components/Toast';
 

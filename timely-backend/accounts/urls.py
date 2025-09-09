@@ -8,6 +8,7 @@ router.register(r'users', views.UserViewSet, basename='user')
 router.register(r'admin/users', views.AdminUserViewSet, basename='admin-user')
 router.register(r'roles', views.UserRoleViewSet, basename='user-role')
 router.register(r'audit-logs', views.AuditLogViewSet, basename='audit-log')
+router.register(r'role-requests', views.RoleRequestViewSet, basename='role-request')
 
 urlpatterns = [
     # Authentication endpoints

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { publicAPI } from '../api';
+import { publicAPI } from '../lib/api';
 import ResultsTable from '../components/ResultsTable';
 import LeaderboardTable from '../components/LeaderboardTable';
 import LoadingSpinner from '../components/ui/LoadingSpinner';

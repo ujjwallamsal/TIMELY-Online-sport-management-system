@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { publicAPI } from '../api';
+import { publicAPI } from '../lib/api';
 import EventCard from '../components/EventCard';
 import EventFilters from '../components/EventFilters';
 import Pagination from '../components/Pagination';

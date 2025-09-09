@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
 
   const login = () => {
     // open Django login, user returns and clicks "I'm logged in"
-    window.open("http://127.0.0.1:8000/accounts/login/", "_blank", "noopener,noreferrer");
+    window.open("http://127.0.0.1:8000/api/accounts/auth/login/", "_blank", "noopener,noreferrer");
   };
 
   const confirmLoggedIn = async () => {

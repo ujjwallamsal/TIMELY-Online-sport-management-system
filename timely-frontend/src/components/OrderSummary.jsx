@@ -1,6 +1,6 @@
 // OrderSummary.jsx - Component for displaying order summary
 import React from 'react';
-import { utils } from '../api';
+import { utils } from '../lib/api';
 
 const OrderSummary = ({ order, onCheckout, onRemoveItem, isLoading = false }) => {
   if (!order || !order.items || order.items.length === 0) {

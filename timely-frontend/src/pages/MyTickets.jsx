@@ -1,7 +1,7 @@
 // MyTickets.jsx - Page for displaying user's tickets
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ticketingAPI } from '../api';
+import { ticketingAPI } from '../lib/api';
 import QRTicket from '../components/QRTicket';
 
 const MyTickets = () => {

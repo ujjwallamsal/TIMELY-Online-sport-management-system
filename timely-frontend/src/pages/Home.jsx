@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { publicAPI } from '../api';
+import { publicAPI } from '../lib/api';
 import Hero from '../components/Hero';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 

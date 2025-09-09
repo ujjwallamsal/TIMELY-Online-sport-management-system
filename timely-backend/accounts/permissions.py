@@ -3,6 +3,28 @@ from rest_framework import permissions
 from .models import UserRole
 
 
+class IsAdmin(permissions.BasePermission):
+    """
+    Custom permission to only allow users with 'ADMIN' role or superusers to access.
+    """
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and \
+               (request.user.is_superuser or request.user.role == 'ADMIN')
+
+
+class IsOrganizerOrAdmin(permissions.BasePermission):
+    """
+    Custom permission to allow users with 'ORGANIZER' or 'ADMIN' role to access.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        return (request.user.is_superuser or 
+                request.user.role == 'ADMIN' or 
+                request.user.role == 'ORGANIZER')
+
+
 class IsUserManager(permissions.BasePermission):
     """
     Permission to check if user can manage other users.

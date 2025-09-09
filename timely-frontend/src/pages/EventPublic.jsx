@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { publicAPI } from '../api';
+import { publicAPI } from '../lib/api';
 import TicketStrip from '../components/TicketStrip';
 import FixtureList from '../components/FixtureList';
 import ResultsTable from '../components/ResultsTable';

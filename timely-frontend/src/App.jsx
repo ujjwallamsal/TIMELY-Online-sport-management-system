@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout.jsx";
 import PrivateRoute from "./components/PrivateRoute.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import AppToaster from "./components/AppToaster.jsx";
 import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
@@ -20,12 +22,13 @@ import Results from "./pages/Results.jsx";
 import News from "./pages/News.jsx";
 import CreateEvent from "./pages/CreateEvent.jsx";
 import EventManagement from "./pages/EventManagement.jsx";
-import { ToastContainer } from "./components/NotificationSystem.jsx";
 import MyTickets from "./pages/MyTickets.jsx";
 import MyRegistrations from "./pages/MyRegistrations.jsx";
 import RegistrationWizard from "./pages/RegistrationWizard.jsx";
 import Settings from "./pages/Settings.jsx";
 import Venues from "./pages/Venues.jsx";
+import NotFound from "./pages/NotFound.jsx";
+import Error500 from "./pages/Error500.jsx";
 
 // Spectator Portal pages
 import SpectatorEvents from "./pages/SpectatorEvents.jsx";
@@ -33,10 +36,26 @@ import EventPublic from "./pages/EventPublic.jsx";
 import SpectatorSchedule from "./pages/SpectatorSchedule.jsx";
 import SpectatorResults from "./pages/SpectatorResults.jsx";
 
+/**
+ * SkipLink component for accessibility
+ * Allows keyboard users to skip to main content
+ */
+const SkipLink = () => (
+  <a
+    href="#main-content"
+    className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+  >
+    Skip to main content
+  </a>
+);
+
 export default function App() {
   return (
-    <AppLayout>
-      <Routes>
+    <ErrorBoundary>
+      <AppToaster>
+        <AppLayout>
+          <SkipLink />
+          <Routes>
         {/* Public Spectator Portal pages */}
         <Route path="/" element={<Home />} />
         <Route path="/events" element={<SpectatorEvents />} />
@@ -77,12 +96,14 @@ export default function App() {
         <Route path="/events/:eventId/registrations" element={<PrivateRoute requiredRoles={["ORGANIZER","ADMIN"]}><RegistrationManagement /></PrivateRoute>} />
         <Route path="/fixtures" element={<PrivateRoute requiredRoles={["ORGANIZER","ADMIN"]}><Fixtures /></PrivateRoute>} />
 
-        {/* Catch all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Error pages */}
+        <Route path="/500" element={<Error500 />} />
+        
+        {/* Catch all - 404 */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
-      
-      {/* Toast notifications */}
-      <ToastContainer />
     </AppLayout>
+    </AppToaster>
+    </ErrorBoundary>
   );
 }

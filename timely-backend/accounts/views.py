@@ -15,9 +15,9 @@ from django.conf import settings
 from django.utils.crypto import get_random_string
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-from django.db import models
+from django.db import models, transaction
 
-from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, AuditLog
+from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, AuditLog, RoleRequest
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from accounts.auth import set_jwt_cookies, clear_jwt_cookies, CookieJWTAuthentication
@@ -26,7 +26,9 @@ from .serializers import (
     UserRoleSerializer, UserRoleAssignmentSerializer, PasswordChangeSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
     EmailVerificationSerializer, UserListSerializer, AuditLogSerializer,
-    UserProfileUpdateSerializer, UserRoleUpdateSerializer
+    UserProfileUpdateSerializer, UserRoleUpdateSerializer,
+    RoleRequestSerializer, RoleRequestCreateSerializer, RoleRequestReviewSerializer,
+    UserProfileWithKycSerializer
 )
 from .permissions import IsUserManager, IsSelfOrAdmin
 from .utils import get_client_ip, get_user_agent
@@ -34,6 +36,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.decorators import method_decorator
+from common.security import rate_limit, log_auth_attempt, log_role_change
 
 
 class AuthViewSet(viewsets.ViewSet):
@@ -78,10 +81,11 @@ class AuthViewSet(viewsets.ViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'])
+    @rate_limit(max_attempts=5, window_minutes=5)
     def login(self, request):
-        """User login endpoint"""
+        """User login endpoint with rate limiting"""
         # Accept email and password directly from frontend
-        serializer = UserLoginSerializer(data=request.data)
+        serializer = UserLoginSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             user = serializer.validated_data['user']
             login(request, user)
@@ -95,16 +99,11 @@ class AuthViewSet(viewsets.ViewSet):
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
 
-            # Log login
-            AuditLog.log_action(
-                user=user,
-                action=AuditLog.ActionType.LOGIN,
-                resource_type='User',
-                resource_id=str(user.id),
-                details={'email': user.email, 'method': 'email_password'},
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
+            # Log successful login
+            log_auth_attempt(request, success=True, user=user, details={
+                'email': user.email, 
+                'method': 'email_password'
+            })
 
             resp = Response({
                 'message': 'Login successful',
@@ -116,6 +115,13 @@ class AuthViewSet(viewsets.ViewSet):
             set_jwt_cookies(resp, access_token, refresh_token)
 
             return resp
+        
+        # Log failed login attempt
+        log_auth_attempt(request, success=False, details={
+            'email': request.data.get('email', ''),
+            'method': 'email_password',
+            'errors': serializer.errors
+        })
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
@@ -158,8 +164,9 @@ class AuthViewSet(viewsets.ViewSet):
             return Response({'error': 'Invalid refresh token'}, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'])
+    @rate_limit(max_attempts=3, window_minutes=15)
     def password_reset_request(self, request):
-        """Request password reset endpoint"""
+        """Request password reset endpoint with rate limiting"""
         serializer = PasswordResetRequestSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
@@ -173,6 +180,12 @@ class AuthViewSet(viewsets.ViewSet):
                     expires_at=timezone.now() + timezone.timedelta(hours=24)
                 )
                 
+                # Log password reset request
+                log_auth_attempt(request, success=True, user=user, details={
+                    'email': email,
+                    'method': 'password_reset_request'
+                })
+                
                 # Send reset email (stub for now)
                 # send_password_reset_email(user, token.token)
                 
@@ -180,10 +193,23 @@ class AuthViewSet(viewsets.ViewSet):
                     'message': 'Password reset email sent. Please check your email.'
                 })
             except User.DoesNotExist:
-                # Don't reveal if user exists
+                # Log failed password reset attempt (but don't reveal user existence)
+                log_auth_attempt(request, success=False, details={
+                    'email': email,
+                    'method': 'password_reset_request',
+                    'error': 'user_not_found'
+                })
+                
                 return Response({
                     'message': 'If an account with this email exists, a password reset email has been sent.'
                 })
+        
+        # Log invalid request
+        log_auth_attempt(request, success=False, details={
+            'email': request.data.get('email', ''),
+            'method': 'password_reset_request',
+            'errors': serializer.errors
+        })
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
@@ -283,7 +309,9 @@ class UserViewSet(viewsets.ModelViewSet):
     
     def get_serializer_class(self):
         """Return appropriate serializer based on action"""
-        if self.action == 'update' or self.action == 'partial_update':
+        if self.action == 'me':
+            return UserProfileWithKycSerializer
+        elif self.action == 'update' or self.action == 'partial_update':
             return UserProfileUpdateSerializer
         return UserProfileSerializer
     
@@ -372,19 +400,10 @@ class UserViewSet(viewsets.ModelViewSet):
             user.save()
             
             # Log role change
-            AuditLog.log_action(
-                user=request.user,
-                action=AuditLog.ActionType.ROLE_ASSIGNMENT,
-                resource_type='User',
-                resource_id=str(user.id),
-                details={
-                    'assigned_user': user.email,
-                    'old_role': old_role,
-                    'new_role': user.role
-                },
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
+            log_role_change(request, user, [old_role], [user.role], {
+                'assigned_user': user.email,
+                'method': 'admin_update'
+            })
             
             return Response({'message': 'Role updated successfully'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -508,3 +527,183 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Admin can see all audit logs"""
         return AuditLog.objects.all()
+
+
+# ===== ROLE REQUEST VIEWS =====
+
+class RoleRequestViewSet(viewsets.ModelViewSet):
+    """Role request management"""
+    serializer_class = RoleRequestSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'requested_role']
+    search_fields = ['user__email', 'user__first_name', 'user__last_name', 'note']
+    ordering_fields = ['created_at', 'updated_at']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        """Get role requests based on user permissions"""
+        if self.request.user.is_superuser:
+            # Admin can see all role requests
+            return RoleRequest.objects.all().select_related('user', 'reviewed_by')
+        else:
+            # Users can only see their own role requests
+            return RoleRequest.objects.filter(user=self.request.user)
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action"""
+        if self.action == 'create':
+            return RoleRequestCreateSerializer
+        elif self.action in ['approve', 'reject']:
+            return RoleRequestReviewSerializer
+        return RoleRequestSerializer
+    
+    def perform_create(self, serializer):
+        """Create role request for current user"""
+        # Check if user already has a pending request
+        existing_request = RoleRequest.objects.filter(
+            user=self.request.user,
+            status=RoleRequest.Status.PENDING
+        ).exists()
+        
+        if existing_request:
+            raise serializers.ValidationError(
+                "You already have a pending role request. Please wait for it to be reviewed."
+            )
+        
+        serializer.save(user=self.request.user)
+        
+        # Log audit event
+        AuditLog.log_action(
+            user=self.request.user,
+            action=AuditLog.ActionType.CREATE,
+            resource_type='Role Request',
+            resource_id=str(serializer.instance.pk),
+            details={
+                'requested_role': serializer.instance.requested_role,
+                'note': serializer.instance.note
+            },
+            ip_address=get_client_ip(self.request),
+            user_agent=get_user_agent(self.request)
+        )
+    
+    @action(detail=False, methods=['get'])
+    def mine(self, request):
+        """Get current user's role requests"""
+        role_requests = RoleRequest.objects.filter(user=request.user).order_by('-created_at')
+        serializer = self.get_serializer(role_requests, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser])
+    def approve(self, request, pk=None):
+        """Approve role request (admin only)"""
+        role_request = self.get_object()
+        
+        if role_request.status != RoleRequest.Status.PENDING:
+            return Response(
+                {'error': 'Only pending role requests can be approved'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = RoleRequestReviewSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        notes = serializer.validated_data.get('notes', '')
+        
+        with transaction.atomic():
+            # Approve the role request
+            role_request.approve(request.user, notes)
+            
+            # Log audit event
+            AuditLog.log_action(
+                user=request.user,
+                action=AuditLog.ActionType.ROLE_REQUEST_APPROVED,
+                resource_type='Role Request',
+                resource_id=str(role_request.pk),
+                details={
+                    'target_user': role_request.user.email,
+                    'approved_role': role_request.requested_role,
+                    'notes': notes
+                },
+                ip_address=get_client_ip(request),
+                user_agent=get_user_agent(request)
+            )
+            
+            # Send notification to user
+            from notifications.services import NotificationService
+            NotificationService.send_notification(
+                user=role_request.user,
+                title="Role Request Approved",
+                message=f"Your request for {role_request.get_requested_role_display()} role has been approved.",
+                notification_type="role_approved"
+            )
+            
+            # Broadcast user update via WebSocket
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"user_{role_request.user.id}",
+                {
+                    'type': 'user.updated',
+                    'user_id': role_request.user.id,
+                    'role': role_request.user.role
+                }
+            )
+        
+        return Response(
+            {'message': 'Role request approved successfully'},
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser])
+    def reject(self, request, pk=None):
+        """Reject role request (admin only)"""
+        role_request = self.get_object()
+        
+        if role_request.status != RoleRequest.Status.PENDING:
+            return Response(
+                {'error': 'Only pending role requests can be rejected'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = RoleRequestReviewSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        reason = serializer.validated_data.get('reason', '')
+        
+        with transaction.atomic():
+            # Reject the role request
+            role_request.reject(request.user, reason)
+            
+            # Log audit event
+            AuditLog.log_action(
+                user=request.user,
+                action=AuditLog.ActionType.ROLE_REQUEST_REJECTED,
+                resource_type='Role Request',
+                resource_id=str(role_request.pk),
+                details={
+                    'target_user': role_request.user.email,
+                    'rejected_role': role_request.requested_role,
+                    'reason': reason
+                },
+                ip_address=get_client_ip(request),
+                user_agent=get_user_agent(request)
+            )
+            
+            # Send notification to user
+            from notifications.services import NotificationService
+            NotificationService.send_notification(
+                user=role_request.user,
+                title="Role Request Rejected",
+                message=f"Your request for {role_request.get_requested_role_display()} role was rejected. Reason: {reason}",
+                notification_type="role_rejected"
+            )
+        
+        return Response(
+            {'message': 'Role request rejected successfully'},
+            status=status.HTTP_200_OK
+        )
+
+
+

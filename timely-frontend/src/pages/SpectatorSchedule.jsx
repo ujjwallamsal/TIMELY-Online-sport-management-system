@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { publicAPI } from '../api';
+import { publicAPI } from '../lib/api';
 import FixtureList from '../components/FixtureList';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 

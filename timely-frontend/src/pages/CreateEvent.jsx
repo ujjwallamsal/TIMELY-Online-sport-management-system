@@ -48,8 +48,8 @@ export default function CreateEvent() {
 
   async function loadFormData() {
     try {
-      const venuesData = await listVenues();
-      setVenues(venuesData || []);
+      const response = await listVenues();
+      setVenues(response.data.results || response.data || []);
     } catch (error) {
       console.error('Error loading form data:', error);
     }
@@ -272,7 +272,7 @@ export default function CreateEvent() {
                   as="select"
                 >
                   <option value="">Select Venue</option>
-                  {venues.map(venue => (
+                  {venues && Array.isArray(venues) && venues.map(venue => (
                     <option key={venue.id} value={venue.id}>{venue.name}</option>
                   ))}
                 </Input>

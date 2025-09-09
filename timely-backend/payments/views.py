@@ -17,6 +17,7 @@ from .stripe_gateway import stripe_gateway
 from registrations.models import Registration
 from registrations.serializers import RegistrationDetailSerializer
 from django.utils import timezone
+from common.security import verify_stripe_webhook_signature, log_webhook_event
 
 logger = logging.getLogger(__name__)
 
@@ -179,20 +180,29 @@ def confirm_payment(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def stripe_webhook(request):
-    """Handle Stripe webhook events"""
+    """Handle Stripe webhook events with signature verification"""
     payload = request.body
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
     
+    # Verify webhook signature using our security utility
+    is_valid, error_message = verify_stripe_webhook_signature(request)
+    if not is_valid:
+        logger.error(f"Webhook signature verification failed: {error_message}")
+        log_webhook_event(request, 'stripe', False, {'error': error_message})
+        return HttpResponse(status=400)
+    
     try:
-        # Verify webhook signature
+        # Parse the event
         event = stripe.Webhook.construct_event(
             payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
         )
     except ValueError as e:
         logger.error(f"Invalid payload: {e}")
+        log_webhook_event(request, 'stripe', False, {'error': f'Invalid payload: {e}'})
         return HttpResponse(status=400)
     except stripe.error.SignatureVerificationError as e:
         logger.error(f"Invalid signature: {e}")
+        log_webhook_event(request, 'stripe', False, {'error': f'Invalid signature: {e}'})
         return HttpResponse(status=400)
     
     # Save webhook event
@@ -205,6 +215,12 @@ def stripe_webhook(request):
     )
     
     try:
+        # Log successful webhook receipt
+        log_webhook_event(request, 'stripe', True, {
+            'event_type': event.type,
+            'event_id': event.id
+        })
+        
         # Handle the event
         if event.type == 'payment_intent.succeeded':
             handle_payment_succeeded(event.data.object, webhook_event)
@@ -220,6 +236,11 @@ def stripe_webhook(request):
         
     except Exception as e:
         logger.error(f"Webhook processing error: {e}")
+        log_webhook_event(request, 'stripe', False, {
+            'event_type': event.type,
+            'event_id': event.id,
+            'error': str(e)
+        })
         webhook_event.processing_error = str(e)
         webhook_event.save()
         return HttpResponse(status=500)

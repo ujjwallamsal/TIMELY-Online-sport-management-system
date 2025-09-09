@@ -316,6 +316,88 @@ class PasswordResetToken(models.Model):
         self.save(update_fields=['is_used'])
 
 
+class RoleRequest(models.Model):
+    """Role request model for users to request role upgrades"""
+    
+    class RequestedRole(models.TextChoices):
+        ORGANIZER = "ORGANIZER", "Event Organizer"
+        COACH = "COACH", "Coach"
+        ATHLETE = "ATHLETE", "Athlete"
+        # Note: ADMIN is intentionally excluded - only backend superusers can be admins
+    
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending Review"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='role_requests')
+    requested_role = models.CharField(max_length=20, choices=RequestedRole.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    
+    # Request details
+    note = models.TextField(blank=True, help_text="User's reason for requesting this role")
+    
+    # Role-specific information
+    organization_name = models.CharField(max_length=200, blank=True, help_text="For Organizer role")
+    organization_website = models.URLField(blank=True, help_text="For Organizer role")
+    coaching_experience = models.TextField(blank=True, help_text="For Coach role")
+    sport_discipline = models.CharField(max_length=100, blank=True, help_text="For Athlete role")
+    
+    # Review information
+    reviewed_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='reviewed_role_requests'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_notes = models.TextField(blank=True)
+    rejection_reason = models.TextField(blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'accounts_role_request'
+        verbose_name = 'Role Request'
+        verbose_name_plural = 'Role Requests'
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['requested_role', 'status']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} requests {self.get_requested_role_display()} - {self.get_status_display()}"
+    
+    def approve(self, reviewer, notes=""):
+        """Approve role request and assign role to user"""
+        self.status = self.Status.APPROVED
+        self.reviewed_by = reviewer
+        self.reviewed_at = timezone.now()
+        self.review_notes = notes
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'review_notes', 'updated_at'])
+        
+        # Assign the role to the user
+        self.user.role = self.requested_role
+        self.user.save(update_fields=['role', 'updated_at'])
+        
+        return self
+    
+    def reject(self, reviewer, reason=""):
+        """Reject role request"""
+        self.status = self.Status.REJECTED
+        self.reviewed_by = reviewer
+        self.reviewed_at = timezone.now()
+        self.rejection_reason = reason
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'updated_at'])
+        
+        return self
+
+
 class AuditLog(models.Model):
     """Audit log for tracking sensitive operations"""
     
@@ -331,6 +413,10 @@ class AuditLog(models.Model):
         PERMISSION_CHANGE = "PERMISSION_CHANGE", "Permission Change"
         EMAIL_VERIFICATION = "EMAIL_VERIFICATION", "Email Verification"
         PAYMENT_PROCESSING = "PAYMENT_PROCESSING", "Payment Processing"
+        ROLE_REQUEST_APPROVED = "ROLE_REQUEST_APPROVED", "Role Request Approved"
+        ROLE_REQUEST_REJECTED = "ROLE_REQUEST_REJECTED", "Role Request Rejected"
+        KYC_APPROVED = "KYC_APPROVED", "KYC Approved"
+        KYC_REJECTED = "KYC_REJECTED", "KYC Rejected"
     
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
     action = models.CharField(max_length=50, choices=ActionType.choices)

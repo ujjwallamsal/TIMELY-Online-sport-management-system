@@ -65,7 +65,7 @@ export const cancelEvent = (id, reason = '') => api.post(`events/${id}/cancel/`,
 
 // ===== PUBLIC EVENTS =====
 export const getPublicEvents = (page = 1, search = '', sport = '', venue = '', filters = {}) => 
-  api.get('main-public/events/', { params: { page, search, sport_type: sport, venue, ...filters } });
+  api.get('public/events/', { params: { page, search, sport, venue, ...filters } });
 
 // ===== VENUES =====
 export const listVenues = (params = {}) => 
@@ -161,19 +161,43 @@ export const deleteResult = (id) => api.delete(`results/${id}/`);
 
 // ===== PUBLIC RESULTS =====
 export const getPublicResults = (page = 1, filters = {}) => 
-  api.get('main-public/results/', { params: { page, ...filters } });
+  api.get('public/events/', { params: { page, ...filters } });
 
-// ===== NEWS & ANNOUNCEMENTS =====
+// ===== CMS PAGES =====
+export const getPages = (params = {}) => api.get('content/pages/', { params });
+export const getPage = (slug) => api.get(`content/pages/${slug}/`);
+export const createPage = (pageData) => api.post('content/pages/', pageData);
+export const updatePage = (slug, pageData) => api.patch(`content/pages/${slug}/`, pageData);
+export const deletePage = (slug) => api.delete(`content/pages/${slug}/`);
+
+// ===== CMS NEWS =====
+export const getNews = (params = {}) => api.get('content/news/', { params });
+export const getNewsArticle = (id) => api.get(`content/news/${id}/`);
+export const createNews = (newsData) => api.post('content/news/', newsData);
+export const updateNews = (id, newsData) => api.patch(`content/news/${id}/`, newsData);
+export const deleteNews = (id) => api.delete(`content/news/${id}/`);
+
+// ===== CMS BANNERS =====
+export const getBanners = (params = {}) => api.get('content/banners/', { params });
+export const getBanner = (id) => api.get(`content/banners/${id}/`);
+export const createBanner = (bannerData) => api.post('content/banners/', bannerData);
+export const updateBanner = (id, bannerData) => api.patch(`content/banners/${id}/`, bannerData);
+export const deleteBanner = (id) => api.delete(`content/banners/${id}/`);
+
+// ===== PUBLIC CMS =====
+export const getPublicPage = (slug) => api.get(`content/public/pages/${slug}/`);
+export const getPublicPages = (params = {}) => api.get('content/public/pages/', { params });
+export const getPublicNews = (page = 1, filters = {}) => 
+  api.get('content/public/news/', { params: { page, ...filters } });
+export const getPublicBanners = () => api.get('content/public/banners/');
+
+// ===== LEGACY ANNOUNCEMENTS (for backward compatibility) =====
 export const getAnnouncements = (page = 1, filters = {}) => 
   api.get('content/announcements/', { params: { page, ...filters } });
 export const getAnnouncement = (id) => api.get(`content/announcements/${id}/`);
 export const createAnnouncement = (announcementData) => api.post('content/announcements/', announcementData);
 export const updateAnnouncement = (id, announcementData) => api.patch(`content/announcements/${id}/`, announcementData);
 export const deleteAnnouncement = (id) => api.delete(`content/announcements/${id}/`);
-
-// ===== PUBLIC NEWS =====
-export const getPublicNews = (page = 1, filters = {}) => 
-  api.get('main-public/announcements/', { params: { page, ...filters } });
 
 
 
@@ -231,6 +255,67 @@ export const deleteUser = (id) => api.delete(`admin/users/${id}/`);
 export const getSystemStats = () => api.get('admin/stats/');
 export const getEventReports = (filters = {}) => api.get('admin/reports/events/', { params: filters });
 export const getUserReports = (filters = {}) => api.get('admin/reports/users/', { params: filters });
+
+// ===== ADMIN DASHBOARD API =====
+export const adminAPI = {
+  // Get KPIs
+  getKPIs: () => api.get('admin/kpis/'),
+
+  // Drilldown endpoints
+  drillUsers: (params = {}) => api.get('admin/drill/users/', { params }),
+  drillEvents: (params = {}) => api.get('admin/drill/events/', { params }),
+  drillRegistrations: (params = {}) => api.get('admin/drill/registrations/', { params }),
+  drillOrders: (params = {}) => api.get('admin/drill/orders/', { params }),
+  getAuditLogs: (params = {}) => api.get('admin/audit/', { params }),
+
+  // CSV Export
+  exportCSV: (kind, params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`admin/export/${kind}/?${queryParams}`, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'text/csv'
+      }
+    });
+  }
+};
+
+// ===== KYC API =====
+export const kycAPI = {
+  // Get KYC profile
+  getProfile: () => api.get('kyc/profile/'),
+  
+  // Create/update KYC profile
+  createProfile: (data) => api.post('kyc/profile/', data),
+  updateProfile: (data) => api.patch('kyc/profile/', data),
+  
+  // Submit KYC for review
+  submitProfile: () => api.post('kyc/profile/submit/'),
+  
+  // Admin review KYC
+  reviewProfile: (profileId, action, data) => api.patch(`kyc/profile/${profileId}/review/`, { action, ...data }),
+  
+  // Document management
+  uploadDocument: (formData) => api.post('kyc/documents/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  deleteDocument: (documentId) => api.delete(`kyc/documents/${documentId}/`),
+  listDocuments: () => api.get('kyc/documents/'),
+};
+
+// ===== ROLE REQUEST API =====
+export const roleRequestAPI = {
+  // Create role request
+  createRequest: (data) => api.post('accounts/role-requests/', data),
+  
+  // Get user's role requests
+  getMyRequests: () => api.get('accounts/role-requests/mine/'),
+  
+  // Admin endpoints
+  listRequests: (params = {}) => api.get('accounts/role-requests/', { params }),
+  approveRequest: (requestId, data) => api.patch(`accounts/role-requests/${requestId}/approve/`, data),
+  rejectRequest: (requestId, data) => api.patch(`accounts/role-requests/${requestId}/reject/`, data),
+};
 
 // ===== PAYMENTS =====
 export const createPaymentIntent = (amount, currency = 'usd') => 
@@ -305,5 +390,275 @@ export const getPublicEventFixtures = (eventId, params = {}) =>
 
 // ===== HEALTH & STATUS =====
 export const getHealth = () => api.get('');
+
+// ===== PUBLIC API (for spectator pages) =====
+export const publicAPI = {
+  // Get home page aggregated data
+  getPublicHome: () => api.get('public/home/'),
+  
+  // List published events with filters
+  listPublicEvents: (params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`public/events/?${queryParams}`);
+  },
+  
+  // Get published event detail
+  getPublicEvent: (eventId) => api.get(`public/events/${eventId}/`),
+  
+  // List published fixtures for an event
+  listPublicFixtures: (eventId, params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`public/events/${eventId}/fixtures/?${queryParams}`);
+  },
+  
+  // Get published results and leaderboard for an event
+  listPublicResults: (eventId) => api.get(`public/events/${eventId}/results/`),
+  
+  // List published news/announcements
+  listPublicNews: (params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`public/news/?${queryParams}`);
+  },
+};
+
+// ===== MESSAGING API =====
+export const messagesAPI = {
+  // Create message thread
+  createThread: (data) => api.post('messages/threads/', data),
+  
+  // List user's threads
+  listThreads: (params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`messages/threads/?${queryParams}`);
+  },
+  
+  // Get thread details
+  getThread: (id) => api.get(`messages/threads/${id}/`),
+  
+  // Add participant to thread
+  addThreadParticipant: (threadId, userId) => api.post(`messages/threads/${threadId}/add_participant/`, { user_id: userId }),
+  
+  // Remove participant from thread
+  removeThreadParticipant: (threadId, userId) => api.delete(`messages/threads/${threadId}/participants/${userId}/`),
+  
+  // List thread messages
+  listThreadMessages: (threadId, params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`messages/threads/${threadId}/messages/?${queryParams}`);
+  },
+  
+  // Send message to thread
+  sendMessage: (threadId, body) => api.post(`messages/threads/${threadId}/send_message/`, { body }),
+  
+  // Edit message
+  editMessage: (messageId, body) => api.patch(`messages/messages/${messageId}/`, { body }),
+  
+  // Delete message (soft delete)
+  deleteMessage: (messageId) => api.delete(`messages/messages/${messageId}/`),
+  
+  // Mark thread as read
+  markThreadRead: (threadId) => api.get(`messages/threads/${threadId}/messages/`),
+};
+
+// ===== NOTIFICATIONS API =====
+export const notifyAPI = {
+  // List user's notifications
+  listNotifications: (params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`notifications/?${queryParams}`);
+  },
+  
+  // Mark notification as read
+  markNotificationRead: (id) => api.patch(`notifications/${id}/read/`),
+  
+  // Mark all notifications as read
+  markAllNotificationsRead: () => api.post('notifications/mark-all-read/'),
+  
+  // Create announcement (organizer/admin only)
+  announce: (data) => api.post('notifications/announce/', data),
+};
+
+// ===== TICKETING API =====
+export const ticketingAPI = {
+  // List ticket types for an event
+  listTicketTypes: (eventId, params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`tickets/events/${eventId}/types/?${queryParams}`);
+  },
+  
+  // Create ticket order
+  createOrder: (payload) => api.post('tickets/orders/', payload),
+  
+  // Get order details
+  getOrder: (orderId) => api.get(`tickets/orders/${orderId}/`),
+  
+  // Cancel order
+  cancelOrder: (orderId) => api.post(`tickets/orders/${orderId}/cancel/`),
+  
+  // Get order summary
+  getOrderSummary: (orderId) => api.get(`tickets/orders/${orderId}/summary/`),
+  
+  // List user's tickets
+  listMyTickets: (params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`tickets/my-tickets/?${queryParams}`);
+  },
+  
+  // Get ticket details
+  getTicket: (ticketId) => api.get(`tickets/tickets/${ticketId}/`),
+  
+  // Validate ticket (for scanning)
+  validateTicket: (ticketId) => api.get(`tickets/tickets/${ticketId}/validate/`),
+  
+  // Use ticket (for check-in)
+  useTicket: (ticketId) => api.post(`tickets/tickets/${ticketId}/use/`),
+  
+  // Organizer functions
+  listEventOrders: (eventId, params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`tickets/events/${eventId}/orders/?${queryParams}`);
+  },
+  
+  // Create ticket type (organizer/admin)
+  createTicketType: (eventId, payload) => api.post(`tickets/events/${eventId}/types/create/`, payload),
+  
+  // Update ticket type (organizer/admin)
+  updateTicketType: (ticketTypeId, payload) => api.patch(`tickets/types/${ticketTypeId}/`, payload),
+  
+  // Delete ticket type (organizer/admin)
+  deleteTicketType: (ticketTypeId) => api.delete(`tickets/types/${ticketTypeId}/delete/`),
+};
+
+// ===== PAYMENTS API =====
+export const paymentsAPI = {
+  // Create Stripe checkout session
+  stripeCheckout: (orderId) => api.post('payments/stripe/checkout/', { order_id: orderId }),
+  
+  // Create refund (admin/organizer)
+  createRefund: (orderId) => api.post(`payments/refund/${orderId}/`),
+};
+
+// ===== MEDIA API =====
+export const mediaAPI = {
+  // List media items (authenticated users see their own + approved; moderators see all)
+  listMedia: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        queryParams.append(key, value);
+      }
+    });
+    return api.get(`media/?${queryParams}`);
+  },
+  
+  // Get specific media item
+  getMedia: (mediaId) => api.get(`media/${mediaId}/`),
+  
+  // Upload new media (multipart form data)
+  createMedia: (formData) => api.post('media/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  
+  // Update media item (title, description, etc.)
+  updateMedia: (mediaId, data) => api.patch(`media/${mediaId}/`, data),
+  
+  // Delete media item
+  deleteMedia: (mediaId) => api.delete(`media/${mediaId}/`),
+  
+  // Moderation actions (organizer/admin only)
+  approveMedia: (mediaId) => api.post(`media/${mediaId}/approve/`),
+  rejectMedia: (mediaId, reason = '') => api.post(`media/${mediaId}/reject/`, { reason }),
+  hideMedia: (mediaId) => api.post(`media/${mediaId}/hide/`),
+  featureMedia: (mediaId) => api.post(`media/${mediaId}/feature/`),
+  
+  // Public gallery (approved media only)
+  listPublicMedia: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        queryParams.append(key, value);
+      }
+    });
+    return api.get(`media/public/?${queryParams}`);
+  },
+  
+  // Get share information
+  getShareInfo: (mediaId) => api.get(`media/share/${mediaId}/`),
+};
+
+// ===== UTILITY FUNCTIONS =====
+export const utils = {
+  // Format price in cents to display string
+  formatPrice: (cents, currency = 'USD') => {
+    const dollars = cents / 100;
+    if (currency === 'USD') return `$${dollars.toFixed(2)}`;
+    if (currency === 'EUR') return `€${dollars.toFixed(2)}`;
+    if (currency === 'GBP') return `£${dollars.toFixed(2)}`;
+    return `${dollars.toFixed(2)} ${currency}`;
+  },
+  
+  // Format date for display
+  formatDate: (dateString) => new Date(dateString).toLocaleDateString(),
+  
+  // Format datetime for display
+  formatDateTime: (dateString) => new Date(dateString).toLocaleString(),
+  
+  // Get status color for UI
+  getStatusColor: (status) => {
+    const colors = {
+      pending: 'yellow',
+      paid: 'green',
+      failed: 'red',
+      refunded: 'blue',
+      cancelled: 'gray',
+      valid: 'green',
+      used: 'blue',
+      void: 'red',
+    };
+    return colors[status] || 'gray';
+  },
+};
+
+// ===== REPORTS API =====
+export const reportsAPI = {
+  // Get report data
+  getReport: (reportType, filters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== '' && value !== null && value !== undefined) {
+        params.append(key, value);
+      }
+    });
+    
+    const queryString = params.toString();
+    const url = `reports/${reportType}/${queryString ? `?${queryString}` : ''}`;
+    
+    return api.get(url);
+  },
+
+  // Export report to CSV
+  exportReport: (reportType, filters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== '' && value !== null && value !== undefined) {
+        params.append(key, value);
+      }
+    });
+    
+    const queryString = params.toString();
+    const url = `reports/export/${reportType}/${queryString ? `?${queryString}` : ''}`;
+    
+    return api.get(url, { responseType: 'blob' });
+  },
+
+  // Get available events for filters
+  getEvents: () => api.get('events/'),
+
+  // Get available sports for filters
+  getSports: () => api.get('events/sports/'),
+
+  // Get available divisions for filters
+  getDivisions: () => api.get('events/divisions/'),
+};
 
 export default api;

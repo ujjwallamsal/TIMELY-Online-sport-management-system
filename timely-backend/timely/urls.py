@@ -10,8 +10,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
 # Import views (only what's actually used in this file)
-from reports.views import TicketSummaryReport, TicketCSVExport
-from reports.views_admin import AdminOverviewView
+# from reports.views import TicketSummaryReport, TicketCSVExport  # Old views, now handled by ReportsViewSet
+# from reports.views_admin import AdminOverviewView  # Old view, now handled by ReportsViewSet
 # from tickets.views import StripeWebhookView, PayPalWebhookView  # Views don't exist yet
 from tickets.public_views import PublicCheckoutView
 # from registrations.views import secure_document_download
@@ -67,11 +67,10 @@ router = DefaultRouter()
 
 # ---------------------------------------------------------------------------
 
-def health(_request):
-    return JsonResponse({"status": "ok", "app": "Timely API"})
+from common.views import HealthView
 
 urlpatterns = [
-    path("", health, name="health"),
+    path("health/", HealthView.as_view(), name="health"),
 
     # Admin
     path("admin/", admin.site.urls),
@@ -92,10 +91,14 @@ urlpatterns = [
     path("api/results/", include("results.urls")),
     path("api/tickets/", include("tickets.urls")),
     path("api/payments/", include("payments.urls")),
-    path("api/notifications/", include("notifications.urls")),
     path("api/reports/", include("reports.urls")),
+    path("api/notifications/", include("notifications.urls")),
     path("api/content/", include("content.urls")),
     path("api/gallery/", include("gallery.urls")),
+    path("api/media/", include("mediahub.urls")),
+    path("api/admin/", include("adminapi.urls")),
+    path("api/kyc/", include("kyc.urls")),
+    path("api/audit/", include("audit.urls")),
     
     # Legacy public APIs (kept for backward compatibility)
     path("api/fixtures/public/", include("fixtures.urls")),

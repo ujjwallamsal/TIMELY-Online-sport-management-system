@@ -1,7 +1,7 @@
 // Checkout.jsx - Checkout page for ticket purchases
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ticketingAPI, paymentsAPI } from '../api';
+import { ticketingAPI, paymentsAPI } from '../lib/api';
 import TicketTypeCard from '../components/TicketTypeCard';
 import OrderSummary from '../components/OrderSummary';
 

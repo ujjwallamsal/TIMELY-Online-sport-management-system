@@ -9,7 +9,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, AuditLog
+from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, AuditLog, RoleRequest
 
 
 User = get_user_model()
@@ -172,13 +172,13 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    """Serializer for user registration"""
+    """Serializer for user registration - SPECTATOR ONLY"""
     password = serializers.CharField(write_only=True, min_length=8)
     password_confirm = serializers.CharField(write_only=True)
     
     class Meta:
         model = User
-        fields = ['email', 'password', 'password_confirm', 'first_name', 'last_name', 'role']
+        fields = ['email', 'password', 'password_confirm', 'first_name', 'last_name']
         extra_kwargs = {
             'email': {'required': True},
             'first_name': {'required': True},
@@ -206,36 +206,51 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(e.messages)
         return value
     
+    def validate(self, data):
+        """Validate registration data - enforce spectator-only"""
+        # Remove any role fields that might be sent
+        if 'role' in data:
+            data.pop('role')
+        if 'is_staff' in data:
+            data.pop('is_staff')
+        if 'is_superuser' in data:
+            data.pop('is_superuser')
+        
+        return data
+    
     def create(self, validated_data):
-        """Create user with validated data"""
+        """Create user with validated data - always SPECTATOR"""
         validated_data.pop('password_confirm')
+        # Force role to SPECTATOR
+        validated_data['role'] = User.Role.SPECTATOR
         user = User.objects.create_user(**validated_data)
         return user
 
 
 class UserLoginSerializer(serializers.Serializer):
-    """Serializer for user login"""
-    email = serializers.EmailField()
+    """Serializer for user login - accepts email or username"""
+    email = serializers.CharField()  # Changed from EmailField to accept username too
     password = serializers.CharField(write_only=True)
     
     def validate(self, attrs):
-        """Validate login credentials"""
-        email = attrs.get('email')
+        """Validate login credentials - try email first, then username"""
+        email_or_username = attrs.get('email')
         password = attrs.get('password')
         
-        if email and password:
-            # Try to authenticate with email
+        if email_or_username and password:
             user = None
-            # Use email for authentication
-            user = authenticate(username=email, password=password)
+            
+            # Try to authenticate with email or username
+            # The EmailOrUsernameModelBackend handles both cases with the username parameter
+            user = authenticate(request=self.context.get('request'), username=email_or_username, password=password)
             
             if not user:
-                raise serializers.ValidationError("Invalid credentials.")
+                raise serializers.ValidationError("Invalid email/username or password.")
             if not user.is_active:
                 raise serializers.ValidationError("User account is disabled.")
             attrs['user'] = user
         else:
-            raise serializers.ValidationError("Must include email and password.")
+            raise serializers.ValidationError("Must include email/username and password.")
         
         return attrs
 
@@ -430,3 +445,120 @@ class UserRoleUpdateSerializer(serializers.Serializer):
         if value not in dict(User.Role.choices):
             raise serializers.ValidationError("Invalid role choice.")
         return value
+
+
+# ===== ROLE REQUEST SERIALIZERS =====
+
+class RoleRequestSerializer(serializers.ModelSerializer):
+    """Serializer for role requests"""
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    user_display_name = serializers.CharField(source='user.display_name', read_only=True)
+    requested_role_display = serializers.CharField(source='get_requested_role_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    reviewed_by_email = serializers.EmailField(source='reviewed_by.email', read_only=True)
+    
+    class Meta:
+        model = RoleRequest
+        fields = [
+            'id', 'user', 'user_email', 'user_display_name', 'requested_role', 
+            'requested_role_display', 'status', 'status_display', 'note',
+            'organization_name', 'organization_website', 'coaching_experience', 
+            'sport_discipline', 'reviewed_by_email', 'reviewed_at', 
+            'review_notes', 'rejection_reason', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'user', 'user_email', 'user_display_name', 'requested_role_display',
+            'status_display', 'reviewed_by_email', 'reviewed_at', 'review_notes',
+            'rejection_reason', 'created_at', 'updated_at'
+        ]
+    
+    def validate_requested_role(self, value):
+        """Validate requested role - no ADMIN requests allowed"""
+        if value == 'ADMIN':
+            raise serializers.ValidationError(
+                "Admin role cannot be requested. Only backend superusers can be admins."
+            )
+        return value
+
+
+class RoleRequestCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating role requests"""
+    
+    class Meta:
+        model = RoleRequest
+        fields = [
+            'requested_role', 'note', 'organization_name', 'organization_website',
+            'coaching_experience', 'sport_discipline'
+        ]
+    
+    def validate_requested_role(self, value):
+        """Validate requested role - no ADMIN requests allowed"""
+        if value == 'ADMIN':
+            raise serializers.ValidationError(
+                "Admin role cannot be requested. Only backend superusers can be admins."
+            )
+        return value
+    
+    def validate(self, data):
+        """Validate role-specific fields"""
+        requested_role = data.get('requested_role')
+        
+        if requested_role == 'ORGANIZER':
+            if not data.get('organization_name'):
+                raise serializers.ValidationError({
+                    'organization_name': 'Organization name is required for Organizer role'
+                })
+        elif requested_role == 'COACH':
+            if not data.get('coaching_experience'):
+                raise serializers.ValidationError({
+                    'coaching_experience': 'Coaching experience is required for Coach role'
+                })
+        elif requested_role == 'ATHLETE':
+            if not data.get('sport_discipline'):
+                raise serializers.ValidationError({
+                    'sport_discipline': 'Sport discipline is required for Athlete role'
+                })
+        
+        return data
+
+
+class RoleRequestReviewSerializer(serializers.Serializer):
+    """Serializer for admin role request review"""
+    action = serializers.ChoiceField(choices=['approve', 'reject'])
+    notes = serializers.CharField(required=False, allow_blank=True)
+    reason = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate(self, data):
+        """Validate review action"""
+        action = data.get('action')
+        if action == 'reject' and not data.get('reason'):
+            raise serializers.ValidationError({
+                'reason': 'Rejection reason is required when rejecting role request'
+            })
+        return data
+
+
+class UserProfileWithKycSerializer(serializers.ModelSerializer):
+    """Extended user profile serializer with KYC status and pending role request"""
+    kyc_status = serializers.CharField(source='kyc_profile.status', read_only=True)
+    pending_role_request = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'username', 'first_name', 'last_name', 'full_name',
+            'display_name', 'role', 'is_active', 'email_verified', 'date_joined',
+            'last_login', 'kyc_status', 'pending_role_request'
+        ]
+        read_only_fields = [
+            'id', 'email', 'username', 'role', 'is_active', 'email_verified',
+            'date_joined', 'last_login', 'kyc_status', 'pending_role_request'
+        ]
+    
+    def get_pending_role_request(self, obj):
+        """Get the user's pending role request"""
+        from accounts.models import RoleRequest
+        pending_request = obj.role_requests.filter(status=RoleRequest.Status.PENDING).first()
+        if pending_request:
+            return RoleRequestSerializer(pending_request).data
+        return None

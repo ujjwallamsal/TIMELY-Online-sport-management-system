@@ -47,13 +47,17 @@ INSTALLED_APPS = [
     "registrations",
     "fixtures",
     "tickets",
+    "reports",
     "results",
     "notifications",
     "content.apps.ContentConfig",
     "gallery",
     'payments',
-    "reports",
     "public",
+    "mediahub",
+    "adminapi",
+    "kyc",
+    "audit",
 ]
 
 # --- Middleware ---
@@ -67,6 +71,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "common.middleware.PublicEndpointMiddleware",  # Add our custom middleware
+    "common.security.SecurityHeadersMiddleware",  # Security headers
 ]
 
 ROOT_URLCONF = "timely.urls"
@@ -125,6 +130,12 @@ STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Media Hub settings
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_VIDEO_SIZE = 100 * 1024 * 1024  # 100MB
+MEDIA_THUMBNAIL_SIZE = (300, 300)
+MEDIA_THUMBNAIL_QUALITY = 85
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Auth (custom user) ---
@@ -145,8 +156,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         # Remove global permission requirement - let each view handle its own
     ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 20,
+    "DEFAULT_PAGINATION_CLASS": "common.pagination.TimelyPageNumberPagination",
+    "PAGE_SIZE": 12,
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
@@ -207,6 +218,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5178",
 ]
 
+# Explicitly deny all other origins
+CORS_ALLOW_ALL_ORIGINS = False
+
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
@@ -233,8 +247,37 @@ FRONTEND_URL = "http://localhost:5173"
 # Redirect URLs
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+
+# --- Security Settings ---
+# Session and Cookie Security
+SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = not DEBUG  # True in production
+SESSION_COOKIE_AGE = 1209600  # 2 weeks
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# CSRF Security
+CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SECURE = not DEBUG  # True in production
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_NAME = "csrftoken"
+
+# Password Security
+# Django uses PBKDF2 by default (recommended)
+# For bcrypt: pip install bcrypt and uncomment below
+# PASSWORD_HASHERS = [
+#     'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+#     'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+#     'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+#     'django.contrib.auth.hashers.Argon2PasswordHasher',
+#     'django.contrib.auth.hashers.ScryptPasswordHasher',
+# ]
+
+# Security Headers
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
 
 # Channels configuration: use Redis only if REDIS_URL is set; otherwise in-memory for dev
 if os.environ.get("REDIS_URL"):
@@ -276,8 +319,79 @@ EMAIL_USE_TLS = False
 
 # Admin hardening (dev defaults; enable in production)
 SECURE_SSL_REDIRECT = False  # True in prod
-SESSION_COOKIE_SECURE = False  # True in prod
-CSRF_COOKIE_SECURE = False  # True in prod
+
+# Cache Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+        'TIMEOUT': 300,  # 5 minutes default
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        }
+    }
+}
+
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+        'query': {
+            'format': '{asctime} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'security.log',
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'query_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'slow_queries.log',
+            'formatter': 'query',
+        },
+    },
+    'loggers': {
+        'django.security': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'common.security': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'django.db.backends': {
+            'handlers': ['query_file'] if DEBUG else [],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
+
+# Query logging for slow queries (>200ms)
+if DEBUG:
+    LOGGING['loggers']['django.db.backends']['handlers'] = ['query_file']
+    LOGGING['loggers']['django.db.backends']['level'] = 'DEBUG'
 
 # Optional: IP allowlist for admin (example)
 # ADMIN_IP_ALLOWLIST = {"127.0.0.1", "::1"}

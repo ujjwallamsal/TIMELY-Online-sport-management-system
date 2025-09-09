@@ -21,7 +21,7 @@ class EventViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description', 'location']
     ordering_fields = ['start_datetime', 'created_at', 'name']
     ordering = ['start_datetime', 'created_at']
-    pagination_class = None  # Will be set in settings
+    # Use default pagination from settings
     
     def get_serializer_class(self):
         if self.action == 'list':

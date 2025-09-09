@@ -1,7 +1,7 @@
 // QRTicket.jsx - Component for displaying ticket with QR code
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { utils } from '../api';
+import { utils } from '../lib/api';
 
 const QRTicket = ({ ticket, showDetails = true }) => {
   if (!ticket) {

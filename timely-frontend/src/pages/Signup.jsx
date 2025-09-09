@@ -3,14 +3,6 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { TrophyIcon } from '@heroicons/react/24/outline';
 
-const ROLES = [
-  { value: "SPECTATOR", label: "Spectator", description: "Browse and attend events" },
-  { value: "ATHLETE", label: "Athlete", description: "Participate in sports events" },
-  { value: "COACH", label: "Coach", description: "Train and guide athletes" },
-  { value: "ORGANIZER", label: "Organizer", description: "Create and manage events" },
-  { value: "ADMIN", label: "Admin", description: "Full system access" }
-];
-
 export default function Signup() {
   const navigate = useNavigate();
   const { signup } = useAuth();
@@ -19,8 +11,7 @@ export default function Signup() {
     last_name: "", 
     email: "", 
     password: "", 
-    password_confirm: "",
-    role: "SPECTATOR" 
+    password_confirm: ""
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -159,8 +150,22 @@ export default function Signup() {
           {done && (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg" role="alert" aria-live="polite">
               <p className="text-sm text-green-600">
-                🎉 Account created successfully! Redirecting to dashboard...
+                🎉 Account created successfully! You can now upgrade your account to access additional features.
               </p>
+              <div className="mt-2 flex space-x-3">
+                <a 
+                  href="/upgrade-account"
+                  className="text-sm font-medium text-green-700 hover:text-green-800 underline"
+                >
+                  Upgrade Account
+                </a>
+                <a 
+                  href="/kyc"
+                  className="text-sm font-medium text-green-700 hover:text-green-800 underline"
+                >
+                  Complete KYC
+                </a>
+              </div>
             </div>
           )}
 
@@ -307,27 +312,7 @@ export default function Signup() {
               )}
             </div>
 
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
-                Role
-              </label>
-              <select 
-                id="role"
-                name="role"
-                className="appearance-none relative block w-full px-3 py-3 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm transition-all duration-200"
-                value={form.role} 
-                onChange={(e) => upd("role", e.target.value)}
-              >
-                {ROLES.map(role => (
-                  <option key={role.value} value={role.value}>
-                    {role.label} - {role.description}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500">
-                Choose the role that best describes your involvement
-              </p>
-            </div>
+
 
             <button 
               type="submit"

@@ -1,57 +1,42 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { publicAPI } from '../api';
-import Pagination from '../components/Pagination';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import React, { useState, useEffect } from 'react';
+import { getPublicNews } from '../lib/api';
 
 const News = () => {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 10,
-    total: 0,
-    totalPages: 0
-  });
+  const [page, setPage] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrev, setHasPrev] = useState(false);
 
-  // Load news with pagination
-  const loadNews = useCallback(async (page = 1) => {
+  useEffect(() => {
+    fetchNews();
+  }, [page]);
+
+  const fetchNews = async () => {
     try {
       setLoading(true);
-      setError(null);
+      const response = await getPublicNews(page);
+      setNews(response.data.results || response.data);
       
-      const params = {
-        page,
-        page_size: pagination.pageSize
-      };
+      // Handle pagination
+      if (response.data.next) {
+        setHasNext(true);
+      } else {
+        setHasNext(false);
+      }
       
-      const response = await publicAPI.listPublicNews(params);
-      
-      setNews(response.data.results || []);
-      setPagination(prev => ({
-        ...prev,
-        page: response.data.page || 1,
-        total: response.data.count || 0,
-        totalPages: response.data.total_pages || 0
-      }));
-      
+      if (response.data.previous) {
+        setHasPrev(true);
+      } else {
+        setHasPrev(false);
+      }
     } catch (err) {
-      console.error('Failed to load news:', err);
-      setError('Failed to load news. Please try again later.');
+      console.error('Error fetching news:', err);
+      setError('Failed to load news articles');
     } finally {
       setLoading(false);
     }
-  }, [pagination.pageSize]);
-
-  useEffect(() => {
-    loadNews(1);
-  }, [loadNews]);
-
-  // Handle page changes
-  const handlePageChange = (page) => {
-    loadNews(page);
   };
 
   const formatDate = (dateString) => {
@@ -62,142 +47,140 @@ const News = () => {
     });
   };
 
-  const formatDateTime = (dateString) => {
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const truncateText = (text, maxLength = 150) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
   };
+
+  if (loading && page === 1) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading news...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Error</h1>
+          <p className="text-gray-600">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">News & Announcements</h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Stay updated with the latest news, announcements, and updates from our sports community.
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">News & Updates</h1>
+          <p className="text-lg text-gray-600">
+            Stay informed with the latest news and announcements from our platform.
           </p>
+          <div className="w-24 h-1 bg-blue-600 rounded mt-4"></div>
         </div>
 
-        {/* News List */}
-        {loading ? (
+        {/* News Articles */}
+        {news.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+            <div className="text-gray-400 text-6xl mb-4">📰</div>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">No News Articles</h2>
+            <p className="text-gray-600">There are no news articles available at the moment.</p>
+          </div>
+        ) : (
           <div className="space-y-6">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="bg-white rounded-lg shadow-md border border-gray-200 p-6 animate-pulse">
-                <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
-                <div className="space-y-2">
-                  <div className="h-3 bg-gray-200 rounded w-full"></div>
-                  <div className="h-3 bg-gray-200 rounded w-5/6"></div>
-                  <div className="h-3 bg-gray-200 rounded w-4/6"></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="text-center py-12">
-            <div className="text-red-600 text-lg font-medium mb-4">{error}</div>
-            <button
-              onClick={() => loadNews(pagination.page)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-            >
-              Try Again
-            </button>
-          </div>
-        ) : news.length > 0 ? (
-          <>
-            {/* Results count */}
-            <div className="mb-6">
-              <p className="text-gray-600">
-                Showing {news.length} of {pagination.total} articles
-              </p>
-            </div>
-
-            {/* News articles */}
-            <div className="space-y-6 mb-8">
-              {news.map((article) => (
-                <article
-                  key={article.id}
-                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 border border-gray-200"
-                >
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2 hover:text-blue-600 transition-colors">
-                          <Link to={`/news/${article.slug}`}>
-                            {article.title}
-                          </Link>
-                        </h2>
-                        
-                        <div className="flex items-center text-sm text-gray-500 mb-4">
-                          <time dateTime={article.created_at}>
-                            {formatDate(article.created_at)}
-                          </time>
-                          {article.author && (
-                            <>
-                              <span className="mx-2">•</span>
-                              <span>By {article.author}</span>
-                            </>
-                          )}
-                          {article.updated_at !== article.created_at && (
-                            <>
-                              <span className="mx-2">•</span>
-                              <span>Updated {formatDateTime(article.updated_at)}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="prose max-w-none">
-                      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                        {article.body}
-                      </div>
-                    </div>
-                    
-                    <div className="mt-6 pt-4 border-t border-gray-200">
-                      <Link
-                        to={`/news/${article.slug}`}
-                        className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        Read full article →
-                      </Link>
+            {news.map((article) => (
+              <article 
+                key={article.id} 
+                className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                      {article.title}
+                    </h2>
+                    <div className="flex items-center text-sm text-gray-500 mb-4">
+                      <span className="flex items-center">
+                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                        </svg>
+                        {formatDate(article.created_at)}
+                      </span>
+                      {article.author_name && (
+                        <>
+                          <span className="mx-2">•</span>
+                          <span className="flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                            </svg>
+                            {article.author_name}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
-                </article>
-              ))}
-            </div>
+                </div>
 
-            {/* Pagination */}
-            <Pagination
-              currentPage={pagination.page}
-              totalPages={pagination.totalPages}
-              onPageChange={handlePageChange}
-            />
-          </>
-        ) : (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-6xl mb-4">📰</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No news available</h3>
-            <p className="text-gray-600">
-              Check back later for the latest announcements and updates.
-            </p>
+                <div className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
+                  <p className="text-gray-700 leading-relaxed">
+                    {truncateText(article.body.replace(/<[^>]*>/g, ''))}
+                  </p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <button className="text-blue-600 font-medium hover:text-blue-700 focus:outline-none focus:underline">
+                    Read more →
+                  </button>
+                </div>
+              </article>
+            ))}
           </div>
         )}
 
-        {/* Back to Home */}
-        <div className="text-center mt-12">
-          <Link
-            to="/"
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 transition-colors"
-          >
-            ← Back to Home
-          </Link>
-        </div>
+        {/* Pagination */}
+        {(hasNext || hasPrev) && (
+          <div className="mt-8 flex items-center justify-between">
+            <button
+              onClick={() => setPage(page - 1)}
+              disabled={!hasPrev || loading}
+              className="px-4 py-2 bg-white border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Previous
+            </button>
+            
+            <span className="text-sm text-gray-700">
+              Page {page}
+            </span>
+            
+            <button
+              onClick={() => setPage(page + 1)}
+              disabled={!hasNext || loading}
+              className="px-4 py-2 bg-white border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Next
+            </button>
+          </div>
+        )}
+
+        {/* Loading indicator for pagination */}
+        {loading && page > 1 && (
+          <div className="mt-4 text-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+          </div>
+        )}
       </div>
     </div>
   );
