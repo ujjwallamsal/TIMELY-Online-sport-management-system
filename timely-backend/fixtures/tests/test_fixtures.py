@@ -7,7 +7,7 @@ from rest_framework import status
 from datetime import timedelta
 
 from events.models import Event
-from teams.models import Team
+from api.models import Team
 from venues.models import Venue
 from .models import Fixture, FixtureEntry
 from .services.generator import generate_round_robin, generate_knockout

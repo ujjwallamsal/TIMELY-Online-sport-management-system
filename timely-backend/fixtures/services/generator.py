@@ -6,7 +6,7 @@ import random
 import math
 
 from events.models import Event
-from teams.models import Team
+from api.models import Team
 from venues.models import Venue
 from django.contrib.auth import get_user_model
 

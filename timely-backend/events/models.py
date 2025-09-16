@@ -8,30 +8,27 @@ from django.core.exceptions import ValidationError
 class Event(models.Model):
     """Event model for sports events management"""
     
-    class LifecycleStatus(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        PUBLISHED = "published", "Published"
-        CANCELLED = "cancelled", "Cancelled"
+    class Status(models.TextChoices):
+        UPCOMING = "UPCOMING", "Upcoming"
+        ONGOING = "ONGOING", "Ongoing"
+        COMPLETED = "COMPLETED", "Completed"
+        CANCELLED = "CANCELLED", "Cancelled"
     
     # Basic Information
     name = models.CharField(max_length=200, help_text="Event name")
-    sport = models.CharField(max_length=100, help_text="Sport type")
+    sport = models.ForeignKey(
+        'api.Sport',
+        on_delete=models.CASCADE,
+        related_name='events',
+        help_text="Sport type"
+    )
     description = models.TextField(blank=True, help_text="Event description")
     
     # Dates and Times
-    start_datetime = models.DateTimeField(help_text="Event start date and time")
-    end_datetime = models.DateTimeField(help_text="Event end date and time")
-    registration_open_at = models.DateTimeField(
-        null=True, blank=True, 
-        help_text="When registration opens"
-    )
-    registration_close_at = models.DateTimeField(
-        null=True, blank=True,
-        help_text="When registration closes"
-    )
+    start_date = models.DateTimeField(help_text="Event start date and time")
+    end_date = models.DateTimeField(help_text="Event end date and time")
     
     # Location and Capacity
-    location = models.CharField(max_length=200, help_text="Event location")
     venue = models.ForeignKey(
         'venues.Venue',
         on_delete=models.SET_NULL,
@@ -40,26 +37,19 @@ class Event(models.Model):
         related_name="events",
         help_text="Associated venue (optional)"
     )
-    capacity = models.PositiveIntegerField(
-        default=0,
-        validators=[MinValueValidator(0)],
-        help_text="Maximum participants"
-    )
     
-    # Financial
-    fee_cents = models.PositiveIntegerField(
-        default=0,
-        validators=[MinValueValidator(0)],
-        help_text="Registration fee in cents"
+    # Eligibility and Status
+    eligibility = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Eligibility criteria (JSON)"
     )
-    
-    # Lifecycle
-    lifecycle_status = models.CharField(
+    status = models.CharField(
         max_length=20,
-        choices=LifecycleStatus.choices,
-        default=LifecycleStatus.DRAFT,
+        choices=Status.choices,
+        default=Status.UPCOMING,
         db_index=True,
-        help_text="Event lifecycle status"
+        help_text="Event status"
     )
     
     # Audit fields
@@ -78,12 +68,12 @@ class Event(models.Model):
         """Compute event phase based on current time and event dates"""
         now = timezone.now()
         
-        if self.lifecycle_status == self.LifecycleStatus.CANCELLED:
-            return "cancelled"
+        if self.status == self.Status.COMPLETED:
+            return "completed"
         
-        if now < self.start_datetime:
+        if now < self.start_date:
             return "upcoming"
-        elif now >= self.start_datetime and now <= self.end_datetime:
+        elif now >= self.start_date and now <= self.end_date:
             return "ongoing"
         else:
             return "completed"
@@ -93,19 +83,9 @@ class Event(models.Model):
         super().clean()
         
         # Validate datetime order
-        if self.start_datetime and self.end_datetime:
-            if self.start_datetime >= self.end_datetime:
-                raise ValidationError("End datetime must be after start datetime")
-        
-        # Validate registration windows
-        if self.registration_open_at and self.registration_close_at:
-            if self.registration_open_at >= self.registration_close_at:
-                raise ValidationError("Registration close must be after registration open")
-            
-            # Registration should close before or at event start (not after event starts)
-            if self.start_datetime:
-                if self.registration_close_at > self.start_datetime:
-                    raise ValidationError("Registration must close before or at event start")
+        if self.start_date and self.end_date:
+            if self.start_date >= self.end_date:
+                raise ValidationError("End date must be after start date")
     
     def save(self, *args, **kwargs):
         """Save with validation"""
@@ -113,14 +93,17 @@ class Event(models.Model):
         super().save(*args, **kwargs)
     
     def __str__(self):
-        return f"{self.name} ({self.sport})"
+        return f"{self.name} ({self.sport.name})"
     
     class Meta:
-        ordering = ['start_datetime', 'created_at']
+        ordering = ['start_date', 'created_at']
         indexes = [
-            models.Index(fields=['start_datetime']),
-            models.Index(fields=['lifecycle_status']),
-            models.Index(fields=['lifecycle_status', 'start_datetime']),
+            models.Index(fields=['start_date']),
+            models.Index(fields=['status']),
+            models.Index(fields=['status', 'start_date']),
+            models.Index(fields=['sport']),
+            models.Index(fields=['venue']),
+            models.Index(fields=['created_by']),
         ]
 
 

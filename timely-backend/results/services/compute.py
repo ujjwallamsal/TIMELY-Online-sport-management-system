@@ -5,9 +5,9 @@ from django.db.models import Q, F, Sum, Count
 from django.utils import timezone
 
 from events.models import Event
-from teams.models import Team
+from api.models import Team
 from fixtures.models import Fixture
-from ..models import Result, LeaderboardEntry, AthleteStat
+from ..models import Result, LeaderboardEntry
 
 
 class StandingsComputer:
@@ -45,15 +45,13 @@ class StandingsComputer:
                     event=self.event,
                     team_id=team_id,
                     defaults={
-                        'position': position,
-                        'points': stats['points'],
-                        'matches_played': stats['matches_played'],
-                        'wins': stats['wins'],
-                        'draws': stats['draws'],
-                        'losses': stats['losses'],
-                        'goals_for': stats['goals_for'],
-                        'goals_against': stats['goals_against'],
-                        'goal_difference': stats['goal_difference'],
+                        'pts': stats['points'],
+                        'w': stats['wins'],
+                        'd': stats['draws'],
+                        'l': stats['losses'],
+                        'gf': stats['goals_for'],
+                        'ga': stats['goals_against'],
+                        'gd': stats['goal_difference'],
                     }
                 )
                 leaderboard_entries.append(entry)
@@ -64,12 +62,13 @@ class StandingsComputer:
         """Get all teams that have participated in fixtures for this event"""
         team_ids = set()
         
-        # Get teams from fixture entries
+        # Get teams from fixtures
         fixtures = Fixture.objects.filter(event=self.event)
         for fixture in fixtures:
-            for entry in fixture.entries.all():
-                if entry.team:
-                    team_ids.add(entry.team.id)
+            if fixture.home:
+                team_ids.add(fixture.home.id)
+            if fixture.away:
+                team_ids.add(fixture.away.id)
         
         return Team.objects.filter(id__in=team_ids)
     
@@ -77,9 +76,9 @@ class StandingsComputer:
         """Calculate statistics for a specific team"""
         # Get all results for this team
         results = Result.objects.filter(
-            Q(fixture__entries__team=team) & 
-            Q(fixture__event=self.event) &
-            Q(status=Result.Status.FINAL)
+            Q(fixture__home=team) | Q(fixture__away=team),
+            fixture__event=self.event,
+            finalized_at__isnull=False
         ).select_related('fixture')
         
         stats = {
@@ -97,14 +96,14 @@ class StandingsComputer:
             stats['matches_played'] += 1
             
             # Determine if team was home or away
-            is_home = result.fixture.home_team == team
+            is_home = result.fixture.home == team
             
             if is_home:
-                team_score = result.score_home
-                opponent_score = result.score_away
+                team_score = result.home_score
+                opponent_score = result.away_score
             else:
-                team_score = result.score_away
-                opponent_score = result.score_home
+                team_score = result.away_score
+                opponent_score = result.home_score
             
             stats['goals_for'] += team_score
             stats['goals_against'] += opponent_score
@@ -148,55 +147,6 @@ class StandingsComputer:
         return self.compute_standings()
 
 
-class AthleteStatsComputer:
-    """Service for computing individual athlete statistics"""
-    
-    def __init__(self, event: Event):
-        self.event = event
-    
-    def compute_athlete_rankings(self, metrics_key: str = 'score') -> List[AthleteStat]:
-        """
-        Compute athlete rankings based on a specific metric.
-        Higher values are better (e.g., score, distance, etc.)
-        """
-        with transaction.atomic():
-            # Get all athlete stats for this event
-            athlete_stats = AthleteStat.objects.filter(event=self.event)
-            
-            # Sort by the specified metric (descending)
-            sorted_stats = sorted(
-                athlete_stats,
-                key=lambda x: x.metrics.get(metrics_key, 0),
-                reverse=True
-            )
-            
-            # Update positions
-            for position, stat in enumerate(sorted_stats, 1):
-                stat.position = position
-                stat.save()
-            
-            return sorted_stats
-    
-    def compute_athlete_rankings_by_time(self, metrics_key: str = 'time') -> List[AthleteStat]:
-        """
-        Compute athlete rankings based on time (lower is better).
-        For sports like running, swimming, etc.
-        """
-        with transaction.atomic():
-            athlete_stats = AthleteStat.objects.filter(event=self.event)
-            
-            # Sort by time (ascending - lower is better)
-            sorted_stats = sorted(
-                athlete_stats,
-                key=lambda x: x.metrics.get(metrics_key, float('inf'))
-            )
-            
-            # Update positions
-            for position, stat in enumerate(sorted_stats, 1):
-                stat.position = position
-                stat.save()
-            
-            return sorted_stats
 
 
 def recompute_event_standings(event_id: int) -> List[LeaderboardEntry]:
@@ -209,14 +159,6 @@ def recompute_event_standings(event_id: int) -> List[LeaderboardEntry]:
         return []
 
 
-def recompute_athlete_rankings(event_id: int, metrics_key: str = 'score') -> List[AthleteStat]:
-    """Convenience function to recompute athlete rankings for an event"""
-    try:
-        event = Event.objects.get(id=event_id)
-        computer = AthleteStatsComputer(event)
-        return computer.compute_athlete_rankings(metrics_key)
-    except Event.DoesNotExist:
-        return []
 
 
 def get_leaderboard_summary(event_id: int) -> Dict:
@@ -232,16 +174,15 @@ def get_leaderboard_summary(event_id: int) -> Dict:
             'total_matches': sum(entry.matches_played for entry in entries) // 2,  # Divide by 2 since each match is counted twice
             'leaderboard': [
                 {
-                    'position': entry.position,
                     'team_name': entry.team.name,
-                    'points': entry.points,
+                    'pts': entry.pts,
                     'matches_played': entry.matches_played,
-                    'wins': entry.wins,
-                    'draws': entry.draws,
-                    'losses': entry.losses,
-                    'goals_for': entry.goals_for,
-                    'goals_against': entry.goals_against,
-                    'goal_difference': entry.goal_difference,
+                    'w': entry.w,
+                    'd': entry.d,
+                    'l': entry.l,
+                    'gf': entry.gf,
+                    'ga': entry.ga,
+                    'gd': entry.gd,
                     'win_percentage': round(entry.win_percentage, 1),
                     'points_per_match': round(entry.points_per_match, 2),
                 }

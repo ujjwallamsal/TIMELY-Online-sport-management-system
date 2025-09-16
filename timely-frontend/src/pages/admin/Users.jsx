@@ -285,10 +285,15 @@ const Users = () => {
           icon="⚠️"
           title="Failed to load users"
           message={error}
-          action={{
-            label: "Try Again",
-            onClick: fetchUsers
-          }}
+          action={
+            <button
+              onClick={fetchUsers}
+              className="btn btn-primary"
+              aria-label="Try again"
+            >
+              Try Again
+            </button>
+          }
         />
       </div>
     );
@@ -623,10 +628,15 @@ const Users = () => {
             icon="👥"
             title="No users found"
             message="Get started by creating your first user."
-            action={{
-              label: "Create User",
-              onClick: () => setShowCreateForm(true)
-            }}
+            action={
+              <button
+                onClick={() => setShowCreateForm(true)}
+                className="btn btn-primary"
+                aria-label="Create user"
+              >
+                Create User
+              </button>
+            }
           />
         )}
       </div>

@@ -41,9 +41,9 @@ INSTALLED_APPS = [
     "corsheaders",
     
     # First-party (Timely) - remaining apps
+    "api",
     "venues",
     "events",
-    "teams",
     "registrations",
     "fixtures",
     "tickets",

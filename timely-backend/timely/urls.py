@@ -81,12 +81,14 @@ urlpatterns = [
     # Public spectator portal endpoints
     path("api/public/", include("public.urls")),
     
-    # API routes - Clean, single-level paths
+    # API v1 - Unified router
+    path("api/v1/", include("api.v1.urls")),
+    
+    # Legacy API routes - Keep for backward compatibility
     path("api/accounts/", include("accounts.urls")),
     path("api/admin/", include("accounts.admin_api.urls")),
     path("api/events/", include("events.urls")),
     path("api/venues/", include("venues.urls")),
-    path("api/teams/", include("teams.urls")),
     path("api/registrations/", include("registrations.urls")),
     path("api/fixtures/", include("fixtures.urls")),
     path("api/results/", include("results.urls")),

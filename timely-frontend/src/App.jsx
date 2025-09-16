@@ -65,12 +65,6 @@ export default function App() {
         <Route path="/results" element={<SpectatorResults />} />
         <Route path="/news" element={<News />} />
         
-        {/* Legacy/Admin pages */}
-        <Route path="/admin/events" element={<PrivateRoute><EventsList /></PrivateRoute>} />
-        <Route path="/admin/events/:id" element={<PrivateRoute><EventDetail /></PrivateRoute>} />
-        <Route path="/admin/events/:id/register" element={<PrivateRoute><EventRegistration /></PrivateRoute>} />
-        <Route path="/admin/matches" element={<PrivateRoute><Matches /></PrivateRoute>} />
-        <Route path="/admin/venues" element={<PrivateRoute><Venues /></PrivateRoute>} />
 
         {/* Auth pages */}
         <Route path="/login" element={<Login />} />

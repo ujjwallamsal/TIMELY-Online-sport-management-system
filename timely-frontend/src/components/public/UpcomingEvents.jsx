@@ -112,10 +112,15 @@ const UpcomingEvents = () => {
               icon={CalendarIcon}
               title="Unable to load events"
               description={error}
-              action={{
-                label: "Try again",
-                onClick: fetchEvents
-              }}
+              action={
+                <button
+                  onClick={fetchEvents}
+                  className="btn btn-primary"
+                  aria-label="Try again"
+                >
+                  Try again
+                </button>
+              }
             />
           </div>
         </div>
@@ -132,10 +137,15 @@ const UpcomingEvents = () => {
               icon={CalendarIcon}
               title="No upcoming events"
               description="Check back soon for new events and competitions."
-              action={{
-                label: "View all events",
-                onClick: () => window.location.href = '/events'
-              }}
+              action={
+                <button
+                  onClick={() => window.location.href = '/events'}
+                  className="btn btn-primary"
+                  aria-label="View all events"
+                >
+                  View all events
+                </button>
+              }
             />
           </div>
         </div>

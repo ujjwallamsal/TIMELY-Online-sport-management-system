@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     ResultViewSet, FixtureResultView, EventResultsView, EventRecentResultsView,
-    EventLeaderboardView, LeaderboardViewSet, AthleteStatViewSet, RecomputeStandingsView
+    EventLeaderboardView, LeaderboardViewSet, RecomputeStandingsView
 )
 from .public_views import PublicResultViewSet
 
@@ -10,7 +10,6 @@ from .public_views import PublicResultViewSet
 results_router = DefaultRouter()
 results_router.register(r"", ResultViewSet, basename="results")
 results_router.register(r"leaderboard", LeaderboardViewSet, basename="leaderboard")
-results_router.register(r"athlete-stats", AthleteStatViewSet, basename="athlete-stats")
 
 # Public router
 public_router = DefaultRouter()

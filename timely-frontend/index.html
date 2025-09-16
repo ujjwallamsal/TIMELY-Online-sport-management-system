@@ -1,12 +1,131 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Timely</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timely - Sports Event Management</title>
+    <link rel="stylesheet" href="./src/styles/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Loading state -->
+        <div id="loading-screen" class="loading-screen">
+            <div class="loading-spinner"></div>
+            <p>Loading Timely...</p>
+        </div>
+        
+        <!-- Main application will be rendered here -->
+        <div id="main-app" class="main-app hidden">
+            <!-- Sidebar -->
+            <aside id="sidebar" class="sidebar">
+                <div class="sidebar-header">
+                    <div class="brand">
+                        <div class="brand-icon">T</div>
+                        <span class="brand-text">Timely</span>
+                    </div>
+                    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                
+                <nav id="sidebar-nav" class="sidebar-nav">
+                    <!-- Navigation items will be populated by JS -->
+                </nav>
+                
+                <div class="sidebar-footer">
+                    <div class="user-info">
+                        <div class="user-avatar">
+                            <span id="user-initials">U</span>
+                        </div>
+                        <div class="user-details">
+                            <div id="user-name" class="user-name">User Name</div>
+                            <div id="user-role" class="user-role">Role</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- Main content area -->
+            <div class="main-content">
+                <!-- Top bar -->
+                <header id="topbar" class="topbar">
+                    <div class="topbar-left">
+                        <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle mobile menu">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                <line x1="3" y1="18" x2="21" y2="18"></line>
+                            </svg>
+                        </button>
+                        
+                        <div class="search-container">
+                            <div class="search-input-wrapper">
+                                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <path d="m21 21-4.35-4.35"></path>
+                                </svg>
+                                <input type="text" id="global-search" placeholder="Search events, teams, venues..." class="search-input">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="topbar-right">
+                        <!-- Notifications -->
+                        <div class="notification-container">
+                            <button id="notifications-toggle" class="notification-button" aria-label="Notifications">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                                </svg>
+                                <span id="notification-count" class="notification-badge hidden">0</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Theme toggle -->
+                        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
+                            <svg id="theme-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="5"></circle>
+                                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                            </svg>
+                        </button>
+                        
+                        <!-- User menu -->
+                        <div class="user-menu-container">
+                            <button id="user-menu-toggle" class="user-menu-button" aria-label="User menu">
+                                <div class="user-avatar-small">
+                                    <span id="user-initials-small">U</span>
+                                </div>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6,9 12,15 18,9"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </header>
+                
+                <!-- Page content -->
+                <main id="page-content" class="page-content">
+                    <!-- Content will be dynamically loaded here -->
+                </main>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modals and overlays -->
+    <div id="modal-overlay" class="modal-overlay hidden"></div>
+    <div id="modal-container" class="modal-container"></div>
+    
+    <!-- Toast notifications -->
+    <div id="toast-container" class="toast-container"></div>
+    
+    <!-- Scripts -->
+    <script type="module" src="./src/main.js"></script>
+</body>
 </html>

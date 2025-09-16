@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 
 from .models import Fixture, FixtureEntry
 from venues.models import Venue
-from teams.models import Team
+from api.models import Team
 from registrations.models import Registration
 
 

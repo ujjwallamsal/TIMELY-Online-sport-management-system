@@ -10,7 +10,7 @@ from accounts.models import User
 from registrations.models import Registration, RegistrationDocument
 from tickets.models import TicketOrder, Ticket
 from results.models import Result, LeaderboardEntry, AthleteStat
-from teams.models import Team, TeamMember, TeamEventEntry
+from api.models import Team, TeamMember
 from notifications.models import Notification
 from content.models import News, Gallery
 
@@ -42,7 +42,7 @@ def event_saved(sender, instance, created, **kwargs):
         'id': instance.id,
         'name': instance.name,
         'sport': instance.sport,
-        'lifecycle_status': instance.lifecycle_status,
+        'status': instance.status,
         'start_datetime': instance.start_datetime.isoformat(),
         'end_datetime': instance.end_datetime.isoformat(),
         'phase': instance.phase,
@@ -57,7 +57,7 @@ def event_saved(sender, instance, created, **kwargs):
     send_realtime_update(f'events:org:{instance.created_by_id}', 'event_update', data)
     
     # Send to public group if published
-    if instance.lifecycle_status == Event.LifecycleStatus.PUBLISHED:
+    if instance.status == Event.Status.UPCOMING:
         send_realtime_update('events:public', 'event_update', data)
 
 
@@ -495,7 +495,7 @@ def gallery_saved(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Event)
 def event_stats_updated(sender, instance, created, **kwargs):
     """Send stats update when event count changes"""
-    if instance.lifecycle_status == Event.LifecycleStatus.PUBLISHED:
+    if instance.status == Event.Status.UPCOMING:
         send_realtime_update('content:public', 'stats_updated', {
             'type': 'event_published',
             'event_id': instance.id,

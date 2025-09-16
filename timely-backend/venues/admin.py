@@ -3,8 +3,8 @@ from .models import Venue, VenueSlot
 
 @admin.register(Venue)
 class VenueAdmin(admin.ModelAdmin):
-    list_display = ["name", "address", "capacity", "timezone", "created_by"]
-    list_filter = ["timezone", "capacity"]
+    list_display = ["name", "address", "capacity", "facilities"]
+    list_filter = ["capacity"]
     search_fields = ["name", "address"]
     ordering = ["name"]
     fieldsets = (
@@ -12,7 +12,7 @@ class VenueAdmin(admin.ModelAdmin):
             "fields": ("name", "address", "capacity")
         }),
         ("Details", {
-            "fields": ("facilities", "timezone", "created_by")
+            "fields": ("facilities",)
         }),
     )
 

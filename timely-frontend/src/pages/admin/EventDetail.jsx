@@ -170,10 +170,15 @@ const EventDetail = () => {
           icon="⚠️"
           title="Failed to load event"
           message={error}
-          action={{
-            label: "Try Again",
-            onClick: fetchEvent
-          }}
+          action={
+            <button
+              onClick={fetchEvent}
+              className="btn btn-primary"
+              aria-label="Try again"
+            >
+              Try Again
+            </button>
+          }
         />
       </div>
     );
@@ -186,10 +191,15 @@ const EventDetail = () => {
           icon="📅"
           title="Event not found"
           message="The event you're looking for doesn't exist or has been removed."
-          action={{
-            label: "Back to Events",
-            onClick: () => navigate('/admin/events')
-          }}
+          action={
+            <button
+              onClick={() => navigate('/admin/events')}
+              className="btn btn-primary"
+              aria-label="Back to events"
+            >
+              Back to Events
+            </button>
+          }
         />
       </div>
     );

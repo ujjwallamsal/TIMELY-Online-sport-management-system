@@ -182,10 +182,15 @@ const EventsManage = () => {
           icon="⚠️"
           title="Failed to load events"
           message={error}
-          action={{
-            label: "Try Again",
-            onClick: fetchEvents
-          }}
+          action={
+            <button
+              onClick={fetchEvents}
+              className="btn btn-primary"
+              aria-label="Try again"
+            >
+              Try Again
+            </button>
+          }
         />
       </div>
     );
@@ -378,10 +383,15 @@ const EventsManage = () => {
             icon="📅"
             title="No events found"
             message="Get started by creating your first event."
-            action={{
-              label: "Create Event",
-              onClick: () => window.location.href = '/admin/events/create'
-            }}
+            action={
+              <button
+                onClick={() => window.location.href = '/admin/events/create'}
+                className="btn btn-primary"
+                aria-label="Create event"
+              >
+                Create Event
+              </button>
+            }
           />
         )}
       </div>

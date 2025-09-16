@@ -7,7 +7,7 @@ def approve_registrations(modeladmin, request, queryset):
 	count = 0
 	for reg in queryset.select_related("event"):
 		if reg.status == Registration.Status.PENDING:
-			reg.status = Registration.Status.CONFIRMED
+			reg.status = Registration.Status.APPROVED
 			reg.decided_by = request.user
 			reg.decided_at = timezone.now()
 			reg.save()
@@ -22,16 +22,16 @@ def reject_registrations(modeladmin, request, queryset):
 @admin.register(Registration)
 class RegistrationAdmin(admin.ModelAdmin):
 	list_display = [
-		"event", "user", "type", "status", "payment_status", "submitted_at"
+		"event", "applicant", "type", "status", "submitted_at"
 	]
-	list_filter = ["status", "type", "payment_status", "submitted_at"]
-	search_fields = ["event__name", "user__email", "team_name"]
+	list_filter = ["status", "type", "submitted_at"]
+	search_fields = ["event__name", "applicant__email", "team__name"]
 	date_hierarchy = "submitted_at"
 	ordering = ["-submitted_at"]
 	actions = [approve_registrations, reject_registrations]
 
 	def get_queryset(self, request):
-		qs = super().get_queryset(request).select_related("event", "user")
+		qs = super().get_queryset(request).select_related("event", "applicant")
 		if request.user.is_superuser:
 			return qs
 		if request.user.is_staff:

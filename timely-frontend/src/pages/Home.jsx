@@ -171,11 +171,16 @@ const Home = () => {
         <EmptyState
           icon="⚠️"
           title="Failed to load data"
-          message={error}
-          action={{
-            label: "Try Again",
-            onClick: loadHomeData
-          }}
+          description={error}
+          action={
+            <button
+              onClick={loadHomeData}
+              className="btn btn-primary"
+              aria-label="Try again"
+            >
+              Try Again
+            </button>
+          }
         />
       </div>
     );

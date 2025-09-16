@@ -17,10 +17,10 @@ class EventViewSet(viewsets.ModelViewSet):
     
     queryset = Event.objects.select_related('created_by').prefetch_related('divisions').all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['sport', 'lifecycle_status']
+    filterset_fields = ['sport', 'status']
     search_fields = ['name', 'description', 'location']
-    ordering_fields = ['start_datetime', 'created_at', 'name']
-    ordering = ['start_datetime', 'created_at']
+    ordering_fields = ['start_date', 'created_at', 'name']
+    ordering = ['start_date', 'created_at']
     # Use default pagination from settings
     
     def get_serializer_class(self):
@@ -48,7 +48,7 @@ class EventViewSet(viewsets.ModelViewSet):
         
         # Public list defaults to published only
         if self.action == 'list' and not self.request.user.is_authenticated:
-            queryset = queryset.filter(lifecycle_status=Event.LifecycleStatus.PUBLISHED)
+            queryset = queryset.filter(status=Event.Status.UPCOMING)
         elif self.action == 'list' and self.request.user.is_authenticated:
             # Admin sees all events, Organizer sees their own + published, others see published only
             if self.request.user.role == 'ADMIN':
@@ -57,12 +57,12 @@ class EventViewSet(viewsets.ModelViewSet):
             elif self.request.user.role == 'ORGANIZER':
                 # Organizer sees their own events + published events
                 queryset = queryset.filter(
-                    Q(lifecycle_status=Event.LifecycleStatus.PUBLISHED) |
+                    Q(status=Event.Status.UPCOMING) |
                     Q(created_by=self.request.user)
                 )
             else:
                 # Other users see only published events
-                queryset = queryset.filter(lifecycle_status=Event.LifecycleStatus.PUBLISHED)
+                queryset = queryset.filter(status=Event.Status.UPCOMING)
         
         # Apply filters
         sport = self.request.query_params.get('sport')
@@ -73,15 +73,15 @@ class EventViewSet(viewsets.ModelViewSet):
         status_filter = self.request.query_params.get('status')
         if status_filter and self.request.user.is_authenticated:
             if self.request.user.role in ['ADMIN', 'ORGANIZER']:
-                queryset = queryset.filter(lifecycle_status=status_filter)
+                queryset = queryset.filter(status=status_filter)
         
         # Date range filter
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
         if date_from:
-            queryset = queryset.filter(start_datetime__gte=date_from)
+            queryset = queryset.filter(start_date__gte=date_from)
         if date_to:
-            queryset = queryset.filter(end_datetime__lte=date_to)
+            queryset = queryset.filter(end_date__lte=date_to)
         
         # Search query
         q = self.request.query_params.get('q')
@@ -103,13 +103,13 @@ class EventViewSet(viewsets.ModelViewSet):
         """Publish a draft event"""
         event = self.get_object()
         
-        if event.lifecycle_status != Event.LifecycleStatus.DRAFT:
+        if event.status != Event.Status.UPCOMING:
             return Response(
                 {"detail": "Only draft events can be published"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        event.lifecycle_status = Event.LifecycleStatus.PUBLISHED
+        event.status = Event.Status.UPCOMING
         event.save()
         
         # Send realtime update
@@ -122,13 +122,13 @@ class EventViewSet(viewsets.ModelViewSet):
         """Unpublish an event (return to draft)"""
         event = self.get_object()
         
-        if event.lifecycle_status != Event.LifecycleStatus.PUBLISHED:
+        if event.status != Event.Status.UPCOMING:
             return Response(
                 {"detail": "Only published events can be unpublished"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        event.lifecycle_status = Event.LifecycleStatus.DRAFT
+        event.status = Event.Status.UPCOMING
         event.save()
         
         # Send realtime update
@@ -141,7 +141,7 @@ class EventViewSet(viewsets.ModelViewSet):
         """Cancel an event"""
         event = self.get_object()
         
-        if event.lifecycle_status == Event.LifecycleStatus.CANCELLED:
+        if event.status == Event.Status.CANCELLED:
             return Response(
                 {"detail": "Event is already cancelled"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -150,7 +150,7 @@ class EventViewSet(viewsets.ModelViewSet):
         serializer = EventLifecycleActionSerializer(data=request.data)
         if serializer.is_valid():
             reason = serializer.validated_data.get('reason', '')
-            event.lifecycle_status = Event.LifecycleStatus.CANCELLED
+            event.status = Event.Status.CANCELLED
             event.save()
             
             # Send realtime update
@@ -202,9 +202,9 @@ class EventViewSet(viewsets.ModelViewSet):
                     'data': {
                         'id': event.id,
                         'name': event.name,
-                        'lifecycle_status': event.lifecycle_status,
-                        'start_datetime': event.start_datetime.isoformat(),
-                        'end_datetime': event.end_datetime.isoformat(),
+                        'status': event.status,
+                        'start_date': event.start_date.isoformat(),
+                        'end_date': event.end_date.isoformat(),
                         'phase': event.phase,
                     }
                 }
@@ -224,7 +224,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 )
                 
                 # Send to public group if published
-                if event.lifecycle_status == Event.LifecycleStatus.PUBLISHED:
+                if event.status == Event.Status.UPCOMING:
                     async_to_sync(channel_layer.group_send)(
                         'events:public',
                         payload

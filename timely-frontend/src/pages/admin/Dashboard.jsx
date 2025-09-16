@@ -1,302 +1,288 @@
 // src/pages/admin/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { Users, Calendar, Ticket, DollarSign, Activity, Server, Database, Globe } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { getStats, getRevenue, getUserDistribution, getRecentEvents, getRecentRegistrations, getHealth } from '../../config/endpoints.js';
-import api from '../../lib/api.js';
-import useSocket from '../../hooks/useSocket.js';
-import StatCard from '../../components/admin/StatCard.jsx';
-import RevenueChart from '../../components/admin/RevenueChart.jsx';
-import UserPie from '../../components/admin/UserPie.jsx';
-import RecentEvents from '../../components/admin/RecentEvents.jsx';
-import RecentRegistrations from '../../components/admin/RecentRegistrations.jsx';
-import Skeleton from '../../components/Skeleton.jsx';
-import ErrorBand from '../../components/ui/ErrorBand.jsx';
+import { Link } from 'react-router-dom';
+import { 
+  Calendar, 
+  Users, 
+  CheckCircle, 
+  Clock, 
+  TrendingUp,
+  AlertCircle,
+  Plus
+} from 'lucide-react';
 
 const Dashboard = () => {
-  const { user } = useAuth();
-  const [stats, setStats] = useState(null);
-  const [revenueData, setRevenueData] = useState([]);
-  const [userDistribution, setUserDistribution] = useState([]);
-  const [recentEvents, setRecentEvents] = useState([]);
-  const [recentRegistrations, setRecentRegistrations] = useState([]);
-  const [health, setHealth] = useState(null);
-  
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [revenueRange, setRevenueRange] = useState('year');
-
-  // WebSocket connection for real-time updates
-  const { isConnected, lastMessage } = useSocket('/ws/admin/', {
-    onMessage: (data) => {
-      console.log('Dashboard real-time update:', data);
-      
-      // Handle different types of real-time updates
-      switch (data.type) {
-        case 'event_update':
-          if (data.data.action === 'created' || data.data.action === 'updated' || data.data.action === 'published') {
-            fetchRecentEvents();
-          }
-          break;
-        case 'registration_update':
-          if (data.data.action === 'created' || data.data.action === 'approved' || data.data.action === 'rejected') {
-            fetchRecentRegistrations();
-          }
-          break;
-        case 'stats_updated':
-          fetchStats();
-          break;
-        case 'revenue_updated':
-          fetchRevenue(revenueRange);
-          break;
-        default:
-          break;
-      }
-    },
-    onPolling: () => {
-      // Polling fallback - refresh all data
-      fetchAllData();
-    }
+  const [stats, setStats] = useState({
+    upcomingEvents: 0,
+    matchesToday: 0,
+    pendingApprovals: 0,
+    rescheduleRequests: 0
   });
 
-  const fetchStats = async () => {
-    try {
-      console.log('Fetching stats...');
-      const response = await api.get('/api/admin/kpis/');
-      console.log('Stats response:', response);
-      const data = response.data;
-      
-      // Use the real API data
-      setStats(data);
-    } catch (err) {
-      console.error('Error fetching stats:', err);
-      // Set empty stats instead of mock data
-      setStats({
-        total_users: 0,
-        active_events: 0,
-        tickets_sold: 0,
-        total_revenue: 0,
-        user_trend: 0,
-        event_trend: 0,
-        ticket_trend: 0,
-        revenue_trend: 0
-      });
-    }
-  };
-
-  const fetchRevenue = async (range) => {
-    try {
-      // For now, set empty revenue data since we don't have a revenue endpoint
-      setRevenueData([]);
-    } catch (err) {
-      console.error('Error fetching revenue data:', err);
-      setRevenueData([]);
-    }
-  };
-
-  const fetchUserDistribution = async () => {
-    try {
-      // For now, set empty user distribution data since we don't have this endpoint
-      setUserDistribution([]);
-    } catch (err) {
-      console.error('Error fetching user distribution:', err);
-      setUserDistribution([]);
-    }
-  };
-
-  const fetchRecentEvents = async () => {
-    try {
-      // Use the actual events API
-      const response = await api.get('/api/events/?ordering=-created_at&page_size=5');
-      const data = response.data;
-      
-      // Use real data from API
-      setRecentEvents(data.results || []);
-    } catch (err) {
-      console.error('Error fetching recent events:', err);
-      setRecentEvents([]);
-    }
-  };
-
-  const fetchRecentRegistrations = async () => {
-    try {
-      // Use the actual registrations API
-      const response = await api.get('/api/registrations/?ordering=-created_at&page_size=5');
-      const data = response.data;
-      
-      // Use real data from API
-      setRecentRegistrations(data.results || []);
-    } catch (err) {
-      console.error('Error fetching recent registrations:', err);
-      setRecentRegistrations([]);
-    }
-  };
-
-  const fetchHealth = async () => {
-    try {
-      // Use the correct health endpoint
-      const response = await api.get('/health/');
-      const data = response.data;
-      
-      setHealth(data);
-    } catch (err) {
-      console.error('Error fetching health data:', err);
-      // Use mock data as fallback
-      const mockHealth = {
-        status: 'ok',
-        database: 'ok',
-        timestamp: new Date().toISOString()
-      };
-      setHealth(mockHealth);
-    }
-  };
-
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      await Promise.all([
-        fetchStats(),
-        fetchRevenue(revenueRange),
-        fetchUserDistribution(),
-        fetchRecentEvents(),
-        fetchRecentRegistrations(),
-        fetchHealth()
-      ]);
-    } catch (err) {
-      console.error('Error fetching dashboard data:', err);
-      setError('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [todaysFixtures, setTodaysFixtures] = useState([]);
+  const [pendingRegistrations, setPendingRegistrations] = useState([]);
 
   useEffect(() => {
-    fetchAllData();
+    // Fetch dashboard data
+    fetchDashboardData();
   }, []);
 
-  useEffect(() => {
-    fetchRevenue(revenueRange);
-  }, [revenueRange]);
+  const fetchDashboardData = async () => {
+    try {
+      // Mock data for now - replace with actual API calls
+      setStats({
+        upcomingEvents: 12,
+        matchesToday: 8,
+        pendingApprovals: 23,
+        rescheduleRequests: 3
+      });
 
-  const handleRetry = () => {
-    fetchAllData();
+      setTodaysFixtures([
+        {
+          id: 1,
+          event: 'Basketball Championship',
+          home: 'Team Alpha',
+          away: 'Team Beta',
+          venue: 'Sports Center',
+          start: '14:00',
+          status: 'SCHEDULED'
+        },
+        {
+          id: 2,
+          event: 'Soccer League',
+          home: 'Team Gamma',
+          away: 'Team Delta',
+          venue: 'Field A',
+          start: '16:30',
+          status: 'LIVE'
+        }
+      ]);
+
+      setPendingRegistrations([
+        {
+          id: 1,
+          applicant: 'John Doe',
+          type: 'ATHLETE',
+          event: 'Basketball Championship',
+          submitted: '2024-01-15'
+        },
+        {
+          id: 2,
+          applicant: 'Team Eagles',
+          type: 'TEAM',
+          event: 'Soccer League',
+          submitted: '2024-01-14'
+        }
+      ]);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="mb-8">
-          <Skeleton type="text" className="h-8 w-48 mb-2" />
-          <Skeleton type="text" className="h-4 w-96" />
+  const StatCard = ({ title, value, icon: Icon, color, trend }) => (
+    <div className="bg-white rounded-lg shadow p-6">
+      <div className="flex items-center">
+        <div className={`p-3 rounded-full ${color}`}>
+          <Icon className="h-6 w-6 text-white" />
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} type="card" className="h-32" />
-          ))}
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Skeleton type="card" className="h-80" />
-          <Skeleton type="card" className="h-80" />
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Skeleton type="card" className="h-96" />
-          <Skeleton type="card" className="h-96" />
+        <div className="ml-4">
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className="text-2xl font-semibold text-gray-900">{value}</p>
+          {trend && (
+            <div className="flex items-center mt-1">
+              <TrendingUp className="h-4 w-4 text-green-500" />
+              <span className="text-sm text-green-600 ml-1">{trend}</span>
+            </div>
+          )}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (error) {
-    return (
-      <div className="p-6">
-        <ErrorBand message={error} onRetry={handleRetry} />
-      </div>
-    );
-  }
+  const FixtureRow = ({ fixture }) => (
+    <tr className="hover:bg-gray-50">
+      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+        {fixture.event}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        {fixture.home}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        {fixture.away}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        {fixture.venue}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        {fixture.start}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+          fixture.status === 'LIVE' 
+            ? 'bg-red-100 text-red-800' 
+            : 'bg-green-100 text-green-800'
+        }`}>
+          {fixture.status}
+        </span>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+        <div className="flex space-x-2">
+          <button className="text-blue-600 hover:text-blue-900">
+            Enter Result
+          </button>
+          <button className="text-gray-600 hover:text-gray-900">
+            Reschedule
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+
+  const RegistrationRow = ({ registration }) => (
+    <tr className="hover:bg-gray-50">
+      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+        {registration.applicant}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        {registration.type}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        {registration.event}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        {registration.submitted}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+        <div className="flex space-x-2">
+          <button className="text-green-600 hover:text-green-900">
+            Approve
+          </button>
+          <button className="text-red-600 hover:text-red-900">
+            Reject
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
 
   return (
-    <div className="p-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-2 text-gray-600">
-          Welcome back, {user?.first_name || user?.email}! Here's what's happening with your platform.
-        </p>
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <div className="flex space-x-3">
+          <Link
+            to="/admin/events/new"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Event
+          </Link>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
-          title="Total Users"
-          value={stats?.total_users || 0}
-          trend={stats?.user_trend ? { value: stats.user_trend, isPositive: stats.user_trend > 0 } : undefined}
-          icon={<Users className="h-6 w-6" />}
+          title="Upcoming Events"
+          value={stats.upcomingEvents}
+          icon={Calendar}
+          color="bg-blue-500"
+          trend="+12%"
         />
         <StatCard
-          title="Active Events"
-          value={stats?.active_events || 0}
-          trend={stats?.event_trend ? { value: stats.event_trend, isPositive: stats.event_trend > 0 } : undefined}
-          icon={<Calendar className="h-6 w-6" />}
+          title="Matches Today"
+          value={stats.matchesToday}
+          icon={Clock}
+          color="bg-green-500"
         />
         <StatCard
-          title="Tickets Sold"
-          value={stats?.tickets_sold || 0}
-          trend={stats?.ticket_trend ? { value: stats.ticket_trend, isPositive: stats.ticket_trend > 0 } : undefined}
-          icon={<Ticket className="h-6 w-6" />}
+          title="Pending Approvals"
+          value={stats.pendingApprovals}
+          icon={AlertCircle}
+          color="bg-yellow-500"
         />
         <StatCard
-          title="Total Revenue"
-          value={stats?.total_revenue || 0}
-          trend={stats?.revenue_trend ? { value: stats.revenue_trend, isPositive: stats.revenue_trend > 0 } : undefined}
-          icon={<DollarSign className="h-6 w-6" />}
+          title="Reschedule Requests"
+          value={stats.rescheduleRequests}
+          icon={CheckCircle}
+          color="bg-purple-500"
         />
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <RevenueChart
-          data={revenueData}
-          onRangeChange={setRevenueRange}
-        />
-        <UserPie data={userDistribution} />
+      {/* Today's Fixtures */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">Today's Fixtures</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Event
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Home
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Away
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Venue
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Start
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {todaysFixtures.map((fixture) => (
+                <FixtureRow key={fixture.id} fixture={fixture} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <RecentEvents events={recentEvents} />
-        <RecentRegistrations registrations={recentRegistrations} />
-      </div>
-
-      {/* System Status */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">System Status</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-center">
-            <div className={`w-3 h-3 rounded-full mr-3 ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-            <span className="text-sm text-gray-600">WebSocket</span>
-            <span className={`ml-2 text-sm font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-          
-          <div className="flex items-center">
-            <div className={`w-3 h-3 rounded-full mr-3 ${health?.database === 'ok' ? 'bg-green-400' : 'bg-red-400'}`}></div>
-            <span className="text-sm text-gray-600">Database</span>
-            <span className={`ml-2 text-sm font-medium ${health?.database === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
-              {health?.database === 'ok' ? 'Healthy' : 'Unknown'}
-            </span>
-          </div>
-          
-          <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full mr-3 bg-green-400"></div>
-            <span className="text-sm text-gray-600">API</span>
-            <span className="ml-2 text-sm font-medium text-green-600">Operational</span>
-          </div>
+      {/* Pending Registrations */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">Pending Registrations</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Applicant
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Type
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Event
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Submitted
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {pendingRegistrations.map((registration) => (
+                <RegistrationRow key={registration.id} registration={registration} />
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -193,10 +193,15 @@ const Venues = () => {
           icon="⚠️"
           title="Failed to load venues"
           message={error}
-          action={{
-            label: "Try Again",
-            onClick: fetchVenues
-          }}
+          action={
+            <button
+              onClick={fetchVenues}
+              className="btn btn-primary"
+              aria-label="Try again"
+            >
+              Try Again
+            </button>
+          }
         />
       </div>
     );
@@ -454,10 +459,15 @@ const Venues = () => {
             icon="🏟️"
             title="No venues found"
             message="Get started by creating your first venue."
-            action={{
-              label: "Create Venue",
-              onClick: () => setShowCreateForm(true)
-            }}
+            action={
+              <button
+                onClick={() => setShowCreateForm(true)}
+                className="btn btn-primary"
+                aria-label="Create venue"
+              >
+                Create Venue
+              </button>
+            }
           />
         )}
       </div>

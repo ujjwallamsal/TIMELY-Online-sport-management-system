@@ -1,263 +1,218 @@
-# Timely - Sports Event Management System
+# Timely Frontend
 
-A modern, real-time sports event management platform built with Django 5 + DRF + PostgreSQL + React (Vite).
+A modern, responsive sports event management system built with vanilla JavaScript, HTML, and CSS.
 
-## 🚀 Features
+## Features
 
-### Event Management
-- **CRUD Operations**: Create, read, update, and delete events (organizers only)
-- **Event Statuses**: Draft → Published → Upcoming → Ongoing → Completed/Cancelled
-- **Validation**: Date validation, capacity limits, venue conflict detection
-- **Real-time Updates**: WebSocket integration for live event updates
+- **Clean, Professional UI**: Modern design with light/dark theme support
+- **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Role-Based Navigation**: Different views for Admin, Organizer, Coach, Athlete, and Spectator
+- **Real-time Updates**: WebSocket support for live data updates
+- **Accessibility**: WCAG 2.1 AA compliant with keyboard navigation
+- **Modular Architecture**: Clean separation of concerns with ES6 modules
 
-### User Roles & Permissions
-- **Spectator**: Browse and attend events
-- **Athlete**: Participate in sports events
-- **Coach**: Train and guide athletes
-- **Organizer**: Create and manage events
-- **Admin**: Full system access
+## Tech Stack
 
-### Modern UI/UX
-- **Tailwind CSS**: Utility-first, responsive design
-- **Mobile-First**: Optimized for all devices
-- **Accessibility**: WCAG AA compliant
-- **Real-time Indicators**: Live connection status
+- **HTML5**: Semantic markup
+- **CSS3**: Custom properties, Grid, Flexbox
+- **Vanilla JavaScript**: ES6+ modules, no frameworks
+- **WebSocket**: Real-time communication
+- **Fetch API**: HTTP requests
 
-## 🛠️ Tech Stack
-
-### Backend
-- **Django 5**: Modern Python web framework
-- **Django REST Framework**: API development
-- **PostgreSQL**: Robust database
-- **Django Channels**: WebSocket support
-- **Redis**: Message broker for real-time features
-
-### Frontend
-- **React 18**: Modern UI library
-- **Vite**: Fast build tool
-- **Tailwind CSS**: Utility-first CSS framework
-- **WebSockets**: Real-time communication
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-timely-frontend/
-├── src/
-│   ├── components/          # Reusable UI components
-│   ├── pages/              # Page components
-│   ├── context/            # React context providers
-│   ├── hooks/              # Custom React hooks
-│   ├── lib/                # API and utility functions
-│   └── utils/              # Helper functions
-├── public/                 # Static assets
-└── package.json            # Dependencies
+src/
+├── app/                 # Main application logic
+│   └── App.js          # Application orchestrator
+├── pages/              # Page components
+│   ├── BasePage.js     # Base page class
+│   ├── DashboardPage.js
+│   ├── EventsPage.js
+│   ├── LoginPage.js
+│   └── ...
+├── services/           # API and external services
+│   └── api.js         # API client
+├── utils/             # Utility functions
+│   ├── theme.js       # Theme management
+│   ├── router.js      # Hash-based routing
+│   └── notifications.js # Toast notifications
+├── config/            # Configuration
+│   └── env.js         # Environment variables
+└── styles/            # CSS styles
+    └── main.css       # Main stylesheet
 ```
 
-## 🚀 Quick Start
+## Getting Started
 
-### Prerequisites
-- Node.js 18+ 
-- npm or yarn
-- Backend API running (see backend setup)
+1. **Install Dependencies**: No build step required - just serve the files
+2. **Configure Backend**: Update `src/config/env.js` with your backend URL
+3. **Serve Files**: Use any static file server (e.g., `python -m http.server`)
+4. **Open Browser**: Navigate to `http://localhost:8000`
 
-### Frontend Setup
+## Configuration
 
-1. **Install dependencies**
-   ```bash
-   cd timely-frontend
-   npm install
-   ```
+### Environment Variables
 
-2. **Environment variables**
-   Create `.env.local` file:
-   ```env
-   VITE_API_BASE=http://127.0.0.1:8000
-   ```
+Create a `src/config/env.js` file or set `window.ENV` before loading:
 
-3. **Start development server**
-   ```bash
-   npm run dev
-   ```
-
-4. **Build for production**
-   ```bash
-   npm run build
-   ```
-
-### Backend Setup
-
-1. **Navigate to backend**
-   ```bash
-   cd timely-backend
-   ```
-
-2. **Create virtual environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Database setup**
-   ```bash
-   python manage.py migrate
-   python manage.py createsuperuser
-   ```
-
-5. **Start development server**
-   ```bash
-   python manage.py runserver
-   ```
-
-6. **Start Redis (for WebSockets)**
-   ```bash
-   redis-server
-   ```
-
-## 🔧 Key Components
-
-### Event Management
-- **EventManagement.jsx**: Organizer dashboard for CRUD operations
-- **Events.jsx**: Public event listing with filters
-- **EventDetail.jsx**: Comprehensive event information
-
-### Real-time Features
-- **useWebSocket.js**: WebSocket hook for real-time updates
-- **Event updates**: Live notifications when events change
-- **Connection status**: Visual indicators for WebSocket state
-
-### Authentication
-- **AuthContext.jsx**: User authentication and role management
-- **Protected routes**: Role-based access control
-- **JWT tokens**: Secure authentication
-
-## 🎨 Design Principles
-
-- **Mobile-First**: Responsive design starting from mobile
-- **Accessibility**: WCAG AA compliance
-- **Performance**: Optimized loading and real-time updates
-- **User Experience**: Intuitive navigation and clear feedback
-
-## 📱 Responsive Design
-
-- **Mobile**: Single-column layout, touch-friendly
-- **Tablet**: Two-column grid, optimized spacing
-- **Desktop**: Full-featured layout with sidebar
-
-## 🔒 Security Features
-
-- **Role-based access**: Granular permissions
-- **Input validation**: Client and server-side validation
-- **CSRF protection**: Django security features
-- **Secure headers**: HTTPS and security headers
-
-## 🧪 Testing
-
-```bash
-# Frontend tests
-npm run test
-
-# Backend tests
-python manage.py test
+```javascript
+window.ENV = {
+  API_BASE_URL: 'http://127.0.0.1:8000/api',
+  WS_URL: 'ws://127.0.0.1:8000/ws/',
+  DEBUG: false
+};
 ```
 
-## 🚀 Deployment
+### Backend Integration
 
-### Frontend
-```bash
-npm run build
-# Deploy dist/ folder to your hosting service
+The frontend expects a Django REST API with the following endpoints:
+
+- `GET /api/accounts/users/me/` - Current user
+- `POST /api/accounts/auth/login/` - Login
+- `GET /api/events/` - List events
+- `GET /api/venues/` - List venues
+- `GET /api/registrations/` - List registrations
+- And more...
+
+## Pages
+
+### Dashboard
+- KPI cards showing key metrics
+- Recent events, registrations, and notifications
+- Quick actions based on user role
+
+### Events
+- List view with search and filters
+- Create/edit event modals
+- Event detail view with tabs
+
+### Event Detail
+- Overview tab with event information
+- Participants tab for registrations
+- Fixtures tab for schedule
+- Results tab for scores and leaderboard
+- Media tab for photos/videos
+- Tickets tab for sales
+- Settings tab for configuration
+
+### Other Pages
+- Registrations management
+- Fixtures and scheduling
+- Results and leaderboards
+- Ticket management
+- Venue management
+- Media gallery
+- User and role management
+- Reports and analytics
+- Settings
+
+## Theming
+
+The application supports light and dark themes with CSS custom properties:
+
+```css
+:root {
+  --bg-primary: #ffffff;
+  --text-primary: #1e293b;
+  --primary: #3b82f6;
+  /* ... more variables */
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0f172a;
+  --text-primary: #f8fafc;
+  /* ... dark theme overrides */
+}
 ```
 
-### Backend
-```bash
-# Production settings
-python manage.py collectstatic
-gunicorn timely.wsgi:application
+## Routing
+
+Uses hash-based routing for deep linking:
+
+- `#/dashboard` - Dashboard
+- `#/events` - Events list
+- `#/events/123` - Event detail
+- `#/events/123/results` - Event results tab
+- `#/registrations` - Registrations
+- And more...
+
+## API Client
+
+The `API` class handles all backend communication:
+
+```javascript
+// Get events
+const events = await app.api.getEvents({ page: 1, page_size: 20 });
+
+// Create event
+const event = await app.api.createEvent({
+  name: 'New Event',
+  start_date: '2024-01-01T10:00:00Z'
+});
+
+// Upload file
+const result = await app.api.upload('/api/upload/', file);
 ```
 
-## 📊 Database Indexes
+## Notifications
 
-Optimized for performance:
-- `(status, start_date)` - Event filtering
-- `(sport_type, status)` - Sport-based queries
-- `(venue, start_date)` - Venue availability
+Toast notifications for user feedback:
 
-## 🔄 Real-time Updates
+```javascript
+// Success notification
+app.notificationManager.success('Event created successfully!');
 
-- **WebSocket events**: `event.changed`, `user.updated`
-- **Fallback**: Automatic reconnection with polling
-- **Lightweight**: Efficient message handling
+// Error notification
+app.notificationManager.error('Failed to save event');
 
-## 📊 Admin Dashboard Data & Realtime
-
-### Dashboard Features
-- **Live Statistics**: Total users, active events, tickets sold, total revenue
-- **Revenue Charts**: Interactive time series with week/month/year views
-- **User Distribution**: Pie chart showing role-based user breakdown
-- **Recent Activity**: Tables for recent events and registrations
-- **System Status**: Real-time health monitoring
-
-### Data Sources
-The dashboard automatically detects and uses the first available endpoint from these configurations:
-
-```typescript
-// Stats endpoints (tried in order)
-stats: [
-  '/api/reports/admin/stats/',
-  '/api/reports/summary/',
-  '/api/admin/stats/',
-]
-
-// Revenue data
-revenue: [
-  '/api/reports/revenue/',
-  '/api/payments/revenue/',
-]
-
-// User distribution
-userDistribution: [
-  '/api/reports/users/by-role/',
-  '/api/accounts/stats/roles/',
-]
+// Info notification
+app.notificationManager.info('Processing...');
 ```
 
-### Real-time Channels
-Dashboard subscribes to these WebSocket groups:
-- `events:admin` - Event updates
-- `registrations:admin` - Registration changes
-- `payments:admin` - Payment updates
-- `reports:admin` - Statistics updates
+## Responsive Design
 
-### Polling Fallback
-If WebSocket disconnects, dashboard automatically falls back to 15-second polling to keep data fresh.
+- **Desktop**: Full sidebar and topbar
+- **Tablet** (≤1150px): Collapsible sidebar
+- **Mobile** (≤768px): Stacked layout, full-width buttons
 
-### Endpoint Detection
-The system automatically probes multiple endpoint variants and caches the working one for the session, ensuring compatibility with different backend configurations.
+## Accessibility
 
-## 🤝 Contributing
+- Keyboard navigation support
+- ARIA labels and roles
+- Focus management
+- Screen reader friendly
+- High contrast support
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+## Browser Support
 
-## 📄 License
+- Chrome 80+
+- Firefox 75+
+- Safari 13+
+- Edge 80+
 
-This project is licensed under the MIT License.
+## Development
 
-## 🆘 Support
+### Adding New Pages
 
-For support and questions:
-- Create an issue on GitHub
-- Check the documentation
-- Contact the development team
+1. Create a new page class extending `BasePage`
+2. Add route in `App.js` setupRouting()
+3. Add navigation item in `getNavigationItems()`
 
----
+### Adding New Components
 
-**Built with ❤️ for the sports community**
+1. Create component in appropriate directory
+2. Import and use in pages
+3. Add styles to `main.css`
+
+### Styling Guidelines
+
+- Use CSS custom properties for theming
+- Follow BEM-like naming conventions
+- Use semantic HTML elements
+- Ensure responsive design
+- Test with keyboard navigation
+
+## License
+
+MIT License - see LICENSE file for details.

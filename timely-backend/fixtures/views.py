@@ -7,7 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Q
 
-from .models import Fixture, FixtureEntry
+from .models import Fixture
 from .serializers import (
     FixtureSerializer, FixtureListSerializer, FixtureGenerateSerializer,
     FixtureAcceptSerializer, FixtureRescheduleSerializer, FixtureSwapEntriesSerializer,
@@ -35,8 +35,8 @@ class FixtureViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, CanViewFixtures]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['event', 'status', 'venue']
-    ordering_fields = ['starts_at', 'round_no', 'created_at']
-    ordering = ['starts_at', 'round_no']
+    ordering_fields = ['start_at', 'round', 'created_at']
+    ordering = ['start_at', 'round']
 
     def get_serializer_class(self):
         """Return appropriate serializer based on action"""
@@ -178,31 +178,26 @@ class FixtureViewSet(viewsets.ModelViewSet):
             created_fixtures = []
             for fixture_data in fixtures_data:
                 # Convert string dates to datetime
-                starts_at = fixture_data['starts_at']
-                ends_at = fixture_data['ends_at']
-                if isinstance(starts_at, str):
-                    starts_at = timezone.datetime.fromisoformat(starts_at.replace('Z', '+00:00'))
-                if isinstance(ends_at, str):
-                    ends_at = timezone.datetime.fromisoformat(ends_at.replace('Z', '+00:00'))
+                start_at = fixture_data['start_at']
+                if isinstance(start_at, str):
+                    start_at = timezone.datetime.fromisoformat(start_at.replace('Z', '+00:00'))
                 
                 # Create fixture
                 fixture = Fixture.objects.create(
                     event=event,
-                    round_no=fixture_data['round_no'],
-                    starts_at=starts_at,
-                    ends_at=ends_at,
+                    round=fixture_data['round'],
+                    phase=fixture_data.get('phase', Fixture.Phase.RR),
+                    start_at=start_at,
                     venue_id=fixture_data.get('venue_id'),
-                    status=Fixture.Status.DRAFT
+                    status=Fixture.Status.SCHEDULED
                 )
                 
-                # Create entries
-                for entry_data in fixture_data['entries']:
-                    FixtureEntry.objects.create(
-                        fixture=fixture,
-                        side=entry_data['side'],
-                        team_id=entry_data.get('team_id'),
-                        participant_id=entry_data.get('participant_id')
-                    )
+                # Set home and away teams
+                if 'home_team_id' in fixture_data:
+                    fixture.home_id = fixture_data['home_team_id']
+                if 'away_team_id' in fixture_data:
+                    fixture.away_id = fixture_data['away_team_id']
+                fixture.save()
                 
                 created_fixtures.append(FixtureSerializer(fixture).data)
             
@@ -271,10 +266,8 @@ class FixtureViewSet(viewsets.ModelViewSet):
         data = serializer.validated_data
         
         # Update fixture
-        if 'starts_at' in data:
-            fixture.starts_at = data['starts_at']
-        if 'ends_at' in data:
-            fixture.ends_at = data['ends_at']
+        if 'start_at' in data:
+            fixture.start_at = data['start_at']
         if 'venue_id' in data:
             fixture.venue_id = data['venue_id']
         
@@ -309,15 +302,13 @@ class FixtureViewSet(viewsets.ModelViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-        # Swap entries
-        home_entry = fixture.entries.filter(side=FixtureEntry.Side.HOME).first()
-        away_entry = fixture.entries.filter(side=FixtureEntry.Side.AWAY).first()
-        
-        if home_entry and away_entry:
-            home_entry.side = FixtureEntry.Side.AWAY
-            away_entry.side = FixtureEntry.Side.HOME
-            home_entry.save()
-            away_entry.save()
+        # Swap home and away teams
+        if fixture.home and fixture.away:
+            home_team = fixture.home
+            away_team = fixture.away
+            fixture.home = away_team
+            fixture.away = home_team
+            fixture.save()
         
         return Response({
             'message': 'Entries swapped successfully',
@@ -346,8 +337,8 @@ class EventFixtureViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [CanViewFixtures]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status', 'venue']
-    ordering_fields = ['starts_at', 'round_no']
-    ordering = ['starts_at', 'round_no']
+    ordering_fields = ['start_at', 'round']
+    ordering = ['start_at', 'round']
 
     def get_queryset(self):
         """Get fixtures for a specific event"""

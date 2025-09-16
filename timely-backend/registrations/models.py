@@ -18,50 +18,49 @@ class Registration(models.Model):
     """Registration model for event participants"""
     
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        WAITLISTED = "waitlisted", "Waitlisted"
-        CONFIRMED = "confirmed", "Confirmed"
-        REJECTED = "rejected", "Rejected"
-        WITHDRAWN = "withdrawn", "Withdrawn"
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
     
-    class RegistrationType(models.TextChoices):
-        INDIVIDUAL = "individual", "Individual"
-        TEAM = "team", "Team"
-    
-    class PaymentStatus(models.TextChoices):
-        UNPAID = "unpaid", "Unpaid"
-        PENDING = "pending", "Pending"
-        PAID = "paid", "Paid"
-        FAILED = "failed", "Failed"
+    class Type(models.TextChoices):
+        TEAM = "TEAM", "Team"
+        ATHLETE = "ATHLETE", "Athlete"
     
     # Basic Information
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='registrations')
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='registrations')
-    division = models.ForeignKey(Division, on_delete=models.CASCADE, related_name='registrations', null=True, blank=True)
-    
-    # Registration Type and Team Details
-    type = models.CharField(
-        max_length=12,
-        choices=RegistrationType.choices,
-        default=RegistrationType.INDIVIDUAL
+    applicant = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='registrations',
+        null=True,
+        blank=True
     )
-    team_name = models.CharField(max_length=100, blank=True, null=True)
-    team_manager_name = models.CharField(max_length=100, blank=True, null=True)
-    team_contact = models.CharField(max_length=100, blank=True, null=True)
+    team = models.ForeignKey(
+        'api.Team',
+        on_delete=models.CASCADE,
+        related_name='registrations',
+        null=True,
+        blank=True
+    )
     
-    # Status and Payment
+    # Registration Type and Status
+    type = models.CharField(
+        max_length=10,
+        choices=Type.choices,
+        default=Type.ATHLETE
+    )
     status = models.CharField(
-        max_length=12,
+        max_length=10,
         choices=Status.choices,
         default=Status.PENDING,
         db_index=True
     )
-    fee_cents = models.PositiveIntegerField(default=0, help_text="Registration fee in cents")
-    payment_status = models.CharField(
-        max_length=10,
-        choices=PaymentStatus.choices,
-        default=PaymentStatus.UNPAID,
-        db_index=True
+    
+    # Documentation
+    docs = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Registration documents (JSON)"
     )
     
     # Timestamps
@@ -77,28 +76,32 @@ class Registration(models.Model):
     reason = models.TextField(blank=True, help_text="Reason for rejection or other notes")
     
     class Meta:
-        unique_together = [("user", "event")]
         ordering = ['-submitted_at']
         indexes = [
             models.Index(fields=['event']),
-            models.Index(fields=['user', 'event']),
             models.Index(fields=['status']),
-            models.Index(fields=['payment_status']),
+            models.Index(fields=['event', 'status']),
+            models.Index(fields=['applicant']),
+            models.Index(fields=['team']),
+            models.Index(fields=['type']),
+            models.Index(fields=['submitted_at']),
         ]
     
     def __str__(self):
-        team_info = f" ({self.team_name})" if self.team_name else ""
-        return f"{self.user.email} - {self.event.name}{team_info}"
+        if self.type == self.Type.TEAM and self.team:
+            return f"{self.team.name} - {self.event.name}"
+        elif self.applicant:
+            return f"{self.applicant.email} - {self.event.name}"
+        return f"Registration - {self.event.name}"
     
     @property
-    def fee_dollars(self):
-        """Convert fee from cents to dollars"""
-        return self.fee_cents / 100
-    
-    @property
-    def is_team_registration(self):
-        """Check if this is a team registration"""
-        return self.type == self.RegistrationType.TEAM
+    def applicant_name(self):
+        """Get applicant name"""
+        if self.type == self.Type.TEAM and self.team:
+            return self.team.name
+        elif self.applicant:
+            return self.applicant.full_name
+        return "Unknown"
 
 
 class RegistrationDocument(models.Model):

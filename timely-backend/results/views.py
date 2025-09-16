@@ -8,19 +8,18 @@ from django.db import transaction
 from django.utils import timezone
 from django.db.models import Q, Prefetch
 
-from .models import Result, LeaderboardEntry, AthleteStat
+from .models import Result, LeaderboardEntry
 from .serializers import (
     ResultSerializer, ResultCreateSerializer, ResultActionSerializer,
-    LeaderboardEntrySerializer, AthleteStatSerializer, AthleteStatCreateSerializer,
-    LeaderboardSummarySerializer, RecentResultsSerializer, FixtureResultSerializer,
-    EventResultsSummarySerializer
+    LeaderboardEntrySerializer, LeaderboardSummarySerializer, RecentResultsSerializer, 
+    FixtureResultSerializer, EventResultsSummarySerializer
 )
 from .services.compute import (
-    recompute_event_standings, recompute_athlete_rankings, get_leaderboard_summary
+    recompute_event_standings, get_leaderboard_summary
 )
 from fixtures.models import Fixture
 from events.models import Event
-from teams.models import Team
+from api.models import Team
 from accounts.permissions import IsOrganizer, CanManageResults
 
 
@@ -28,8 +27,8 @@ class ResultViewSet(viewsets.ModelViewSet):
     """ViewSet for managing results"""
     
     queryset = Result.objects.select_related(
-        'fixture__event', 'fixture__home_team', 'fixture__away_team',
-        'winner', 'verified_by'
+        'fixture__event', 'fixture__home', 'fixture__away',
+        'winner', 'entered_by'
     ).all()
     serializer_class = ResultSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -48,15 +47,13 @@ class ResultViewSet(viewsets.ModelViewSet):
         if event_id:
             queryset = queryset.filter(fixture__event_id=event_id)
         
-        # Filter by status
-        status_filter = self.request.query_params.get('status')
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
-        
-        # Filter by published status
-        published = self.request.query_params.get('published')
-        if published is not None:
-            queryset = queryset.filter(published=published.lower() == 'true')
+        # Filter by finalized status
+        finalized = self.request.query_params.get('finalized')
+        if finalized is not None:
+            if finalized.lower() == 'true':
+                queryset = queryset.filter(finalized_at__isnull=False)
+            else:
+                queryset = queryset.filter(finalized_at__isnull=True)
         
         return queryset
     
@@ -89,7 +86,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        if result.status == result.Status.FINAL:
+        if result.is_finalized:
             return Response(
                 {'detail': 'Result is already finalized.'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -114,9 +111,9 @@ class ResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        if result.is_verified:
+        if result.is_finalized:
             return Response(
-                {'detail': 'Result is already verified.'},
+                {'detail': 'Result is already finalized.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -125,87 +122,27 @@ class ResultViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(result)
         return Response(serializer.data)
     
-    @action(detail=True, methods=['post'], url_path='publish')
-    def publish(self, request, pk=None):
-        """Publish a result"""
+    @action(detail=True, methods=['post'], url_path='lock')
+    def lock(self, request, pk=None):
+        """Lock a result"""
         result = self.get_object()
         
         if not self._can_manage_result(result.fixture.event):
             return Response(
-                {'detail': 'You do not have permission to publish this result.'},
+                {'detail': 'You do not have permission to lock this result.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        if not result.can_be_published:
+        if result.is_finalized:
             return Response(
-                {'detail': 'Result cannot be published (must be final and verified).'},
+                {'detail': 'Result is already locked.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        result.publish()
+        result.lock()
         
         serializer = self.get_serializer(result)
         return Response(serializer.data)
-    
-    @action(detail=True, methods=['post'], url_path='unpublish')
-    def unpublish(self, request, pk=None):
-        """Unpublish a result"""
-        result = self.get_object()
-        
-        if not self._can_manage_result(result.fixture.event):
-            return Response(
-                {'detail': 'You do not have permission to unpublish this result.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        result.unpublish()
-        
-        serializer = self.get_serializer(result)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['post'], url_path='invalidate')
-    def invalidate(self, request, pk=None):
-        """Invalidate a result"""
-        result = self.get_object()
-        
-        if not self._can_manage_result(result.fixture.event):
-            return Response(
-                {'detail': 'You do not have permission to invalidate this result.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        result.invalidate()
-        
-        # Recompute standings
-        recompute_event_standings(result.fixture.event.id)
-        
-        serializer = self.get_serializer(result)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['post'], url_path='provisional')
-    def provisional(self, request, pk=None):
-        """Create provisional result"""
-        result = self.get_object()
-        
-        if not self._can_manage_result(result.fixture.event):
-            return Response(
-                {'detail': 'You do not have permission to create provisional results.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Update result with provisional data
-        serializer = ResultActionSerializer(data=request.data)
-        if serializer.is_valid():
-            result.score_home = serializer.validated_data.get('score_home', result.score_home)
-            result.score_away = serializer.validated_data.get('score_away', result.score_away)
-            result.notes = serializer.validated_data.get('notes', result.notes)
-            result.status = Result.Status.PROVISIONAL
-            result.save()
-            
-            serializer = self.get_serializer(result)
-            return Response(serializer.data)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class FixtureResultView(APIView):
@@ -256,12 +193,12 @@ class EventResultsView(APIView):
         """Get results and leaderboard for an event"""
         event = get_object_or_404(Event, id=event_id)
         
-        # Get recent published results
+        # Get recent finalized results
         recent_results = Result.objects.filter(
             fixture__event=event,
-            published=True
+            finalized_at__isnull=False
         ).select_related(
-            'fixture__home_team', 'fixture__away_team', 'winner'
+            'fixture__home', 'fixture__away', 'winner'
         ).order_by('-created_at')[:10]
         
         # Get leaderboard
@@ -271,22 +208,17 @@ class EventResultsView(APIView):
         
         # Get event summary
         total_fixtures = Fixture.objects.filter(event=event).count()
-        completed_fixtures = Result.objects.filter(
+        finalized_results = Result.objects.filter(
             fixture__event=event,
-            status=Result.Status.FINAL
-        ).count()
-        published_results = Result.objects.filter(
-            fixture__event=event,
-            published=True
+            finalized_at__isnull=False
         ).count()
         
         data = {
             'event_id': event.id,
             'event_name': event.name,
             'total_fixtures': total_fixtures,
-            'completed_fixtures': completed_fixtures,
-            'published_results': published_results,
-            'pending_results': completed_fixtures - published_results,
+            'finalized_results': finalized_results,
+            'pending_results': total_fixtures - finalized_results,
             'leaderboard': LeaderboardEntrySerializer(leaderboard, many=True).data,
             'recent_results': ResultSerializer(recent_results, many=True).data,
         }
@@ -308,17 +240,17 @@ class EventRecentResultsView(APIView):
         limit = int(request.query_params.get('limit', 20))
         offset = int(request.query_params.get('offset', 0))
         
-        # Get published results
+        # Get finalized results
         results = Result.objects.filter(
             fixture__event=event,
-            published=True
+            finalized_at__isnull=False
         ).select_related(
-            'fixture__home_team', 'fixture__away_team', 'winner'
+            'fixture__home', 'fixture__away', 'winner'
         ).order_by('-created_at')[offset:offset + limit]
         
         total_count = Result.objects.filter(
             fixture__event=event,
-            published=True
+            finalized_at__isnull=False
         ).count()
         
         data = {
@@ -367,71 +299,6 @@ class LeaderboardViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(event_id=event_id)
         
         return queryset.order_by('event', 'position')
-
-
-class AthleteStatViewSet(viewsets.ModelViewSet):
-    """ViewSet for athlete statistics"""
-    
-    queryset = AthleteStat.objects.select_related('event', 'athlete', 'verified_by').all()
-    serializer_class = AthleteStatSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return AthleteStatCreateSerializer
-        return AthleteStatSerializer
-    
-    def get_queryset(self):
-        """Filter athlete stats by event"""
-        queryset = super().get_queryset()
-        
-        event_id = self.request.query_params.get('event_id')
-        if event_id:
-            queryset = queryset.filter(event_id=event_id)
-        
-        return queryset.order_by('event', 'position')
-    
-    def perform_create(self, serializer):
-        """Create athlete stat with proper permissions"""
-        event_id = self.request.data.get('event_id')
-        event = get_object_or_404(Event, id=event_id)
-        
-        # Check permissions
-        if not (
-            IsOrganizer().has_permission(self.request, self) or
-            CanManageResults().has_permission(self.request, self)
-        ):
-            self.permission_denied(self.request)
-        
-        serializer.save(event=event)
-    
-    @action(detail=True, methods=['post'], url_path='verify')
-    def verify(self, request, pk=None):
-        """Verify athlete stats"""
-        athlete_stat = self.get_object()
-        
-        if not (
-            IsOrganizer().has_permission(request, self) or
-            CanManageResults().has_permission(request, self)
-        ):
-            return Response(
-                {'detail': 'You do not have permission to verify these stats.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        if athlete_stat.verified:
-            return Response(
-                {'detail': 'Athlete stats are already verified.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        athlete_stat.verify(user=request.user)
-        
-        # Recompute rankings
-        recompute_athlete_rankings(athlete_stat.event.id)
-        
-        serializer = self.get_serializer(athlete_stat)
-        return Response(serializer.data)
 
 
 class RecomputeStandingsView(APIView):

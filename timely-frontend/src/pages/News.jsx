@@ -93,10 +93,15 @@ const News = () => {
           icon="⚠️"
           title="Failed to load news"
           message={error}
-          action={{
-            label: "Try Again",
-            onClick: fetchNews
-          }}
+          action={
+            <button
+              onClick={fetchNews}
+              className="btn btn-primary"
+              aria-label="Try again"
+            >
+              Try Again
+            </button>
+          }
         />
       </div>
     );

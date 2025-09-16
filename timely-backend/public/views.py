@@ -19,7 +19,7 @@ from fixtures.models import Fixture
 from results.models import Result
 from content.models import Announcement, News, Banner
 from tickets.models import TicketOrder
-from teams.models import Team
+from api.models import Team
 from accounts.models import User
 from venues.models import Venue
 
@@ -39,9 +39,9 @@ def public_home(request) -> Response:
         
         # Get featured events (published + upcoming/featured)
         featured_events = Event.objects.filter(
-            lifecycle_status=Event.LifecycleStatus.PUBLISHED,
-            start_datetime__gte=now
-        ).select_related('venue').order_by('start_datetime')[:6]
+            status=Event.Status.UPCOMING,
+            start_date__gte=now
+        ).select_related('venue').order_by('start_date')[:6]
         
         # Get published news (published & publish_at<=now)
         news = News.objects.filter(
@@ -62,7 +62,7 @@ def public_home(request) -> Response:
                     'id': event.id,
                     'title': event.name,
                     'sport': event.sport,
-                    'start_at': event.start_datetime.isoformat(),
+                    'start_at': event.start_date.isoformat(),
                     'venue_name': event.venue.name if event.venue else event.location,
                     'price_cents': event.fee_cents,
                     'status': event.phase
@@ -125,7 +125,7 @@ def public_events_list(request) -> Response:
         
         # Build queryset - published events only
         events = Event.objects.filter(
-            lifecycle_status=Event.LifecycleStatus.PUBLISHED
+            status=Event.Status.UPCOMING
         ).select_related('venue')
         
         # Apply filters
@@ -140,13 +140,13 @@ def public_events_list(request) -> Response:
             events = events.filter(sport__iexact=sport)
             
         if date_from:
-            events = events.filter(start_datetime__gte=date_from)
+            events = events.filter(start_date__gte=date_from)
             
         if date_to:
-            events = events.filter(end_datetime__lte=date_to)
+            events = events.filter(end_date__lte=date_to)
         
         # Order by start date
-        events = events.order_by('start_datetime', 'created_at')
+        events = events.order_by('start_date', 'created_at')
         
         # Paginate
         paginator = Paginator(events, page_size)
@@ -159,8 +159,8 @@ def public_events_list(request) -> Response:
                 'name': event.name,
                 'sport': event.sport,
                 'description': event.description,
-                'start_datetime': event.start_datetime,
-                'end_datetime': event.end_datetime,
+                'start_date': event.start_date,
+                'end_date': event.end_date,
                 'location': event.location,
                 'venue': {
                     'id': event.venue.id,
@@ -201,7 +201,7 @@ def public_event_detail(request, event_id: int) -> Response:
     try:
         event = Event.objects.filter(
             id=event_id,
-            lifecycle_status=Event.LifecycleStatus.PUBLISHED
+            status=Event.Status.UPCOMING
         ).select_related('venue').prefetch_related('divisions').first()
         
         if not event:
@@ -215,8 +215,8 @@ def public_event_detail(request, event_id: int) -> Response:
             'name': event.name,
             'sport': event.sport,
             'description': event.description,
-            'start_datetime': event.start_datetime,
-            'end_datetime': event.end_datetime,
+            'start_date': event.start_date,
+            'end_date': event.end_date,
             'registration_open_at': event.registration_open_at,
             'registration_close_at': event.registration_close_at,
             'location': event.location,
@@ -260,7 +260,7 @@ def public_event_fixtures(request, event_id: int) -> Response:
         # Verify event exists and is published
         event = Event.objects.filter(
             id=event_id,
-            lifecycle_status=Event.LifecycleStatus.PUBLISHED
+            status=Event.Status.UPCOMING
         ).first()
         
         if not event:
@@ -340,7 +340,7 @@ def public_event_results(request, event_id: int) -> Response:
         # Verify event exists and is published
         event = Event.objects.filter(
             id=event_id,
-            lifecycle_status=Event.LifecycleStatus.PUBLISHED
+            status=Event.Status.UPCOMING
         ).first()
         
         if not event:
@@ -522,7 +522,7 @@ def public_stats(request) -> Response:
         
         # Count published events
         events_count = Event.objects.filter(
-            lifecycle_status=Event.LifecycleStatus.PUBLISHED
+            status=Event.Status.UPCOMING
         ).count()
         
         # Count total participants (users with athlete role)

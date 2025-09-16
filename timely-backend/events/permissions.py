@@ -8,7 +8,7 @@ class IsEventOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         # Read permissions for published events
         if request.method in permissions.SAFE_METHODS:
-            if obj.lifecycle_status == Event.LifecycleStatus.PUBLISHED:
+            if obj.status == Event.Status.UPCOMING:
                 return True
             # Owners and admins can see their own events
             return (

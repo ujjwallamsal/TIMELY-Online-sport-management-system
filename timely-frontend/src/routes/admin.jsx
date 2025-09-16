@@ -7,9 +7,15 @@ import Dashboard from '../pages/admin/Dashboard.jsx';
 import EventsManage from '../pages/admin/EventsManage.jsx';
 import EventForm from '../pages/admin/EventForm.jsx';
 import EventDetail from '../pages/admin/EventDetail.jsx';
+import RegistrationsManage from '../pages/admin/RegistrationsManage.jsx';
+import FixturesManage from '../pages/admin/FixturesManage.jsx';
+import ResultsManage from '../pages/admin/ResultsManage.jsx';
 import Venues from '../pages/admin/Venues.jsx';
-import VenueSlots from '../pages/admin/VenueSlots.jsx';
+import VenueForm from '../pages/admin/VenueForm.jsx';
 import Users from '../pages/admin/Users.jsx';
+import AnnouncementsManage from '../pages/admin/AnnouncementsManage.jsx';
+import ReportsManage from '../pages/admin/ReportsManage.jsx';
+import SettingsManage from '../pages/admin/SettingsManage.jsx';
 import NotFound from '../pages/NotFound';
 
 // Admin route guard component
@@ -64,7 +70,6 @@ const AdminRoutes = () => {
         <Routes>
           {/* Dashboard */}
           <Route path="/" element={<Dashboard />} />
-          <Route path="/dashboard" element={<Dashboard />} />
           
           {/* Events Management */}
           <Route path="/events" element={<EventsManage />} />
@@ -72,15 +77,34 @@ const AdminRoutes = () => {
           <Route path="/events/:id/edit" element={<EventForm />} />
           <Route path="/events/:id" element={<EventDetail />} />
           
+          {/* Registrations Management */}
+          <Route path="/registrations" element={<RegistrationsManage />} />
+          
+          {/* Fixtures Management */}
+          <Route path="/fixtures" element={<FixturesManage />} />
+          
+          {/* Results Management */}
+          <Route path="/results" element={<ResultsManage />} />
+          
           {/* Venues Management */}
           <Route path="/venues" element={<Venues />} />
-          <Route path="/venues/:id/slots" element={<VenueSlots />} />
+          <Route path="/venues/new" element={<VenueForm />} />
+          <Route path="/venues/:id/edit" element={<VenueForm />} />
           
           {/* Users Management */}
           <Route path="/users" element={<Users />} />
           
+          {/* Announcements Management */}
+          <Route path="/announcements" element={<AnnouncementsManage />} />
+          
+          {/* Reports */}
+          <Route path="/reports" element={<ReportsManage />} />
+          
+          {/* Settings */}
+          <Route path="/settings" element={<SettingsManage />} />
+          
           {/* Catch all - redirect to dashboard */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AdminLayout>
     </AdminGuard>

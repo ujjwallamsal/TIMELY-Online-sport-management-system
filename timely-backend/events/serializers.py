@@ -32,10 +32,10 @@ class EventSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'name', 'sport', 'description',
-            'start_datetime', 'end_datetime',
+            'start_date', 'end_date',
             'registration_open_at', 'registration_close_at',
             'location', 'venue', 'capacity', 'fee_cents',
-            'lifecycle_status', 'phase', 'is_published',
+            'status', 'phase', 'is_published',
             'created_by', 'created_by_name',
             'created_at', 'updated_at', 'divisions'
         ]
@@ -43,13 +43,13 @@ class EventSerializer(serializers.ModelSerializer):
     
     def get_is_published(self, obj):
         """Check if event is published"""
-        return obj.lifecycle_status == Event.LifecycleStatus.PUBLISHED
+        return obj.status == Event.Status.UPCOMING
     
     def validate(self, data):
         """Validate event data"""
         # Validate datetime order
-        if 'start_datetime' in data and 'end_datetime' in data:
-            if data['start_datetime'] >= data['end_datetime']:
+        if 'start_date' in data and 'end_date' in data:
+            if data['start_date'] >= data['end_date']:
                 raise ValidationError("End datetime must be after start datetime")
         
         # Validate registration windows
@@ -58,14 +58,14 @@ class EventSerializer(serializers.ModelSerializer):
                 raise ValidationError("Registration close must be after registration open")
         
         # Validate registration window
-        if all(key in data for key in ['registration_open_at', 'registration_close_at', 'start_datetime']):
+        if all(key in data for key in ['registration_open_at', 'registration_close_at', 'start_date']):
             # Registration can open before event starts (this is allowed)
-            if data['registration_close_at'] > data['start_datetime']:
+            if data['registration_close_at'] > data['start_date']:
                 raise ValidationError("Registration close cannot be after event start")
         
         # Validate registration close is not after event end
-        if all(key in data for key in ['registration_close_at', 'end_datetime']):
-            if data['registration_close_at'] > data['end_datetime']:
+        if all(key in data for key in ['registration_close_at', 'end_date']):
+            if data['registration_close_at'] > data['end_date']:
                 raise ValidationError("Registration close cannot be after event end")
         
         return data
@@ -86,8 +86,8 @@ class EventListSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'name', 'sport', 'description',
-            'start_datetime', 'end_datetime', 'location', 'venue',
-            'capacity', 'fee_cents', 'lifecycle_status', 'phase',
+            'start_date', 'end_date', 'location', 'venue',
+            'capacity', 'fee_cents', 'status', 'phase',
             'created_by_name', 'created_at'
         ]
 
@@ -97,15 +97,15 @@ class EventLifecycleActionSerializer(serializers.Serializer):
     
     reason = serializers.CharField(required=False, allow_blank=True, help_text="Reason for cancellation")
     
-    def validate_lifecycle_status(self, value, action):
+    def validate_status(self, value, action):
         """Validate lifecycle status transitions"""
         event = self.context['event']
-        current_status = event.lifecycle_status
+        current_status = event.status
         
         valid_transitions = {
-            'publish': [Event.LifecycleStatus.DRAFT],
-            'unpublish': [Event.LifecycleStatus.PUBLISHED],
-            'cancel': [Event.LifecycleStatus.DRAFT, Event.LifecycleStatus.PUBLISHED]
+            'publish': [Event.Status.UPCOMING],
+            'unpublish': [Event.Status.UPCOMING],
+            'cancel': [Event.Status.UPCOMING, Event.Status.UPCOMING]
         }
         
         if current_status not in valid_transitions.get(action, []):

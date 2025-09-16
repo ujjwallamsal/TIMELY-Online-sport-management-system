@@ -11,42 +11,42 @@ class DivisionAdmin(admin.ModelAdmin):
     ordering = ["event", "sort_order", "name"]
 
 
-@admin.action(description="Publish selected events")
-def publish_events(modeladmin, request, queryset):
-    updated = queryset.update(lifecycle_status=Event.LifecycleStatus.PUBLISHED)
-    modeladmin.message_user(request, f"{updated} event(s) published")
+@admin.action(description="Mark selected events as ongoing")
+def mark_ongoing(modeladmin, request, queryset):
+    updated = queryset.update(status=Event.Status.ONGOING)
+    modeladmin.message_user(request, f"{updated} event(s) marked as ongoing")
 
 
-@admin.action(description="Unpublish selected events")
-def unpublish_events(modeladmin, request, queryset):
-    updated = queryset.update(lifecycle_status=Event.LifecycleStatus.DRAFT)
-    modeladmin.message_user(request, f"{updated} event(s) moved to draft")
+@admin.action(description="Mark selected events as completed")
+def mark_completed(modeladmin, request, queryset):
+    updated = queryset.update(status=Event.Status.COMPLETED)
+    modeladmin.message_user(request, f"{updated} event(s) marked as completed")
 
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     list_display = [
-        "name", "sport", "location", "start_datetime", "end_datetime", 
-        "lifecycle_status", "created_by"
+        "name", "sport", "venue", "start_date", "end_date", 
+        "status", "created_by"
     ]
-    search_fields = ["name", "sport", "location", "created_by__email"]
-    list_filter = ["sport", "lifecycle_status", "start_datetime", "end_datetime"]
-    date_hierarchy = "start_datetime"
-    ordering = ["-start_datetime"]
-    actions = [publish_events, unpublish_events]
+    search_fields = ["name", "sport__name", "venue__name", "created_by__email"]
+    list_filter = ["sport", "status", "start_date", "end_date"]
+    date_hierarchy = "start_date"
+    ordering = ["-start_date"]
+    actions = [mark_ongoing, mark_completed]
     
     fieldsets = (
         ('Basic Information', {
             'fields': ('name', 'sport', 'description')
         }),
         ('Date and Time', {
-            'fields': ('start_datetime', 'end_datetime', 'registration_open_at', 'registration_close_at')
+            'fields': ('start_date', 'end_date')
         }),
-        ('Location and Capacity', {
-            'fields': ('location', 'capacity', 'fee_cents')
+        ('Location and Venue', {
+            'fields': ('venue', 'eligibility')
         }),
         ('Status', {
-            'fields': ('lifecycle_status',)
+            'fields': ('status',)
         }),
         ('Metadata', {
             'fields': ('created_by',),

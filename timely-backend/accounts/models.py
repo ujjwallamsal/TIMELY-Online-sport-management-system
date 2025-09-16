@@ -51,18 +51,13 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     """Custom user model with email-based authentication and RBAC"""
     
-    # Role choices for backward compatibility
+    # Role choices for the lean MVP
     class Role(models.TextChoices):
         ADMIN = "ADMIN", "Administrator"
         ORGANIZER = "ORGANIZER", "Event Organizer"
-        ATHLETE = "ATHLETE", "Athlete"
         COACH = "COACH", "Coach"
-        MANAGER = "MANAGER", "Team Manager"
+        ATHLETE = "ATHLETE", "Athlete"
         SPECTATOR = "SPECTATOR", "Spectator"
-        VOLUNTEER = "VOLUNTEER", "Volunteer"
-        REFEREE = "REFEREE", "Referee"
-        MEDICAL = "MEDICAL", "Medical Staff"
-        SUPPORT = "SUPPORT", "Support Staff"
     
     email = models.EmailField(unique=True, db_index=True)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
@@ -183,14 +178,9 @@ class UserRole(models.Model):
     class RoleType(models.TextChoices):
         ADMIN = "ADMIN", "Administrator"
         ORGANIZER = "ORGANIZER", "Event Organizer"
-        ATHLETE = "ATHLETE", "Athlete"
         COACH = "COACH", "Coach"
-        MANAGER = "MANAGER", "Team Manager"
+        ATHLETE = "ATHLETE", "Athlete"
         SPECTATOR = "SPECTATOR", "Spectator"
-        VOLUNTEER = "VOLUNTEER", "Volunteer"
-        REFEREE = "REFEREE", "Referee"
-        MEDICAL = "MEDICAL", "Medical Staff"
-        SUPPORT = "SUPPORT", "Support Staff"
     
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='roles')
     role_type = models.CharField(max_length=20, choices=RoleType.choices)

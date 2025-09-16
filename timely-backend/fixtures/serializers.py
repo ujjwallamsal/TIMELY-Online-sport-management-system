@@ -1,72 +1,27 @@
 # fixtures/serializers.py
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Fixture, FixtureEntry
+from .models import Fixture
 
 User = get_user_model()
-
-
-class FixtureEntrySerializer(serializers.ModelSerializer):
-    """Serializer for FixtureEntry"""
-    
-    team_name = serializers.CharField(source='team.name', read_only=True)
-    participant_name = serializers.CharField(source='participant.get_full_name', read_only=True)
-    name = serializers.ReadOnlyField()
-    
-    class Meta:
-        model = FixtureEntry
-        fields = [
-            'id', 'fixture', 'side', 'team', 'team_name', 
-            'participant', 'participant_name', 'name', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def validate(self, data):
-        """Validate fixture entry data"""
-        team = data.get('team')
-        participant = data.get('participant')
-        
-        if not team and not participant:
-            raise serializers.ValidationError("Must specify either team or participant")
-        
-        if team and participant:
-            raise serializers.ValidationError("Cannot specify both team and participant")
-        
-        return data
 
 
 class FixtureSerializer(serializers.ModelSerializer):
     """Serializer for Fixture CRUD operations"""
     
-    entries = FixtureEntrySerializer(many=True, read_only=True)
     venue_name = serializers.CharField(source='venue.name', read_only=True)
     event_name = serializers.CharField(source='event.name', read_only=True)
-    home_team = serializers.ReadOnlyField()
-    away_team = serializers.ReadOnlyField()
-    home_participant = serializers.ReadOnlyField()
-    away_participant = serializers.ReadOnlyField()
+    home_team_name = serializers.CharField(source='home.name', read_only=True)
+    away_team_name = serializers.CharField(source='away.name', read_only=True)
     
     class Meta:
         model = Fixture
         fields = [
-            'id', 'event', 'event_name', 'round_no', 'starts_at', 'ends_at',
-            'venue', 'venue_name', 'status', 'entries', 'home_team', 'away_team',
-            'home_participant', 'away_participant', 'created_at', 'updated_at'
+            'id', 'event', 'event_name', 'round', 'phase', 'start_at',
+            'venue', 'venue_name', 'status', 'home', 'home_team_name',
+            'away', 'away_team_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def validate(self, data):
-        """Validate fixture data"""
-        starts_at = data.get('starts_at')
-        ends_at = data.get('ends_at')
-        
-        if starts_at and ends_at:
-            if ends_at <= starts_at:
-                raise serializers.ValidationError({
-                    'ends_at': 'End time must be after start time'
-                })
-        
-        return data
 
 
 class FixtureGenerateSerializer(serializers.Serializer):
@@ -110,25 +65,17 @@ class FixtureAcceptSerializer(serializers.Serializer):
     def validate_fixtures(self, value):
         """Validate fixtures data structure"""
         for i, fixture_data in enumerate(value):
-            required_fields = ['round_no', 'starts_at', 'ends_at', 'entries']
+            required_fields = ['round', 'start_at']
             for field in required_fields:
                 if field not in fixture_data:
                     raise serializers.ValidationError(
                         f"Fixture {i}: Missing required field '{field}'"
                     )
             
-            # Validate entries
-            entries = fixture_data.get('entries', [])
-            if len(entries) < 2:
+            # Validate teams
+            if 'home_team_id' not in fixture_data and 'away_team_id' not in fixture_data:
                 raise serializers.ValidationError(
-                    f"Fixture {i}: Must have at least 2 entries"
-                )
-            
-            # Check for home and away entries
-            sides = [entry.get('side') for entry in entries]
-            if 'home' not in sides or 'away' not in sides:
-                raise serializers.ValidationError(
-                    f"Fixture {i}: Must have both home and away entries"
+                    f"Fixture {i}: Must have at least one team"
                 )
         
         return value
@@ -137,22 +84,8 @@ class FixtureAcceptSerializer(serializers.Serializer):
 class FixtureRescheduleSerializer(serializers.Serializer):
     """Serializer for rescheduling fixtures"""
     
-    starts_at = serializers.DateTimeField(required=False)
-    ends_at = serializers.DateTimeField(required=False)
+    start_at = serializers.DateTimeField(required=False)
     venue_id = serializers.IntegerField(required=False, allow_null=True)
-    
-    def validate(self, data):
-        """Validate reschedule data"""
-        starts_at = data.get('starts_at')
-        ends_at = data.get('ends_at')
-        
-        if starts_at and ends_at:
-            if ends_at <= starts_at:
-                raise serializers.ValidationError({
-                    'ends_at': 'End time must be after start time'
-                })
-        
-        return data
 
 
 class FixtureSwapEntriesSerializer(serializers.Serializer):
@@ -165,69 +98,30 @@ class FixtureConflictSerializer(serializers.Serializer):
     """Serializer for conflict checking"""
     
     fixture_id = serializers.IntegerField(required=False)
-    starts_at = serializers.DateTimeField()
-    ends_at = serializers.DateTimeField()
+    start_at = serializers.DateTimeField()
     venue_id = serializers.IntegerField(required=False, allow_null=True)
-    
-    def validate(self, data):
-        """Validate conflict check data"""
-        starts_at = data.get('starts_at')
-        ends_at = data.get('ends_at')
-        
-        if starts_at and ends_at:
-            if ends_at <= starts_at:
-                raise serializers.ValidationError({
-                    'ends_at': 'End time must be after start time'
-                })
-        
-        return data
 
 
 class FixtureListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for fixture lists"""
     
     venue_name = serializers.CharField(source='venue.name', read_only=True)
-    home_team_name = serializers.SerializerMethodField()
-    away_team_name = serializers.SerializerMethodField()
+    home_team_name = serializers.CharField(source='home.name', read_only=True)
+    away_team_name = serializers.CharField(source='away.name', read_only=True)
     
     class Meta:
         model = Fixture
         fields = [
-            'id', 'event', 'round_no', 'starts_at', 'ends_at',
+            'id', 'event', 'round', 'phase', 'start_at',
             'venue', 'venue_name', 'status', 'home_team_name', 'away_team_name'
         ]
-    
-    def get_home_team_name(self, obj):
-        """Get home team name"""
-        home_entry = obj.home_entry
-        if home_entry:
-            return home_entry.name
-        return None
-    
-    def get_away_team_name(self, obj):
-        """Get away team name"""
-        away_entry = obj.away_entry
-        if away_entry:
-            return away_entry.name
-        return None
 
 
 class FixtureProposalSerializer(serializers.Serializer):
     """Serializer for fixture generation proposals"""
     
-    round_no = serializers.IntegerField()
-    starts_at = serializers.DateTimeField()
-    ends_at = serializers.DateTimeField()
+    round = serializers.IntegerField()
+    start_at = serializers.DateTimeField()
     venue_id = serializers.IntegerField(required=False, allow_null=True)
-    entries = serializers.ListField(
-        child=serializers.DictField(),
-        min_length=2
-    )
-    
-    def validate_entries(self, value):
-        """Validate entries in proposal"""
-        sides = [entry.get('side') for entry in value]
-        if 'home' not in sides or 'away' not in sides:
-            raise serializers.ValidationError("Must have both home and away entries")
-        
-        return value
+    home_team_id = serializers.IntegerField(required=False, allow_null=True)
+    away_team_id = serializers.IntegerField(required=False, allow_null=True)
