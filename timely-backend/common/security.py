@@ -36,7 +36,15 @@ def rate_limit(max_attempts=5, window_minutes=5, key_func=None):
     """
     def decorator(view_func):
         @wraps(view_func)
-        def wrapper(request, *args, **kwargs):
+        def wrapper(self_or_request, request=None, *args, **kwargs):
+            # Handle both function-based and class-based views
+            if request is None:
+                # Function-based view: self_or_request is the request
+                request = self_or_request
+            else:
+                # Class-based view: self_or_request is self, request is the request
+                pass
+            
             # Generate rate limit key
             if key_func:
                 key = key_func(request)
@@ -69,7 +77,12 @@ def rate_limit(max_attempts=5, window_minutes=5, key_func=None):
             _rate_limit_storage[key].append(current_time)
             
             # Call the original view
-            return view_func(request, *args, **kwargs)
+            if request is None:
+                # Function-based view
+                return view_func(self_or_request, *args, **kwargs)
+            else:
+                # Class-based view
+                return view_func(self_or_request, request, *args, **kwargs)
         return wrapper
     return decorator
 

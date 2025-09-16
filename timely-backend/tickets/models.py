@@ -92,6 +92,8 @@ class TicketOrder(models.Model):
     
     class Provider(models.TextChoices):
         STRIPE = "stripe", "Stripe"
+        PAYPAL = "paypal", "PayPal"
+        OFFLINE = "offline", "Offline Bank Transfer"
     
     # Core relationships
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ticket_orders")
@@ -114,13 +116,13 @@ class TicketOrder(models.Model):
     )
     
     # Payment provider
-    provider = models.CharField(
+    payment_provider = models.CharField(
         max_length=20,
         choices=Provider.choices,
         default=Provider.STRIPE
     )
-    provider_session_id = models.CharField(max_length=255, null=True, blank=True, help_text="Stripe session ID")
-    provider_payment_intent = models.CharField(max_length=255, null=True, blank=True, help_text="Stripe payment intent ID")
+    provider_session_id = models.CharField(max_length=255, null=True, blank=True, help_text="Payment provider session ID")
+    provider_payment_intent_id = models.CharField(max_length=255, null=True, blank=True, help_text="Payment provider payment intent ID")
     
     # Audit fields
     created_at = models.DateTimeField(auto_now_add=True)
@@ -154,7 +156,7 @@ class TicketOrder(models.Model):
         if session_id:
             self.provider_session_id = session_id
         if payment_intent:
-            self.provider_payment_intent = payment_intent
+            self.provider_payment_intent_id = payment_intent
         self.save()
         
         # Issue tickets and update inventory
@@ -164,9 +166,45 @@ class TicketOrder(models.Model):
             ticket_type.save()
     
     def cancel(self):
-        """Cancel the order"""
+        """Cancel the order and rollback inventory"""
+        if self.status == self.Status.PAID:
+            # Rollback inventory for paid orders
+            for ticket in self.tickets.all():
+                ticket_type = ticket.ticket_type
+                ticket_type.quantity_sold = max(0, ticket_type.quantity_sold - 1)
+                ticket_type.save()
+                # Void the ticket
+                ticket.void_ticket()
+        
         self.status = self.Status.CANCELLED
         self.save()
+    
+    def refund(self, amount_cents: int = None, reason: str = ""):
+        """Refund the order and void tickets"""
+        if self.status != self.Status.PAID:
+            raise ValueError("Only paid orders can be refunded")
+        
+        # Void all tickets
+        for ticket in self.tickets.all():
+            ticket.void_ticket()
+        
+        # Rollback inventory
+        for ticket in self.tickets.all():
+            ticket_type = ticket.ticket_type
+            ticket_type.quantity_sold = max(0, ticket_type.quantity_sold - 1)
+            ticket_type.save()
+        
+        self.status = self.Status.REFUNDED
+        self.save()
+        
+        # Create refund record
+        Refund.objects.create(
+            order=self,
+            amount_cents=amount_cents or self.total_cents,
+            currency=self.currency,
+            reason=reason,
+            processed_by=None  # Will be set by the view
+        )
 
 
 class Ticket(models.Model):
@@ -248,4 +286,73 @@ class Ticket(models.Model):
     def void_ticket(self):
         """Void the ticket"""
         self.status = self.Status.VOID
+        self.save()
+
+
+class Refund(models.Model):
+    """Refund model for ticket orders"""
+    
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSED = "processed", "Processed"
+        FAILED = "failed", "Failed"
+    
+    # Core relationships
+    order = models.ForeignKey(TicketOrder, on_delete=models.CASCADE, related_name="refunds")
+    processed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="processed_refunds")
+    
+    # Financial
+    amount_cents = models.PositiveIntegerField(help_text="Refund amount in cents")
+    currency = models.CharField(max_length=3, default='USD', help_text="Currency code")
+    
+    # Status
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True
+    )
+    
+    # Provider data
+    provider_refund_id = models.CharField(max_length=255, null=True, blank=True, help_text="Provider refund ID")
+    provider_response = models.JSONField(default=dict, blank=True, help_text="Provider response data")
+    
+    # Details
+    reason = models.TextField(blank=True, help_text="Refund reason")
+    notes = models.TextField(blank=True, help_text="Additional notes")
+    
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['order', 'status']),
+            models.Index(fields=['processed_by', 'status']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Refund {self.id} - {self.order} - {self.amount_cents}¢"
+    
+    @property
+    def amount_dollars(self):
+        """Get refund amount in dollars"""
+        return self.amount_cents / 100
+    
+    def mark_processed(self, provider_refund_id: str = None, provider_response: dict = None):
+        """Mark refund as processed"""
+        self.status = self.Status.PROCESSED
+        self.processed_at = timezone.now()
+        if provider_refund_id:
+            self.provider_refund_id = provider_refund_id
+        if provider_response:
+            self.provider_response = provider_response
+        self.save()
+    
+    def mark_failed(self, reason: str = ""):
+        """Mark refund as failed"""
+        self.status = self.Status.FAILED
+        self.notes = f"{self.notes}\nFailed: {reason}".strip()
         self.save()

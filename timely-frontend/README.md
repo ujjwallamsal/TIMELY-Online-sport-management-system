@@ -193,6 +193,52 @@ Optimized for performance:
 - **Fallback**: Automatic reconnection with polling
 - **Lightweight**: Efficient message handling
 
+## 📊 Admin Dashboard Data & Realtime
+
+### Dashboard Features
+- **Live Statistics**: Total users, active events, tickets sold, total revenue
+- **Revenue Charts**: Interactive time series with week/month/year views
+- **User Distribution**: Pie chart showing role-based user breakdown
+- **Recent Activity**: Tables for recent events and registrations
+- **System Status**: Real-time health monitoring
+
+### Data Sources
+The dashboard automatically detects and uses the first available endpoint from these configurations:
+
+```typescript
+// Stats endpoints (tried in order)
+stats: [
+  '/api/reports/admin/stats/',
+  '/api/reports/summary/',
+  '/api/admin/stats/',
+]
+
+// Revenue data
+revenue: [
+  '/api/reports/revenue/',
+  '/api/payments/revenue/',
+]
+
+// User distribution
+userDistribution: [
+  '/api/reports/users/by-role/',
+  '/api/accounts/stats/roles/',
+]
+```
+
+### Real-time Channels
+Dashboard subscribes to these WebSocket groups:
+- `events:admin` - Event updates
+- `registrations:admin` - Registration changes
+- `payments:admin` - Payment updates
+- `reports:admin` - Statistics updates
+
+### Polling Fallback
+If WebSocket disconnects, dashboard automatically falls back to 15-second polling to keep data fresh.
+
+### Endpoint Detection
+The system automatically probes multiple endpoint variants and caches the working one for the session, ensuring compatibility with different backend configurations.
+
 ## 🤝 Contributing
 
 1. Fork the repository

@@ -29,11 +29,12 @@ export default function CreateEvent() {
     description: '',
     start_datetime: '',
     end_datetime: '',
+    registration_open_at: '',
     registration_close_at: '',
     location: '',
     venue: '',
     capacity: 0,
-    registration_fee_cents: 0,
+    fee_cents: 0,
     cover_image: null
   });
   const [errors, setErrors] = useState({});
@@ -76,7 +77,8 @@ export default function CreateEvent() {
     if (!formData.description.trim()) newErrors.description = 'Description is required';
     if (!formData.start_datetime) newErrors.start_datetime = 'Start date is required';
     if (!formData.end_datetime) newErrors.end_datetime = 'End date is required';
-    if (!formData.registration_close_at) newErrors.registration_close_at = 'Registration deadline is required';
+    if (!formData.registration_open_at) newErrors.registration_open_at = 'Registration open date is required';
+    if (!formData.registration_close_at) newErrors.registration_close_at = 'Registration close date is required';
     if (!formData.location.trim()) newErrors.location = 'Location is required';
     if (!formData.capacity || formData.capacity <= 0) newErrors.capacity = 'Capacity must be greater than 0';
     
@@ -85,8 +87,13 @@ export default function CreateEvent() {
       newErrors.end_datetime = 'End date must be after start date';
     }
     
-    if (formData.registration_close_at && formData.start_datetime && formData.registration_close_at >= formData.start_datetime) {
-      newErrors.registration_close_at = 'Registration deadline must be before event start';
+    // Registration validation
+    if (formData.registration_open_at && formData.registration_close_at && formData.registration_open_at >= formData.registration_close_at) {
+      newErrors.registration_close_at = 'Registration close must be after registration open';
+    }
+    
+    if (formData.registration_close_at && formData.start_datetime && formData.registration_close_at > formData.start_datetime) {
+      newErrors.registration_close_at = 'Registration close must be before or at event start';
     }
 
     setErrors(newErrors);
@@ -105,9 +112,13 @@ export default function CreateEvent() {
       const eventData = {
         ...formData,
         capacity: parseInt(formData.capacity) || 0,
-        registration_fee_cents: parseInt(formData.registration_fee_cents) || 0,
-        is_published: false, // Start as draft
-        status: 'DRAFT'
+        fee_cents: parseInt(formData.fee_cents) || 0,
+        lifecycle_status: 'draft', // Start as draft
+        // Convert date strings to datetime strings
+        start_datetime: formData.start_datetime ? `${formData.start_datetime}T10:00:00Z` : null,
+        end_datetime: formData.end_datetime ? `${formData.end_datetime}T18:00:00Z` : null,
+        registration_open_at: formData.registration_open_at ? `${formData.registration_open_at}T00:00:00Z` : null,
+        registration_close_at: formData.registration_close_at ? `${formData.registration_close_at}T23:59:59Z` : null,
       };
 
       // Remove cover_image from main data (will be handled separately)
@@ -213,7 +224,7 @@ export default function CreateEvent() {
                 Dates & Schedule
               </h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Input
                   label="Start Date *"
                   name="start_datetime"
@@ -233,9 +244,21 @@ export default function CreateEvent() {
                   error={errors.end_datetime}
                   required
                 />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Registration Opens *"
+                  name="registration_open_at"
+                  type="date"
+                  value={formData.registration_open_at}
+                  onChange={handleInputChange}
+                  error={errors.registration_open_at}
+                  required
+                />
                 
                 <Input
-                  label="Registration Deadline *"
+                  label="Registration Closes *"
                   name="registration_close_at"
                   type="date"
                   value={formData.registration_close_at}
@@ -300,11 +323,11 @@ export default function CreateEvent() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Input
                   label="Registration Fee (USD)"
-                  name="registration_fee_cents"
+                  name="fee_cents"
                   type="number"
-                  value={formData.registration_fee_cents}
+                  value={formData.fee_cents}
                   onChange={handleInputChange}
-                  error={errors.registration_fee_cents}
+                  error={errors.fee_cents}
                   placeholder="0 for free events"
                   min="0"
                   step="0.01"

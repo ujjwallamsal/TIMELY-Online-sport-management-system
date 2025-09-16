@@ -7,6 +7,7 @@ app_name = 'public'
 urlpatterns = [
     # Home page aggregated data
     path('home/', views.public_home, name='home'),
+    path('stats/', views.public_stats, name='stats'),
     
     # Events
     path('events/', views.public_events_list, name='events-list'),

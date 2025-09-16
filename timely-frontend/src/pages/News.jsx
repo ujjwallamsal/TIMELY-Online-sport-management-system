@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getPublicNews } from '../lib/api';
+import Skeleton from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
 
 const News = () => {
   const [news, setNews] = useState([]);
@@ -16,8 +18,12 @@ const News = () => {
   const fetchNews = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await getPublicNews(page);
-      setNews(response.data.results || response.data);
+      
+      // Handle both paginated and non-paginated responses
+      const items = Array.isArray(response.data) ? response.data : (response.data?.results ?? []);
+      setNews(items);
       
       // Handle pagination
       if (response.data.next) {
@@ -54,10 +60,27 @@ const News = () => {
 
   if (loading && page === 1) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading news...</p>
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          {/* Header Skeleton */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-8">
+            <Skeleton type="text" className="h-10 w-96 mb-4" />
+            <Skeleton type="text" className="h-6 w-80 mb-4" />
+            <Skeleton type="text" className="h-1 w-24" />
+          </div>
+
+          {/* News Articles Skeleton */}
+          <div className="space-y-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+                <Skeleton type="text" className="h-8 w-3/4 mb-4" />
+                <Skeleton type="text" className="h-4 w-1/3 mb-4" />
+                <Skeleton type="text" className="h-4 w-full mb-2" />
+                <Skeleton type="text" className="h-4 w-2/3 mb-6" />
+                <Skeleton type="text" className="h-1 w-32" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -66,17 +89,15 @@ const News = () => {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Error</h1>
-          <p className="text-gray-600">{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Try Again
-          </button>
-        </div>
+        <EmptyState
+          icon="⚠️"
+          title="Failed to load news"
+          message={error}
+          action={{
+            label: "Try Again",
+            onClick: fetchNews
+          }}
+        />
       </div>
     );
   }
@@ -95,11 +116,11 @@ const News = () => {
 
         {/* News Articles */}
         {news.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-            <div className="text-gray-400 text-6xl mb-4">📰</div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">No News Articles</h2>
-            <p className="text-gray-600">There are no news articles available at the moment.</p>
-          </div>
+          <EmptyState
+            icon="📰"
+            title="No News Articles"
+            message="There are no news articles available at the moment."
+          />
         ) : (
           <div className="space-y-6">
             {news.map((article) => (

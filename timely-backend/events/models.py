@@ -102,10 +102,10 @@ class Event(models.Model):
             if self.registration_open_at >= self.registration_close_at:
                 raise ValidationError("Registration close must be after registration open")
             
-            # Registration should close before event starts (not after event ends)
-            if self.start_datetime and self.end_datetime:
+            # Registration should close before or at event start (not after event starts)
+            if self.start_datetime:
                 if self.registration_close_at > self.start_datetime:
-                    raise ValidationError("Registration must close before event starts")
+                    raise ValidationError("Registration must close before or at event start")
     
     def save(self, *args, **kwargs):
         """Save with validation"""

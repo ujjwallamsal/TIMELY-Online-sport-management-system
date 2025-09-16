@@ -1,15 +1,13 @@
 # reports/urls.py
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import ReportsViewSet
-
-# Create router
-router = DefaultRouter()
-router.register(r'', ReportsViewSet, basename='reports')
+from django.urls import path
+from .views import export_pdf, get_report_data_api, get_available_events, get_report_summary
 
 app_name = 'reports'
 
 urlpatterns = [
     # Reports endpoints
-    path('', include(router.urls)),
+    path('export/', export_pdf, name='export-pdf'),
+    path('data/', get_report_data_api, name='report-data'),
+    path('events/', get_available_events, name='available-events'),
+    path('summary/', get_report_summary, name='report-summary'),
 ]

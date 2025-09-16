@@ -708,7 +708,45 @@ curl -X GET "http://127.0.0.1:8000/api/public/events/" | python -m json.tool
 
 **Status**: ✅ **Implemented** - WebSocket support with polling fallback
 
-## 8. Styling & Accessibility
+## 8. Public Home Data Sources + Realtime
+
+The public homepage (`/`) displays live data from multiple API endpoints with real-time updates:
+
+**API Endpoints:**
+- `GET /api/public/stats/` - Live statistics (events, participants, teams, venues)
+- `GET /api/public/events/?page_size=6&status=upcoming` - Upcoming events
+- `GET /api/cms/news/?page_size=3` - Latest news (optional)
+
+**Real-time Updates:**
+- **WebSocket Channel**: `content:public`
+- **Message Types**: 
+  - `stats_updated` - Updates live counters
+  - `event_update` - Refreshes events when published
+  - `content_update` - General content updates
+- **Fallback**: 30-second polling when WebSocket disconnects
+- **Live Indicator**: Green dot shows connection status
+
+**Components:**
+- `Hero` - Main landing section with CTA buttons
+- `Stats` - Animated counters with real-time updates
+- `Features` - Static feature list with icons
+- `UpcomingEvents` - Live event cards with API data
+- `Roles` - User role descriptions and links
+- `Testimonials` - Customer testimonials
+- `CTA` - Call-to-action section
+- `PublicFooter` - Footer with links and contact info
+
+**Accessibility:**
+- WCAG 2.1 AA compliant
+- Skip to main content link
+- Semantic HTML landmarks
+- Keyboard navigation support
+- Focus-visible rings
+- Screen reader friendly
+
+**Status**: ✅ **Implemented** - Modern React homepage with live data and real-time updates
+
+## 9. Styling & Accessibility
 
 ### CSS Approach
 - **Tailwind CSS**: Utility-first CSS framework for rapid development

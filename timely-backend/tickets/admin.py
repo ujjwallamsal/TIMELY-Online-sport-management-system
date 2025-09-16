@@ -55,10 +55,10 @@ class TicketTypeAdmin(admin.ModelAdmin):
 class TicketOrderAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'user', 'event', 'status', 'total_dollars',
-        'provider', 'created_at'
+        'payment_provider', 'created_at'
     ]
     list_filter = [
-        'status', 'provider', 'currency', 'created_at'
+        'status', 'payment_provider', 'currency', 'created_at'
     ]
     search_fields = [
         'id', 'user__email', 'event__name'
@@ -74,7 +74,7 @@ class TicketOrderAdmin(admin.ModelAdmin):
         }),
         ('Payment', {
             'fields': (
-                'provider', 'provider_session_id', 'provider_payment_intent',
+                'payment_provider', 'provider_session_id', 'provider_payment_intent_id',
                 'total_cents', 'currency'
             )
         }),

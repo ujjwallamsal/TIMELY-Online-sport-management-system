@@ -26,6 +26,7 @@ class EventSerializer(serializers.ModelSerializer):
     phase = serializers.ReadOnlyField(help_text="Computed event phase")
     divisions = DivisionSerializer(many=True, read_only=True)
     created_by_name = serializers.CharField(source="created_by.email", read_only=True)
+    is_published = serializers.SerializerMethodField(help_text="Whether event is published")
     
     class Meta:
         model = Event
@@ -34,11 +35,15 @@ class EventSerializer(serializers.ModelSerializer):
             'start_datetime', 'end_datetime',
             'registration_open_at', 'registration_close_at',
             'location', 'venue', 'capacity', 'fee_cents',
-            'lifecycle_status', 'phase',
+            'lifecycle_status', 'phase', 'is_published',
             'created_by', 'created_by_name',
             'created_at', 'updated_at', 'divisions'
         ]
-        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at', 'phase']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at', 'phase', 'is_published']
+    
+    def get_is_published(self, obj):
+        """Check if event is published"""
+        return obj.lifecycle_status == Event.LifecycleStatus.PUBLISHED
     
     def validate(self, data):
         """Validate event data"""
@@ -52,10 +57,14 @@ class EventSerializer(serializers.ModelSerializer):
             if data['registration_open_at'] >= data['registration_close_at']:
                 raise ValidationError("Registration close must be after registration open")
         
-        # Validate registration window is within event window
-        if all(key in data for key in ['registration_open_at', 'registration_close_at', 'start_datetime', 'end_datetime']):
-            if data['registration_open_at'] < data['start_datetime']:
-                raise ValidationError("Registration open cannot be before event start")
+        # Validate registration window
+        if all(key in data for key in ['registration_open_at', 'registration_close_at', 'start_datetime']):
+            # Registration can open before event starts (this is allowed)
+            if data['registration_close_at'] > data['start_datetime']:
+                raise ValidationError("Registration close cannot be after event start")
+        
+        # Validate registration close is not after event end
+        if all(key in data for key in ['registration_close_at', 'end_datetime']):
             if data['registration_close_at'] > data['end_datetime']:
                 raise ValidationError("Registration close cannot be after event end")
         

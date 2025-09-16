@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { notifyAPI } from '../lib/api';
-import { useSocket } from '../hooks/useSocket';
+import useSocket from '../hooks/useSocket';
 import Toast from '../components/Toast';
 
 /**

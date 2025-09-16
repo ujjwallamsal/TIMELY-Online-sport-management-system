@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { messagesAPI } from '../lib/api';
-import { useSocket } from '../hooks/useSocket';
+import useSocket from '../hooks/useSocket';
 import ThreadList from '../components/ThreadList';
 import MessageBubble from '../components/MessageBubble';
 import MessageComposer from '../components/MessageComposer';

@@ -29,7 +29,6 @@ const Sidebar = ({ isOpen, onClose }) => {
   // Role-based navigation configuration
   const getNavigationItems = (userRole) => {
     const baseItems = [
-      { name: 'Home', path: '/', icon: HomeIcon, public: true },
       { name: 'Events', path: '/events', icon: CalendarIcon, public: true },
       { name: 'Schedule', path: '/schedule', icon: TrophyIcon, public: true },
       { name: 'Results', path: '/results', icon: ChartBarIcon, public: true },
@@ -45,7 +44,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         { name: 'System Settings', path: '/admin/settings', icon: CogIcon },
       ],
       'ORGANIZER': [
-        { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
+        { name: 'Dashboard', path: '/dashboard', icon: CogIcon },
         { name: 'Create Event', path: '/create-event', icon: PlusIcon },
         { name: 'Manage Events', path: '/admin/events', icon: CalendarIcon },
         { name: 'Venues', path: '/admin/venues', icon: BuildingOfficeIcon },
@@ -54,20 +53,20 @@ const Sidebar = ({ isOpen, onClose }) => {
         { name: 'Results Entry', path: '/results-entry', icon: ChartBarIcon },
       ],
       'ATHLETE': [
-        { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
+        { name: 'Dashboard', path: '/dashboard', icon: CogIcon },
         { name: 'My Registrations', path: '/my-registrations', icon: DocumentTextIcon },
         { name: 'My Tickets', path: '/my-tickets', icon: TicketIcon },
         { name: 'My Results', path: '/my-results', icon: ChartBarIcon },
         { name: 'Payment History', path: '/payments', icon: CreditCardIcon },
       ],
       'COACH': [
-        { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
+        { name: 'Dashboard', path: '/dashboard', icon: CogIcon },
         { name: 'My Teams', path: '/my-teams', icon: UserGroupIcon },
         { name: 'Team Registrations', path: '/team-registrations', icon: DocumentTextIcon },
         { name: 'Team Results', path: '/team-results', icon: ChartBarIcon },
       ],
       'SPECTATOR': [
-        { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
+        { name: 'Dashboard', path: '/dashboard', icon: CogIcon },
         { name: 'My Tickets', path: '/my-tickets', icon: TicketIcon },
         { name: 'Favorites', path: '/favorites', icon: TrophyIcon },
       ]

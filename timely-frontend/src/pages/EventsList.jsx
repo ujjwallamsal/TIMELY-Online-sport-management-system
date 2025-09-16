@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { PlusIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
 import { listEvents } from '../lib/api';
+import api from '../lib/api';
 import EventCard from '../components/EventCard';
 import EventFilters from '../components/EventFilters';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -34,7 +35,10 @@ const EventsList = () => {
         ...currentFilters
       };
 
-      const response = await listEvents(params);
+      // Use different API based on user role
+      const response = user?.role === 'ADMIN' 
+        ? await api.get('/api/events/', { params })
+        : await listEvents(params);
       const data = response.data;
       
       setEvents(data.results || []);

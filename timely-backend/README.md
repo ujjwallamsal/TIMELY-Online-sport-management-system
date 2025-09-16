@@ -335,3 +335,188 @@ timely-backend/
 ---
 
 **Note**: This system uses a custom user model with JWT authentication. Always ensure the `accounts` app is migrated before `django.contrib.admin` to avoid dependency issues.
+
+
+## 🔧 Auth & Public Home Troubleshooting
+
+### Admin Login 400 Error
+**Symptoms**: Login fails with 400 Bad Request, no Set-Cookie headers
+**Causes**: 
+- Frontend sending form-data instead of JSON
+- Wrong API endpoint path
+- CORS credentials not enabled
+- Duplicate axios clients
+
+**Solutions**:
+1. **Check API client**: Ensure single axios instance in `src/lib/api.js` with `baseURL: '/api'` and `withCredentials: true`
+2. **Verify payload**: Login should send `{email, password}` as JSON, not FormData
+3. **Check CORS**: Backend settings must have `CORS_ALLOW_CREDENTIALS = True` and include frontend origin
+4. **Test with curl**:
+   ```bash
+   curl -X POST http://127.0.0.1:8000/api/accounts/auth/login/ \
+     -H "Content-Type: application/json" \
+     -H "X-CSRFToken: $(curl -s http://127.0.0.1:8000/api/accounts/auth/login/ | grep csrftoken | cut -d'"' -f4)" \
+     -d '{"email":"admin@example.com","password":"admin123"}' \
+     -c cookies.txt -v
+   ```
+
+### Public Home API Issues
+**Symptoms**: Home page shows loading forever or empty data
+**Causes**:
+- Missing `/api/public/home/` endpoint
+- Cache not working
+- WebSocket connection failing
+- CORS issues
+
+**Solutions**:
+1. **Test endpoint directly**:
+   ```bash
+   curl http://127.0.0.1:8000/api/public/home/ -H "Accept: application/json"
+   ```
+2. **Check cache headers**: Response should include `ETag` and `Last-Modified`
+3. **Verify WebSocket**: Check browser console for WebSocket connection errors
+4. **Test real-time updates**: Publish news or approve media to trigger updates
+
+### CORS & Cookies Issues
+**Symptoms**: 401 errors, cookies not set, CORS errors in browser
+**Solutions**:
+1. **Backend CORS settings**:
+   ```python
+   CORS_ALLOW_CREDENTIALS = True
+   CORS_ALLOWED_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"]
+   CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
+   ```
+2. **Frontend axios config**:
+   ```javascript
+   const api = axios.create({
+     baseURL: '/api',
+     withCredentials: true,
+     headers: { 'Content-Type': 'application/json' }
+   });
+   ```
+3. **Check CSRF**: Ensure CSRF token is included in requests
+
+### Real-time Updates Not Working
+**Symptoms**: Home page doesn't update when content changes
+**Solutions**:
+1. **Check WebSocket connection**: Look for connection errors in browser console
+2. **Verify Channels**: Ensure Django Channels is properly configured
+3. **Test fallback polling**: Should refresh every 30 seconds if WebSocket fails
+4. **Check signals**: Verify content and media signals are broadcasting to `content:public` group
+
+
+## 🔧 Auth & Public API Troubleshooting
+
+### Admin Login 404 Error
+**Symptoms**: Login fails with 404 Not Found on auth endpoints
+**Causes**: 
+- Missing URL patterns for auth endpoints
+- Incorrect API client baseURL
+- CORS issues preventing requests
+
+**Solutions**:
+1. **Verify URLs**: Ensure `/api/accounts/auth/login/`, `/api/accounts/auth/refresh/`, `/api/accounts/users/me/` exist
+2. **Check API client**: Use single axios instance with `baseURL: '/api'` and `withCredentials: true`
+3. **Test with curl**:
+   ```bash
+   curl -X POST http://127.0.0.1:8000/api/accounts/auth/login/ \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"testpass123"}' \
+     -c cookies.txt -v
+   ```
+
+### News Page Crash
+**Symptoms**: News page crashes with "Cannot read property 'map' of undefined"
+**Causes**:
+- Frontend expects array but backend returns paginated object
+- Missing error handling for API responses
+
+**Solutions**:
+1. **Normalize data**: `const items = Array.isArray(data) ? data : (data?.results ?? []);`
+2. **Add loading states**: Use Skeleton components during loading
+3. **Add empty states**: Use EmptyState component when no data
+4. **Backend consistency**: Ensure all list endpoints return DRF pagination shape
+
+### CORS & Cookies Issues
+**Symptoms**: 401 errors, cookies not set, CORS errors in browser
+**Solutions**:
+1. **Backend CORS settings**:
+   ```python
+   CORS_ALLOW_CREDENTIALS = True
+   CORS_ALLOWED_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"]
+   CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
+   ```
+2. **Frontend axios config**:
+   ```javascript
+   const api = axios.create({
+     baseURL: '/api',
+     withCredentials: true,
+     headers: { 'Content-Type': 'application/json' }
+   });
+   ```
+3. **Test endpoints**:
+   ```bash
+   # Test login
+   curl -X POST http://127.0.0.1:8000/api/accounts/auth/login/ \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"testpass123"}'
+   
+   # Test news
+   curl http://127.0.0.1:8000/api/content/public/news/
+   
+   # Test user profile (with cookies)
+   curl http://127.0.0.1:8000/api/accounts/users/me/ -b cookies.txt
+   ```
+
+
+## 🔧 Reset Admins Command
+
+### Management Command: reset_admins
+
+Safely demote or delete all admins/superusers and create a fresh superuser in one step.
+
+**Usage:**
+```bash
+# Demote all admins (safer - converts to regular users)
+python manage.py reset_admins --mode=demote --create-email=admin@example.com --create-username=admin --create-password=Passw0rd!
+
+# Delete all admins (removes completely)
+python manage.py reset_admins --mode=delete --create-email=admin@example.com --create-username=admin --create-password=Passw0rd!
+
+# Interactive mode (prompts for credentials)
+python manage.py reset_admins --mode=demote
+```
+
+**Options:**
+- `--mode`: `demote` (default, safer) or `delete` (removes users completely)
+- `--create-email`: Email for new superuser (overrides `DJANGO_SUPERUSER_EMAIL` env var)
+- `--create-username`: Username for new superuser (default: `admin`)
+- `--create-password`: Password for new superuser (overrides `DJANGO_SUPERUSER_PASSWORD` env var)
+
+**What it does:**
+1. Runs database migrations
+2. Counts and processes existing superusers and staff users
+3. Demotes or deletes them based on `--mode`
+4. Creates/updates a new superuser with provided credentials
+5. Sets appropriate roles and permissions
+6. Prints a summary of actions taken
+
+**Example Output:**
+```
+Running migrations...
+Found 2 superuser(s) and 1 staff user(s)
+Demoting 2 superuser(s)...
+Demoting 1 staff user(s)...
+Demoted 3 admin user(s)
+Created/updated superuser: admin@example.com (username: admin)
+
+==================================================
+RESET ADMINS SUMMARY
+==================================================
+Mode: demote
+Superusers affected: 2
+Staff users affected: 1
+New superuser: admin@example.com
+New username: admin
+==================================================
+```

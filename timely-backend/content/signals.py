@@ -63,6 +63,18 @@ def news_published_signal(sender, instance, created, **kwargs):
                 'updated_at': instance.updated_at.isoformat()
             }
         )
+        
+        # Also broadcast to public group for home page updates
+        send_realtime_update(
+            'content:public',
+            'content.published',
+            {
+                'id': instance.id,
+                'title': instance.title,
+                'excerpt': instance.excerpt or (instance.body[:150] + '...' if len(instance.body) > 150 else instance.body),
+                'publish_at': instance.publish_at.isoformat() if instance.publish_at else instance.created_at.isoformat()
+            }
+        )
 
 
 @receiver(post_save, sender=Banner)

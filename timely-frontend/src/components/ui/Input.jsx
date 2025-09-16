@@ -7,10 +7,14 @@ const Input = ({
   className = '',
   as: Component = 'input',
   children,
+  value,
   ...props 
 }) => {
   const baseClasses = 'block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200';
   const errorClasses = error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : '';
+  
+  // Handle NaN values for number inputs
+  const safeValue = (typeof value === 'number' && isNaN(value)) ? '' : value;
   
   return (
     <div className={className}>
@@ -21,6 +25,7 @@ const Input = ({
       )}
       <Component 
         className={`${baseClasses} ${errorClasses}`}
+        value={safeValue}
         {...props}
       >
         {children}

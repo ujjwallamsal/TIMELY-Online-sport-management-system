@@ -11,6 +11,7 @@ import {
   getMyTickets,
   getSystemStats
 } from '../lib/api';
+import api from '../lib/api';
 import { 
   CalendarIcon, 
   TrophyIcon, 
@@ -57,7 +58,10 @@ export default function Dashboard() {
       setError('');
 
       const promises = [
-        getPublicEvents(1, '', '', '', {}).catch(err => ({ results: [], count: 0, error: err.message })),
+        // Use different API based on user role
+        user?.role === 'ADMIN' 
+          ? api.get('/api/events/?page=1&page_size=12').then(r => r.data).catch(err => ({ results: [], count: 0, error: err.message }))
+          : getPublicEvents(1, '', '', '', {}).catch(err => ({ results: [], count: 0, error: err.message })),
         getPublicResults(1, {}).catch(err => ({ results: [], count: 0, error: err.message })),
       ];
 

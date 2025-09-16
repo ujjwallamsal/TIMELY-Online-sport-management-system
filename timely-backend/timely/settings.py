@@ -58,6 +58,10 @@ INSTALLED_APPS = [
     "adminapi",
     "kyc",
     "audit",
+    "settingshub",
+    "privacy",
+    "scheduler",
+    "realtime",
 ]
 
 # --- Middleware ---
@@ -217,6 +221,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5178",
     "http://localhost:5178",
 ]
+
+# CORS origin whitelist for compatibility
+CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
 
 # Explicitly deny all other origins
 CORS_ALLOW_ALL_ORIGINS = False

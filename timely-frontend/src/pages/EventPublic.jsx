@@ -1,20 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { publicAPI } from '../lib/api';
+import { useToast } from '../components/AppToaster';
 import TicketStrip from '../components/TicketStrip';
 import FixtureList from '../components/FixtureList';
 import ResultsTable from '../components/ResultsTable';
 import LeaderboardTable from '../components/LeaderboardTable';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
 
 const EventPublic = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('overview');
   const [event, setEvent] = useState(null);
   const [fixtures, setFixtures] = useState([]);
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [resultsLoading, setResultsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  
+  const wsRef = useRef(null);
+  const toast = useToast();
 
   useEffect(() => {
     const loadEventData = async () => {
@@ -22,15 +31,16 @@ const EventPublic = () => {
         setLoading(true);
         setError(null);
         
-        const [eventResponse, fixturesResponse, resultsResponse] = await Promise.all([
+        const [eventResponse, fixturesResponse] = await Promise.all([
           publicAPI.getPublicEvent(id),
-          publicAPI.listPublicFixtures(id),
-          publicAPI.listPublicResults(id)
+          publicAPI.listPublicFixtures(id)
         ]);
         
         setEvent(eventResponse.data);
         setFixtures(fixturesResponse.data.results || []);
-        setResults(resultsResponse.data);
+        
+        // Load results data
+        await loadResultsData();
         
       } catch (err) {
         console.error('Failed to load event data:', err);
@@ -48,6 +58,112 @@ const EventPublic = () => {
       loadEventData();
     }
   }, [id]);
+
+  const loadResultsData = async () => {
+    try {
+      setResultsLoading(true);
+      
+      const [resultsResponse, leaderboardResponse] = await Promise.all([
+        fetch(`/api/results/event/${id}/recent/`),
+        fetch(`/api/results/event/${id}/leaderboard/`)
+      ]);
+      
+      if (resultsResponse.ok) {
+        const resultsData = await resultsResponse.json();
+        setResults(resultsData.results || []);
+      }
+      
+      if (leaderboardResponse.ok) {
+        const leaderboardData = await leaderboardResponse.json();
+        setLeaderboard(leaderboardData.leaderboard || []);
+      }
+    } catch (err) {
+      console.error('Failed to load results data:', err);
+      toast.error('Failed to load results', 'Please refresh the page.');
+    } finally {
+      setResultsLoading(false);
+    }
+  };
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    if (!id) return;
+
+    const connectWebSocket = () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/results/event/${id}/`;
+      
+      wsRef.current = new WebSocket(wsUrl);
+      
+      wsRef.current.onopen = () => {
+        setWsConnected(true);
+        console.log('WebSocket connected for results updates');
+      };
+      
+      wsRef.current.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          switch (data.type) {
+            case 'result_created':
+            case 'result_updated':
+            case 'result_published':
+              // Refresh results when a result is updated
+              loadResultsData();
+              break;
+            case 'leaderboard_updated':
+            case 'standings_recomputed':
+              // Update leaderboard
+              if (data.data) {
+                setLeaderboard(data.data);
+              } else {
+                loadResultsData();
+              }
+              break;
+            case 'pong':
+              // Keep connection alive
+              break;
+          }
+        } catch (err) {
+          console.error('Error parsing WebSocket message:', err);
+        }
+      };
+      
+      wsRef.current.onclose = () => {
+        setWsConnected(false);
+        console.log('WebSocket disconnected');
+        
+        // Reconnect after 5 seconds
+        setTimeout(connectWebSocket, 5000);
+      };
+      
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setWsConnected(false);
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [id]);
+
+  // Send ping every 30 seconds to keep connection alive
+  useEffect(() => {
+    if (!wsConnected || !wsRef.current) return;
+
+    const pingInterval = setInterval(() => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 30000);
+
+    return () => clearInterval(pingInterval);
+  }, [wsConnected]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -245,15 +361,40 @@ const EventPublic = () => {
 
             {activeTab === 'results' && (
               <div className="space-y-8">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Match Results</h3>
-                  <ResultsTable results={results?.results || []} />
+                {/* Connection Status */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Match Results</h3>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className="text-sm text-gray-500">
+                      {wsConnected ? 'Live updates' : 'Offline'}
+                    </span>
+                  </div>
                 </div>
                 
-                {results?.leaderboard && results.leaderboard.length > 0 && (
+                {resultsLoading ? (
+                  <div className="space-y-4">
+                    <Skeleton type="heading" className="w-48" />
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <Skeleton type="card" key={i} className="h-16" />
+                      ))}
+                    </div>
+                  </div>
+                ) : results.length === 0 ? (
+                  <EmptyState
+                    icon="🏆"
+                    title="No Results Yet"
+                    message="Results will appear here once matches are completed and published."
+                  />
+                ) : (
+                  <ResultsTable results={results} />
+                )}
+                
+                {leaderboard.length > 0 && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Leaderboard</h3>
-                    <LeaderboardTable leaderboard={results.leaderboard} />
+                    <LeaderboardTable leaderboard={leaderboard} />
                   </div>
                 )}
               </div>

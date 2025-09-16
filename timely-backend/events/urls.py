@@ -22,4 +22,7 @@ urlpatterns = [
         'patch': 'partial_update',
         'delete': 'destroy'
     }), name='event-divisions-detail'),
+    
+    # Fixtures endpoint for schedule/results pages
+    path('<int:event_id>/fixtures/', EventViewSet.as_view({'get': 'fixtures'}), name='event-fixtures'),
 ]

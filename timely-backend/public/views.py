@@ -6,91 +6,98 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from common.auth import NoAuthentication
+from common.cache import cache_page_seconds
 from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.utils import timezone
+from django.http import HttpResponse
 from typing import Dict, Any
 
 from .cache import get_home_data, set_home_data, get_news_data, set_news_data
 from events.models import Event
 from fixtures.models import Fixture
 from results.models import Result
-from content.models import Announcement
+from content.models import Announcement, News, Banner
 from tickets.models import TicketOrder
+from teams.models import Team
+from accounts.models import User
+from venues.models import Venue
 
 
 @api_view(['GET'])
 @authentication_classes([NoAuthentication])
 @permission_classes([AllowAny])
+@cache_page_seconds(60)  # Cache for 60 seconds
 def public_home(request) -> Response:
     """
     GET /api/public/home/
-    Returns aggregated data for home page: hero events, latest news, highlights
+    Returns aggregated data for home page: featuredEvents, news, banners
+    All data is public & published with 60s cache and ETag support
     """
     try:
-        # Try to get cached data first
-        cached_data = get_home_data()
-        if cached_data.get('heroEvents') and cached_data.get('news'):
-            return Response(cached_data)
-        
-        # Build fresh data
         now = timezone.now()
         
-        # Get 3 featured upcoming events (next 30 days)
-        hero_events = Event.objects.filter(
-            lifecycle_status=Event.LifecycleStatus.PUBLISHED,
-            start_datetime__gte=now,
-            start_datetime__lte=now + timezone.timedelta(days=30)
-        ).select_related('venue').order_by('start_datetime')[:3]
-        
-        # Get latest 3 published news items
-        news = Announcement.objects.filter(
-            is_published=True
-        ).order_by('-created_at')[:3]
-        
-        # Calculate highlights
-        upcoming_count = Event.objects.filter(
+        # Get featured events (published + upcoming/featured)
+        featured_events = Event.objects.filter(
             lifecycle_status=Event.LifecycleStatus.PUBLISHED,
             start_datetime__gte=now
-        ).count()
+        ).select_related('venue').order_by('start_datetime')[:6]
         
-        tickets_sold = TicketOrder.objects.filter(
-            status='paid'
-        ).aggregate(total=Count('id'))['total'] or 0
+        # Get published news (published & publish_at<=now)
+        news = News.objects.filter(
+            published=True,
+            publish_at__lte=now
+        ).order_by('-publish_at')[:6]
+        
+        # Get active banners (active window)
+        banners = Banner.objects.filter(
+            active=True,
+            starts_at__lte=now,
+            ends_at__gte=now
+        ).order_by('-created_at')[:3]
         
         data = {
-            'heroEvents': [
+            'featuredEvents': [
                 {
                     'id': event.id,
-                    'name': event.name,
+                    'title': event.name,
                     'sport': event.sport,
-                    'start_datetime': event.start_datetime,
-                    'location': event.location,
-                    'venue': event.venue.name if event.venue else None,
-                    'fee_cents': event.fee_cents
+                    'start_at': event.start_datetime.isoformat(),
+                    'venue_name': event.venue.name if event.venue else event.location,
+                    'price_cents': event.fee_cents,
+                    'status': event.phase
                 }
-                for event in hero_events
+                for event in featured_events
             ],
             'news': [
                 {
                     'id': item.id,
                     'title': item.title,
-                    'slug': item.slug,
-                    'created_at': item.created_at,
-                    'body': item.body[:200] + '...' if len(item.body) > 200 else item.body
+                    'excerpt': item.excerpt or (item.body[:150] + '...' if len(item.body) > 150 else item.body),
+                    'publish_at': item.publish_at.isoformat() if item.publish_at else item.created_at.isoformat()
                 }
                 for item in news
             ],
-            'highlights': {
-                'ticketsSold': tickets_sold,
-                'upcomingCount': upcoming_count
-            }
+            'banners': [
+                {
+                    'id': banner.id,
+                    'title': banner.title,
+                    'image': banner.image.url if banner.image else None,
+                    'link_url': banner.link_url
+                }
+                for banner in banners
+            ]
         }
         
-        # Cache the data
-        set_home_data(data, timeout=60)
+        response = Response(data)
         
-        return Response(data)
+        # Add ETag for cache validation
+        import hashlib
+        content_hash = hashlib.md5(str(data).encode()).hexdigest()
+        response['ETag'] = f'"{content_hash}"'
+        response['Last-Modified'] = now.strftime('%a, %d %b %Y %H:%M:%S GMT')
+        
+        return response
         
     except Exception as e:
         return Response(
@@ -500,3 +507,52 @@ def public_news_list(request) -> Response:
             {'error': f'Failed to load news: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+@authentication_classes([NoAuthentication])
+@permission_classes([AllowAny])
+def public_stats(request) -> Response:
+    """
+    GET /api/public/stats/
+    Returns live statistics for the homepage
+    """
+    try:
+        now = timezone.now()
+        
+        # Count published events
+        events_count = Event.objects.filter(
+            lifecycle_status=Event.LifecycleStatus.PUBLISHED
+        ).count()
+        
+        # Count total participants (users with athlete role)
+        participants_count = User.objects.filter(
+            role='ATHLETE',
+            is_active=True
+        ).count()
+        
+        # Count active teams
+        teams_count = Team.objects.filter(
+            is_active=True
+        ).count()
+        
+        # Count active venues
+        venues_count = Venue.objects.filter(
+            is_active=True
+        ).count()
+        
+        stats = {
+            'events': events_count,
+            'participants': participants_count,
+            'teams': teams_count,
+            'venues': venues_count,
+            'last_updated': now.isoformat()
+        }
+        
+        return Response(stats)
+        
+    except Exception as e:
+        return Response({
+            'error': 'Failed to fetch statistics',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

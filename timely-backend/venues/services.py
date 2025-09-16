@@ -1,204 +1,224 @@
 # venues/services.py
-from __future__ import annotations
-from typing import List, Dict, Any
-from datetime import datetime
-from django.utils import timezone
 from django.db.models import Q
-from .models import Venue, VenueAvailabilitySlot
+from django.utils import timezone
+from .models import Venue, VenueSlot
 
 
-def get_venue_conflicts(venue_id: int, start_datetime: datetime, end_datetime: datetime) -> Dict[str, Any]:
+def find_conflicts(venue_id, starts_at, ends_at, exclude_slot_id=None):
     """
-    Get conflicts for a venue in a given time range.
+    Find conflicts for a proposed venue slot.
     
     Args:
         venue_id: ID of the venue
-        start_datetime: Start of the time range
-        end_datetime: End of the time range
-        
+        starts_at: Proposed start time
+        ends_at: Proposed end time
+        exclude_slot_id: ID of slot to exclude from conflict check (for updates)
+    
     Returns:
-        Dictionary containing conflict information
+        List of conflicting slots
     """
-    try:
-        venue = Venue.objects.get(id=venue_id)
-    except Venue.DoesNotExist:
-        return {"error": "Venue not found"}
-    
-    # Find overlapping availability slots
-    overlapping_slots = VenueAvailabilitySlot.objects.filter(
-        venue=venue,
-        start_datetime__lt=end_datetime,
-        end_datetime__gt=start_datetime
-    ).order_by('start_datetime')
-    
-    # Find blocked/maintenance slots that conflict
-    blocked_slots = overlapping_slots.filter(
-        status__in=[VenueAvailabilitySlot.Status.BLOCKED, VenueAvailabilitySlot.Status.MAINTENANCE]
+    # Build query for overlapping slots
+    query = Q(
+        venue_id=venue_id,
+        starts_at__lt=ends_at,
+        ends_at__gt=starts_at
     )
     
-    # Find available slots that would be affected
-    available_slots = overlapping_slots.filter(
-        status=VenueAvailabilitySlot.Status.AVAILABLE
-    )
+    # Exclude specific slot if provided (for updates)
+    if exclude_slot_id:
+        query &= ~Q(id=exclude_slot_id)
     
-    # TODO: When Events have venue_id, also check for scheduled fixtures
-    # This will be implemented when the Event FK is added
+    # Get conflicting slots
+    conflicts = VenueSlot.objects.filter(query).select_related('venue')
     
-    return {
-        "venue_id": venue_id,
-        "venue_name": venue.name,
-        "requested_period": {
-            "start": start_datetime,
-            "end": end_datetime
-        },
-        "conflicts": {
-            "blocked_slots": [
-                {
-                    "id": slot.id,
-                    "start_datetime": slot.start_datetime,
-                    "end_datetime": slot.end_datetime,
-                    "status": slot.status,
-                    "note": slot.note
-                }
-                for slot in blocked_slots
-            ],
-            "available_slots": [
-                {
-                    "id": slot.id,
-                    "start_datetime": slot.start_datetime,
-                    "end_datetime": slot.end_datetime,
-                    "note": slot.note
-                }
-                for slot in available_slots
-            ],
-            "scheduled_fixtures": []  # Will be populated when Event FK is added
-        },
-        "has_conflicts": blocked_slots.exists()
-    }
-
-
-def get_venue_availability(venue_id: int, date_from: datetime = None, date_to: datetime = None) -> Dict[str, Any]:
-    """
-    Get venue availability for a date range.
-    
-    Args:
-        venue_id: ID of the venue
-        date_from: Start date (defaults to now)
-        date_to: End date (defaults to +30 days)
-        
-    Returns:
-        Dictionary containing availability information
-    """
-    try:
-        venue = Venue.objects.get(id=venue_id)
-    except Venue.DoesNotExist:
-        return {"error": "Venue not found"}
-    
-    # Default to next 30 days if no dates provided
-    if not date_from:
-        date_from = timezone.now()
-    if not date_to:
-        date_to = date_from + timezone.timedelta(days=30)
-    
-    # Get all availability slots in the range
-    slots = VenueAvailabilitySlot.objects.filter(
-        venue=venue,
-        start_datetime__lt=date_to,
-        end_datetime__gt=date_from
-    ).order_by('start_datetime')
-    
-    # Group by status
-    available_slots = slots.filter(status=VenueAvailabilitySlot.Status.AVAILABLE)
-    blocked_slots = slots.filter(status=VenueAvailabilitySlot.Status.BLOCKED)
-    maintenance_slots = slots.filter(status=VenueAvailabilitySlot.Status.MAINTENANCE)
-    
-    return {
-        "venue_id": venue_id,
-        "venue_name": venue.name,
-        "period": {
-            "from": date_from,
-            "to": date_to
-        },
-        "availability": {
-            "available": [
-                {
-                    "id": slot.id,
-                    "start_datetime": slot.start_datetime,
-                    "end_datetime": slot.end_datetime,
-                    "note": slot.note
-                }
-                for slot in available_slots
-            ],
-            "blocked": [
-                {
-                    "id": slot.id,
-                    "start_datetime": slot.start_datetime,
-                    "end_datetime": slot.end_datetime,
-                    "note": slot.note
-                }
-                for slot in blocked_slots
-            ],
-            "maintenance": [
-                {
-                    "id": slot.id,
-                    "start_datetime": slot.start_datetime,
-                    "end_datetime": slot.end_datetime,
-                    "note": slot.note
-                }
-                for slot in maintenance_slots
-            ]
+    return [
+        {
+            'id': slot.id,
+            'venue_id': slot.venue_id,
+            'venue_name': slot.venue.name,
+            'starts_at': slot.starts_at.isoformat(),
+            'ends_at': slot.ends_at.isoformat(),
+            'status': slot.status,
+            'reason': slot.reason
         }
+        for slot in conflicts
+    ]
+
+
+def check_availability(venue_id, from_date, to_date):
+    """
+    Check venue availability for a date range.
+    
+    Args:
+        venue_id: ID of the venue
+        from_date: Start of availability window
+        to_date: End of availability window
+    
+    Returns:
+        Dict with availability data or error
+    """
+    try:
+        venue = Venue.objects.get(id=venue_id)
+    except Venue.DoesNotExist:
+        return {'error': 'Venue not found'}
+    
+    # Get all slots in the date range
+    slots = VenueSlot.objects.filter(
+        venue_id=venue_id,
+        starts_at__lt=to_date,
+        ends_at__gt=from_date
+    ).order_by('starts_at')
+    
+    # Calculate availability
+    available_slots = []
+    blocked_slots = []
+    
+    for slot in slots:
+        slot_data = {
+            'id': slot.id,
+            'starts_at': slot.starts_at.isoformat(),
+            'ends_at': slot.ends_at.isoformat(),
+            'duration_minutes': slot.duration_minutes,
+            'reason': slot.reason
+        }
+        
+        if slot.status == VenueSlot.Status.AVAILABLE:
+            available_slots.append(slot_data)
+        else:
+            blocked_slots.append(slot_data)
+    
+    return {
+        'venue_id': venue_id,
+        'venue_name': venue.name,
+        'from_date': from_date.isoformat(),
+        'to_date': to_date.isoformat(),
+        'available_slots': available_slots,
+        'blocked_slots': blocked_slots,
+        'total_available': len(available_slots),
+        'total_blocked': len(blocked_slots)
     }
 
 
-def create_availability_slots(venue_id: int, slots_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+def validate_slot_data(slot_data):
+    """
+    Validate slot data before creation.
+    
+    Args:
+        slot_data: Dict with slot data
+    
+    Returns:
+        Dict with validation result
+    """
+    errors = []
+    
+    # Check required fields
+    required_fields = ['starts_at', 'ends_at']
+    for field in required_fields:
+        if field not in slot_data:
+            errors.append(f'{field} is required')
+    
+    if errors:
+        return {'is_valid': False, 'errors': errors}
+    
+    # Validate datetime format
+    try:
+        starts_at = timezone.datetime.fromisoformat(
+            slot_data['starts_at'].replace('Z', '+00:00')
+        )
+        ends_at = timezone.datetime.fromisoformat(
+            slot_data['ends_at'].replace('Z', '+00:00')
+        )
+    except (ValueError, AttributeError):
+        errors.append('Invalid datetime format. Use ISO format.')
+        return {'is_valid': False, 'errors': errors}
+    
+    # Validate time order
+    if ends_at <= starts_at:
+        errors.append('End time must be after start time')
+    
+    # Validate slot duration (max 24 hours)
+    duration = ends_at - starts_at
+    if duration.total_seconds() > 24 * 3600:
+        errors.append('Slot duration cannot exceed 24 hours')
+    
+    # Validate slot is not in the past
+    now = timezone.now()
+    if starts_at < now:
+        errors.append('Slot cannot be in the past')
+    
+    return {'is_valid': len(errors) == 0, 'errors': errors}
+
+
+def create_availability_slots(venue_id, slots_data):
     """
     Create multiple availability slots for a venue.
     
     Args:
         venue_id: ID of the venue
-        slots_data: List of slot data dictionaries
-        
+        slots_data: List of slot data dicts
+    
     Returns:
-        Dictionary containing created slots and any errors
+        Dict with creation results
     """
     try:
         venue = Venue.objects.get(id=venue_id)
     except Venue.DoesNotExist:
-        return {"error": "Venue not found"}
+        return {'error': 'Venue not found'}
     
     created_slots = []
     errors = []
     
     for i, slot_data in enumerate(slots_data):
+        # Validate slot data
+        validation = validate_slot_data(slot_data)
+        if not validation['is_valid']:
+            errors.append({
+                'index': i,
+                'errors': validation['errors']
+            })
+            continue
+        
+        # Check for conflicts
+        starts_at = timezone.datetime.fromisoformat(
+            slot_data['starts_at'].replace('Z', '+00:00')
+        )
+        ends_at = timezone.datetime.fromisoformat(
+            slot_data['ends_at'].replace('Z', '+00:00')
+        )
+        
+        conflicts = find_conflicts(venue_id, starts_at, ends_at)
+        if conflicts:
+            errors.append({
+                'index': i,
+                'error': 'Slot conflicts with existing slots',
+                'conflicts': conflicts
+            })
+            continue
+        
+        # Create slot
         try:
-            slot = VenueAvailabilitySlot.objects.create(
+            slot = VenueSlot.objects.create(
                 venue=venue,
-                start_datetime=slot_data['start_datetime'],
-                end_datetime=slot_data['end_datetime'],
-                status=slot_data.get('status', VenueAvailabilitySlot.Status.AVAILABLE),
-                note=slot_data.get('note', '')
+                starts_at=starts_at,
+                ends_at=ends_at,
+                status=slot_data.get('status', VenueSlot.Status.AVAILABLE),
+                reason=slot_data.get('reason', '')
             )
-            created_slots.append(slot)
+            created_slots.append({
+                'id': slot.id,
+                'starts_at': slot.starts_at.isoformat(),
+                'ends_at': slot.ends_at.isoformat(),
+                'status': slot.status
+            })
         except Exception as e:
             errors.append({
-                "index": i,
-                "data": slot_data,
-                "error": str(e)
+                'index': i,
+                'error': str(e)
             })
     
     return {
-        "venue_id": venue_id,
-        "created_slots": len(created_slots),
-        "errors": errors,
-        "slots": [
-            {
-                "id": slot.id,
-                "start_datetime": slot.start_datetime,
-                "end_datetime": slot.end_datetime,
-                "status": slot.status,
-                "note": slot.note
-            }
-            for slot in created_slots
-        ]
+        'created_slots': created_slots,
+        'errors': errors,
+        'success_count': len(created_slots),
+        'error_count': len(errors)
     }

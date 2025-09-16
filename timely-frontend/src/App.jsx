@@ -7,8 +7,6 @@ import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
-import AdminDashboard from "./pages/AdminDashboard.jsx";
-import AdminUsers from "./pages/AdminUsers.jsx";
 import Profile from "./pages/Profile.jsx";
 import PasswordReset from "./pages/PasswordReset.jsx";
 import EventsList from "./pages/EventsList.jsx";
@@ -29,6 +27,9 @@ import Settings from "./pages/Settings.jsx";
 import Venues from "./pages/Venues.jsx";
 import NotFound from "./pages/NotFound.jsx";
 import Error500 from "./pages/Error500.jsx";
+
+// Import new admin routes
+import AdminRoutes from "./routes/admin.jsx";
 
 // Spectator Portal pages
 import SpectatorEvents from "./pages/SpectatorEvents.jsx";
@@ -84,9 +85,8 @@ export default function App() {
         <Route path="/my-registrations" element={<PrivateRoute><MyRegistrations /></PrivateRoute>} />
         <Route path="/events/:eventId/register" element={<PrivateRoute><RegistrationWizard /></PrivateRoute>} />
 
-        {/* Admin pages */}
-        <Route path="/admin" element={<PrivateRoute requiredRoles={["ADMIN"]}><AdminDashboard /></PrivateRoute>} />
-        <Route path="/admin/users" element={<PrivateRoute requiredRoles={["ADMIN"]}><AdminUsers /></PrivateRoute>} />
+        {/* Admin pages - using new admin routes */}
+        <Route path="/admin/*" element={<AdminRoutes />} />
 
         {/* Organizer pages */}
         <Route path="/events/create" element={<PrivateRoute requiredRoles={["ORGANIZER","ADMIN"]}><EventEditor /></PrivateRoute>} />

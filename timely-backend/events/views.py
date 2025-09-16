@@ -50,17 +50,30 @@ class EventViewSet(viewsets.ModelViewSet):
         if self.action == 'list' and not self.request.user.is_authenticated:
             queryset = queryset.filter(lifecycle_status=Event.LifecycleStatus.PUBLISHED)
         elif self.action == 'list' and self.request.user.is_authenticated:
-            # Authenticated users can see published events + their own events
-            if self.request.user.role not in ['ADMIN']:
+            # Admin sees all events, Organizer sees their own + published, others see published only
+            if self.request.user.role == 'ADMIN':
+                # Admin sees all events
+                pass
+            elif self.request.user.role == 'ORGANIZER':
+                # Organizer sees their own events + published events
                 queryset = queryset.filter(
                     Q(lifecycle_status=Event.LifecycleStatus.PUBLISHED) |
                     Q(created_by=self.request.user)
                 )
+            else:
+                # Other users see only published events
+                queryset = queryset.filter(lifecycle_status=Event.LifecycleStatus.PUBLISHED)
         
         # Apply filters
         sport = self.request.query_params.get('sport')
         if sport:
             queryset = queryset.filter(sport__iexact=sport)
+        
+        # Status filter (for admin/organizer)
+        status_filter = self.request.query_params.get('status')
+        if status_filter and self.request.user.is_authenticated:
+            if self.request.user.role in ['ADMIN', 'ORGANIZER']:
+                queryset = queryset.filter(lifecycle_status=status_filter)
         
         # Date range filter
         date_from = self.request.query_params.get('date_from')
@@ -78,12 +91,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 Q(description__icontains=q) |
                 Q(location__icontains=q)
             )
-        
-        # Lifecycle status filter (for privileged users)
-        lifecycle_status = self.request.query_params.get('lifecycle_status')
-        if lifecycle_status and self.request.user.is_authenticated:
-            if self.request.user.role in ['ADMIN', 'ORGANIZER']:
-                queryset = queryset.filter(lifecycle_status=lifecycle_status)
         
         return queryset
     
@@ -153,6 +160,33 @@ class EventViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    @action(detail=True, methods=['get'])
+    def fixtures(self, request, pk=None):
+        """Get fixtures for an event (for schedule/results pages)"""
+        event = self.get_object()
+        
+        # Only admin/organizer can access fixtures
+        if not request.user.is_authenticated or request.user.role not in ['ADMIN', 'ORGANIZER']:
+            return Response(
+                {"detail": "Permission denied"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get date range filters
+        from_date = request.query_params.get('from')
+        to_date = request.query_params.get('to')
+        
+        # For now, return empty fixtures (can be extended with actual fixture model)
+        fixtures = []
+        
+        return Response({
+            'event_id': event.id,
+            'event_name': event.name,
+            'fixtures': fixtures,
+            'from_date': from_date,
+            'to_date': to_date
+        })
+    
     def _send_realtime_update(self, event, action, extra_data=None):
         """Send realtime update via WebSocket (safe no-op if Channels not available)"""
         try:
@@ -177,17 +211,24 @@ class EventViewSet(viewsets.ModelViewSet):
                 if extra_data:
                     payload['data'].update(extra_data)
                 
-                # Send to list subscribers
+                # Send to admin group
                 async_to_sync(channel_layer.group_send)(
-                    'events_list',
+                    'events:admin',
                     payload
                 )
                 
-                # Send to specific event subscribers
+                # Send to organizer group
                 async_to_sync(channel_layer.group_send)(
-                    f'events_item_{event.id}',
+                    f'events:org:{event.created_by_id}',
                     payload
                 )
+                
+                # Send to public group if published
+                if event.lifecycle_status == Event.LifecycleStatus.PUBLISHED:
+                    async_to_sync(channel_layer.group_send)(
+                        'events:public',
+                        payload
+                    )
         except ImportError:
             # Channels not available, silently continue
             pass

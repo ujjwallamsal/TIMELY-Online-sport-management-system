@@ -5,7 +5,7 @@ import {
   rescheduleFixture, getFixtureConflicts, getEvents, getTeams
 } from '../lib/api';
 import { useToast } from '../hooks/useToast.jsx';
-import { useSocket } from '../hooks/useSocket';
+import useSocket from '../hooks/useSocket';
 import FixtureRow from '../components/FixtureRow';
 
 export default function Fixtures() {

@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import PaymentIntent, WebhookEvent, Refund
 from .stripe_gateway import stripe_gateway
+from .provider import PaymentProviderFactory
 from registrations.models import Registration
 from registrations.serializers import RegistrationDetailSerializer
 from django.utils import timezone
@@ -171,6 +172,272 @@ def confirm_payment(request):
         )
     except Exception as e:
         logger.error(f"Payment confirmation error: {e}")
+        return Response(
+            {'error': 'Failed to confirm payment'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_payment_session(request):
+    """Create payment session with specified provider"""
+    try:
+        order_id = request.data.get('order_id')
+        provider = request.data.get('provider', 'stripe')
+        
+        if not order_id:
+            return Response(
+                {'error': 'order_id is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get order (assuming TicketOrder model exists)
+        from tickets.models import TicketOrder
+        order = get_object_or_404(TicketOrder, id=order_id, user=request.user)
+        
+        # Get provider
+        try:
+            payment_provider = PaymentProviderFactory.get_provider(provider)
+        except ValueError as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Prepare order data
+        order_data = {
+            'order_id': str(order.id),
+            'user_id': str(order.user.id),
+            'event_id': str(order.event.id),
+            'amount_cents': order.total_cents,
+            'currency': order.currency,
+            'customer_email': order.user.email,
+            'success_url': f"{settings.FRONTEND_URL}/tickets/success?order_id={order.id}",
+            'cancel_url': f"{settings.FRONTEND_URL}/tickets/cancel?order_id={order.id}",
+            'items': [
+                {
+                    'name': f"{ticket.ticket_type.name} - {order.event.name}",
+                    'description': ticket.ticket_type.description or f"Ticket for {order.event.name}",
+                    'price_cents': ticket.ticket_type.price_cents,
+                    'quantity': 1
+                }
+                for ticket in order.tickets.all()
+            ]
+        }
+        
+        # Create session
+        session_data = payment_provider.create_session(order_data)
+        
+        # Update order with session info
+        order.provider_session_id = session_data.get('session_id')
+        order.payment_provider = provider
+        order.save()
+        
+        return Response(session_data)
+        
+    except Exception as e:
+        logger.error(f"Error creating payment session: {str(e)}")
+        return Response(
+            {'error': 'Failed to create payment session'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def process_refund(request):
+    """Process refund for an order"""
+    try:
+        order_id = request.data.get('order_id')
+        amount_cents = request.data.get('amount_cents')
+        reason = request.data.get('reason', 'Refund requested')
+        
+        if not order_id:
+            return Response(
+                {'error': 'order_id is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get order
+        from tickets.models import TicketOrder
+        order = get_object_or_404(TicketOrder, id=order_id)
+        
+        # Check permissions (admin or order owner)
+        if not (request.user.is_staff or order.user == request.user):
+            return Response(
+                {'error': 'You do not have permission to refund this order'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if order.status != TicketOrder.Status.PAID:
+            return Response(
+                {'error': 'Order is not paid'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get provider
+        provider = order.payment_provider or 'stripe'
+        try:
+            payment_provider = PaymentProviderFactory.get_provider(provider)
+        except ValueError as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Prepare order data for refund
+        order_data = {
+            'order_id': str(order.id),
+            'payment_intent_id': order.provider_payment_intent_id,
+            'currency': order.currency,
+            'refund_reason': reason
+        }
+        
+        # Process refund
+        refund_amount = amount_cents or order.total_cents
+        refund_data = payment_provider.refund(order_data, refund_amount)
+        
+        # Update order status
+        order.status = TicketOrder.Status.REFUNDED
+        order.save()
+        
+        return Response(refund_data)
+        
+    except Exception as e:
+        logger.error(f"Error processing refund: {str(e)}")
+        return Response(
+            {'error': 'Failed to process refund'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_available_providers(request):
+    """Get list of available payment providers"""
+    providers = PaymentProviderFactory.get_available_providers()
+    
+    provider_info = {
+        'stripe': {
+            'name': 'Stripe',
+            'description': 'Credit card payments',
+            'supported_currencies': ['USD', 'EUR', 'GBP', 'AUD'],
+            'fees': '2.9% + 30¢ per transaction'
+        },
+        'paypal': {
+            'name': 'PayPal',
+            'description': 'PayPal payments',
+            'supported_currencies': ['USD', 'EUR', 'GBP', 'AUD'],
+            'fees': '2.9% + fixed fee per transaction'
+        },
+        'offline': {
+            'name': 'Bank Transfer',
+            'description': 'Offline bank transfer',
+            'supported_currencies': ['AUD', 'USD'],
+            'fees': 'No additional fees'
+        }
+    }
+    
+    return Response({
+        'providers': [
+            {
+                'id': provider,
+                **provider_info.get(provider, {})
+            }
+            for provider in providers
+        ]
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def paypal_webhook(request):
+    """Handle PayPal webhook events"""
+    try:
+        # Get PayPal provider
+        paypal_provider = PaymentProviderFactory.get_provider('paypal')
+        
+        # Verify webhook
+        if not paypal_provider.verify_webhook(request):
+            logger.error("Invalid PayPal webhook signature")
+            return HttpResponse(status=400)
+        
+        # Process webhook
+        webhook_data = paypal_provider.process_webhook(request)
+        
+        # Handle the event
+        if webhook_data.get('event_type') == 'payment_completed':
+            # Update order status
+            order_id = webhook_data.get('order_id')
+            if order_id:
+                from tickets.models import TicketOrder
+                try:
+                    order = TicketOrder.objects.get(id=order_id)
+                    order.status = TicketOrder.Status.PAID
+                    order.provider_payment_intent_id = webhook_data.get('capture_id')
+                    order.save()
+                    logger.info(f"Order {order_id} marked as paid via PayPal")
+                except TicketOrder.DoesNotExist:
+                    logger.error(f"Order {order_id} not found for PayPal webhook")
+        
+        return HttpResponse(status=200)
+        
+    except Exception as e:
+        logger.error(f"Error processing PayPal webhook: {str(e)}")
+        return HttpResponse(status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def confirm_offline_payment(request):
+    """Confirm offline payment (admin only)"""
+    if not request.user.is_staff:
+        return Response(
+            {'error': 'Admin access required'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        order_id = request.data.get('order_id')
+        bank_reference = request.data.get('bank_reference')
+        amount = request.data.get('amount')
+        notes = request.data.get('notes', '')
+        
+        if not all([order_id, bank_reference, amount]):
+            return Response(
+                {'error': 'order_id, bank_reference, and amount are required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get order
+        from tickets.models import TicketOrder
+        order = get_object_or_404(TicketOrder, id=order_id)
+        
+        # Get offline provider
+        offline_provider = PaymentProviderFactory.get_provider('offline')
+        
+        # Confirm payment
+        confirmation_data = {
+            'amount': amount,
+            'bank_reference': bank_reference,
+            'confirmed_by': request.user.id,
+            'notes': notes
+        }
+        
+        result = offline_provider.confirm_payment(
+            {'reference_number': order.provider_session_id},
+            confirmation_data
+        )
+        
+        # Update order
+        order.status = TicketOrder.Status.PAID
+        order.save()
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Error confirming offline payment: {str(e)}")
         return Response(
             {'error': 'Failed to confirm payment'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

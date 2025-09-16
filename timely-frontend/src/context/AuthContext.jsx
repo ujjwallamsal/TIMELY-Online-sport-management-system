@@ -8,9 +8,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Temporarily disable automatic auth check to prevent refresh loops
-    // checkAuthStatus();
-    setLoading(false);
+    checkAuthStatus();
   }, []);
 
   const checkAuthStatus = async () => {
@@ -30,8 +28,8 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const login = async (emailOrUsername, password) => {
-    const payload = /@/.test(emailOrUsername) ? { email: emailOrUsername, password } : { username: emailOrUsername, password };
+  const login = async (email, password) => {
+    const payload = { email, password };
     console.log('Login attempt with payload:', payload);
     try {
       const { data } = await api.post('accounts/auth/login/', payload);

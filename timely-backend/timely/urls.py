@@ -83,6 +83,7 @@ urlpatterns = [
     
     # API routes - Clean, single-level paths
     path("api/accounts/", include("accounts.urls")),
+    path("api/admin/", include("accounts.admin_api.urls")),
     path("api/events/", include("events.urls")),
     path("api/venues/", include("venues.urls")),
     path("api/teams/", include("teams.urls")),
@@ -99,6 +100,8 @@ urlpatterns = [
     path("api/admin/", include("adminapi.urls")),
     path("api/kyc/", include("kyc.urls")),
     path("api/audit/", include("audit.urls")),
+    path("api/settings/", include("settingshub.urls")),
+    path("api/privacy/", include("privacy.urls")),
     
     # Legacy public APIs (kept for backward compatibility)
     path("api/fixtures/public/", include("fixtures.urls")),

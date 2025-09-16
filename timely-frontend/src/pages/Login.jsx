@@ -29,7 +29,14 @@ export default function Login() {
       await login(formData.email, formData.password);
       navigate("/dashboard");
     } catch (err) {
-      setError(err.message || "Login failed. Please try again.");
+      // Show clear error messages based on response status
+      if (err.response?.status === 400 || err.response?.status === 401) {
+        setError("Invalid email or password.");
+      } else if (err.response?.status >= 500) {
+        setError("Server error. Please try again.");
+      } else {
+        setError(err.message || "Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

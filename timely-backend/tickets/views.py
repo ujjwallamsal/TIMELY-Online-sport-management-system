@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.contrib.auth import get_user_model
 
-from .models import TicketType, TicketOrder, Ticket
+from .models import TicketType, TicketOrder, Ticket, Refund
 from .serializers import (
     TicketTypeSerializer, TicketTypeCreateSerializer,
     TicketOrderSerializer, CreateOrderSerializer,
@@ -85,6 +85,67 @@ class TicketDetailView(generics.RetrieveAPIView):
 
 
 # Order Management Views
+
+@api_view(['POST'])
+@permission_classes([CanPurchaseTickets])
+def checkout(request):
+    """
+    Create checkout session for tickets
+    """
+    serializer = CreateOrderSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    data = serializer.validated_data
+    
+    try:
+        with transaction.atomic():
+            # Calculate total
+            total_cents, currency = calculate_order_total(data['items'])
+            
+            # Create order
+            order = TicketOrder.objects.create(
+                user=request.user,
+                event_id=data['event_id'],
+                fixture_id=data.get('fixture_id'),
+                total_cents=total_cents,
+                currency=currency
+            )
+            
+            # Create tickets
+            for item in data['items']:
+                ticket_type_id = item['ticket_type_id']
+                quantity = item['qty']
+                
+                for _ in range(quantity):
+                    ticket = Ticket.objects.create(
+                        order=order,
+                        ticket_type_id=ticket_type_id
+                    )
+                    # Generate QR payload
+                    ticket.qr_payload = generate_qr_payload(
+                        ticket.id, order.id, ticket.serial
+                    )
+                    ticket.save()
+            
+            # For development, return mock payment intent
+            payment_data = {
+                'order_id': order.id,
+                'client_secret': f'mock_secret_{order.id}',
+                'payment_intent_id': f'mock_intent_{order.id}',
+                'total_cents': total_cents,
+                'currency': currency,
+                'status': 'requires_payment_method'
+            }
+            
+            return Response(payment_data, status=status.HTTP_201_CREATED)
+            
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
 
 @api_view(['POST'])
 @permission_classes([CanPurchaseTickets])
@@ -341,4 +402,293 @@ def use_ticket(request, ticket_id):
         return Response(
             {'error': 'Ticket cannot be used'}, 
             status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def cancel_order(request, order_id):
+    """
+    Cancel a ticket order
+    """
+    order = get_object_or_404(TicketOrder, id=order_id)
+    
+    # Check permissions
+    if not (request.user.is_staff or order.user == request.user):
+        return Response(
+            {'error': 'You do not have permission to cancel this order'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    if not order.can_cancel:
+        return Response(
+            {'error': 'Order cannot be cancelled'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        with transaction.atomic():
+            order.cancel()
+            
+            return Response(
+                {'message': 'Order cancelled successfully'}, 
+                status=status.HTTP_200_OK
+            )
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to cancel order: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def refund_order(request, order_id):
+    """
+    Refund a ticket order
+    """
+    order = get_object_or_404(TicketOrder, id=order_id)
+    
+    # Check permissions (admin or order owner)
+    if not (request.user.is_staff or order.user == request.user):
+        return Response(
+            {'error': 'You do not have permission to refund this order'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    if order.status != TicketOrder.Status.PAID:
+        return Response(
+            {'error': 'Only paid orders can be refunded'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        amount_cents = request.data.get('amount_cents')
+        reason = request.data.get('reason', 'Refund requested')
+        
+        with transaction.atomic():
+            # Process refund through payment provider
+            from payments.provider import PaymentProviderFactory
+            
+            provider = PaymentProviderFactory.get_provider(order.payment_provider)
+            order_data = {
+                'order_id': str(order.id),
+                'payment_intent_id': order.provider_payment_intent_id,
+                'currency': order.currency,
+                'refund_reason': reason
+            }
+            
+            refund_amount = amount_cents or order.total_cents
+            refund_data = provider.refund(order_data, refund_amount)
+            
+            # Update order and create refund record
+            order.refund(refund_amount, reason)
+            
+            # Update refund record with provider data
+            refund = order.refunds.latest('created_at')
+            refund.processed_by = request.user
+            refund.provider_refund_id = refund_data.get('refund_id')
+            refund.provider_response = refund_data.get('provider_data', {})
+            refund.mark_processed()
+            
+            return Response({
+                'message': 'Order refunded successfully',
+                'refund_id': refund.id,
+                'amount_cents': refund_amount,
+                'provider_data': refund_data
+            })
+            
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to refund order: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_order_refunds(request, order_id):
+    """
+    Get refunds for an order
+    """
+    order = get_object_or_404(TicketOrder, id=order_id)
+    
+    # Check permissions
+    if not (request.user.is_staff or order.user == request.user):
+        return Response(
+            {'error': 'You do not have permission to view refunds for this order'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    refunds = Refund.objects.filter(order=order).order_by('-created_at')
+    
+    refund_data = []
+    for refund in refunds:
+        refund_data.append({
+            'id': refund.id,
+            'amount_cents': refund.amount_cents,
+            'amount_dollars': refund.amount_dollars,
+            'currency': refund.currency,
+            'status': refund.status,
+            'reason': refund.reason,
+            'notes': refund.notes,
+            'processed_by': refund.processed_by.get_full_name() if refund.processed_by else None,
+            'created_at': refund.created_at,
+            'processed_at': refund.processed_at,
+            'provider_refund_id': refund.provider_refund_id
+        })
+    
+    return Response({
+        'refunds': refund_data,
+        'total_refunded_cents': sum(r.amount_cents for r in refunds if r.status == Refund.Status.PROCESSED)
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsTicketOwnerOrAdmin])
+def ticket_qr(request, ticket_id):
+    """
+    Get QR code data for a ticket
+    """
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    
+    return Response({
+        'ticket_id': ticket.id,
+        'serial': ticket.serial,
+        'qr_payload': ticket.qr_payload,
+        'qr_image_url': f'/api/tickets/{ticket.id}/qr/image/',  # For QR image generation
+        'status': ticket.status,
+        'event_name': ticket.order.event.name,
+        'ticket_type': ticket.ticket_type.name
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def checkin_ticket(request, ticket_id):
+    """
+    Check-in a ticket (staff only)
+    """
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    
+    # Check permissions (event staff/organizer/admin)
+    if not (request.user.is_staff or 
+            request.user.is_superuser or
+            ticket.order.event.created_by == request.user):
+        return Response(
+            {'error': 'Permission denied'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Check if already used
+    if ticket.status == Ticket.Status.USED:
+        return Response(
+            {'error': 'Ticket already used'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if ticket.status == Ticket.Status.VOID:
+        return Response(
+            {'error': 'Ticket is void'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Use ticket
+    if ticket.use_ticket():
+        return Response({
+            'message': 'Ticket checked in successfully',
+            'ticket': {
+                'id': ticket.id,
+                'serial': ticket.serial,
+                'ticket_type': ticket.ticket_type.name,
+                'event_name': ticket.order.event.name,
+                'used_at': ticket.used_at.isoformat()
+            }
+        })
+    else:
+        return Response(
+            {'error': 'Failed to check in ticket'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def checkin_ticket_qr(request):
+    """
+    Check-in a ticket using QR code (attendance tracking)
+    """
+    qr_payload = request.data.get('qr_payload')
+    gate = request.data.get('gate', '')
+    
+    if not qr_payload:
+        return Response(
+            {'error': 'QR payload is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Check permissions (event staff/organizer/admin)
+    if not (request.user.is_staff or request.user.is_superuser):
+        return Response(
+            {'error': 'Permission denied'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        # Parse QR payload
+        parts = qr_payload.split(':')
+        if len(parts) != 4 or parts[0] != 'TKT':
+            return Response(
+                {'error': 'Invalid QR code format'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        ticket_id = int(parts[1])
+        order_id = int(parts[2])
+        serial = parts[3]
+        
+        # Get ticket
+        ticket = get_object_or_404(Ticket, id=ticket_id, serial=serial)
+        
+        # Check if already used
+        if ticket.status == Ticket.Status.USED:
+            return Response(
+                {'error': 'Ticket already used'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if ticket.status == Ticket.Status.VOID:
+            return Response(
+                {'error': 'Ticket is void'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Use ticket
+        if ticket.use_ticket():
+            return Response({
+                'message': 'Ticket checked in successfully',
+                'ticket': {
+                    'id': ticket.id,
+                    'serial': ticket.serial,
+                    'ticket_type': ticket.ticket_type.name,
+                    'event_name': ticket.order.event.name,
+                    'used_at': ticket.used_at,
+                    'gate': gate
+                }
+            })
+        else:
+            return Response(
+                {'error': 'Failed to check in ticket'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+    except (ValueError, Ticket.DoesNotExist):
+        return Response(
+            {'error': 'Invalid ticket'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Check-in failed: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

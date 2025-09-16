@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api',
+  baseURL: '/api',  // Use relative URL for better compatibility
   withCredentials: true,  // Enable cookies for JWT authentication
   headers: {
     'Content-Type': 'application/json',
@@ -19,6 +19,7 @@ api.interceptors.request.use((config) => {
   // Log final URL for debugging
   const finalUrl = api.defaults.baseURL + '/' + config.url;
   console.log('API →', config.method?.toUpperCase(), finalUrl);
+  console.log('API Config:', { baseURL: api.defaults.baseURL, url: config.url, finalUrl });
 
   return config;
 });
@@ -27,6 +28,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    console.error('API Error:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message
+    });
+    
     if (error.response?.status === 401) {
       // Don't try to refresh token for /accounts/users/me/ endpoint
       // as it's used for auth status checking
@@ -54,7 +64,6 @@ export const changePassword = (passwordData) => api.post('accounts/auth/change-p
 // ===== EVENTS =====
 export const listEvents = (params = {}) => 
   api.get('events/', { params: { page: 1, page_size: 12, ...params } });
-export const getEvents = listEvents; // Alias for listEvents
 export const getEvent = (id) => api.get(`events/${id}/`);
 export const createEvent = (eventData) => api.post('events/', eventData);
 export const updateEvent = (id, eventData) => api.patch(`events/${id}/`, eventData);
@@ -109,6 +118,12 @@ export const createRegPaymentIntent = (id) => api.post(`registrations/${id}/pay/
 export const confirmRegPayment = (id, payload) => api.post(`registrations/${id}/pay/confirm/`, payload);
 export const getRegPaymentStatus = (id) => api.get(`registrations/${id}/payment_status/`);
 
+// New registration endpoints for realtime flows
+export const payRegistration = (id) => api.post(`registrations/${id}/pay/`);
+export const getRegistrationStatus = (id) => api.get(`registrations/${id}/status/`);
+export const approveRegistration = (id, reason = '') => api.patch(`registrations/${id}/approve/`, { reason });
+export const rejectRegistration = (id, reason = '') => api.patch(`registrations/${id}/reject/`, { reason });
+
 // Document management functions
 export const getDocuments = (registrationId) => api.get(`registrations/${registrationId}/documents/`);
 export const approveDocument = (documentId) => api.patch(`documents/${documentId}/approve/`);
@@ -119,8 +134,6 @@ export const downloadDocument = (documentId) => api.get(`documents/${documentId}
 export const listRegistrations = (params = {}) => api.get('registrations/', { params });
 export const getEventRegistrations = (eventId, page = 1, filters = {}) => 
   api.get(`events/${eventId}/registrations/`, { params: { page, ...filters } });
-export const approveRegistration = (id, reason = '') => api.patch(`registrations/${id}/approve/`, { reason });
-export const rejectRegistration = (id, reason = '') => api.patch(`registrations/${id}/reject/`, { reason });
 export const waitlistRegistration = (id, reason = '') => api.patch(`registrations/${id}/waitlist/`, { reason });
 export const requestReupload = (id, reason = '') => api.patch(`registrations/${id}/request_reupload/`, { reason });
 
@@ -158,6 +171,39 @@ export const getResult = (id) => api.get(`results/${id}/`);
 export const createResult = (resultData) => api.post('results/', resultData);
 export const updateResult = (id, resultData) => api.patch(`results/${id}/`, resultData);
 export const deleteResult = (id) => api.delete(`results/${id}/`);
+
+// Results lifecycle
+export const finalizeResult = (id) => api.post(`results/${id}/finalize/`);
+export const verifyResult = (id) => api.post(`results/${id}/verify/`);
+export const publishResult = (id) => api.post(`results/${id}/publish/`);
+export const unpublishResult = (id) => api.post(`results/${id}/unpublish/`);
+export const invalidateResult = (id) => api.post(`results/${id}/invalidate/`);
+
+// Fixture results
+export const recordFixtureResult = (fixtureId, resultData) => 
+  api.post(`results/fixtures/${fixtureId}/record/`, resultData);
+
+// Event results and leaderboards
+export const getEventResults = (eventId) => api.get(`results/event/${eventId}/`);
+export const getEventRecentResults = (eventId, params = {}) => 
+  api.get(`results/event/${eventId}/recent/`, { params });
+export const getEventLeaderboard = (eventId) => api.get(`results/event/${eventId}/leaderboard/`);
+export const recomputeStandings = (eventId, divisionId = null) => 
+  api.post(`results/event/${eventId}/recompute/`, { division_id: divisionId });
+
+// New results endpoints for realtime flows
+export const createProvisionalResult = (fixtureId, resultData) => 
+  api.post(`results/fixtures/${fixtureId}/provisional/`, resultData);
+export const getPublicEventResults = (eventId, params = {}) => 
+  api.get(`public/events/${eventId}/results/`, { params });
+export const getPublicEventLeaderboard = (eventId, params = {}) => 
+  api.get(`public/events/${eventId}/leaderboard/`, { params });
+
+// Athlete stats
+export const getAthleteStats = (eventId, params = {}) => 
+  api.get('results/athlete-stats/', { params: { event_id: eventId, ...params } });
+export const createAthleteStat = (statData) => api.post('results/athlete-stats/', statData);
+export const verifyAthleteStat = (id) => api.post(`results/athlete-stats/${id}/verify/`);
 
 // ===== PUBLIC RESULTS =====
 export const getPublicResults = (page = 1, filters = {}) => 
@@ -205,11 +251,28 @@ export const deleteAnnouncement = (id) => api.delete(`content/announcements/${id
 export const getTickets = (page = 1, filters = {}) => 
   api.get('tickets/', { params: { page, ...filters } });
 export const getMyTickets = (page = 1, filters = {}) => 
-  api.get('tickets/my-tickets/', { params: { page, ...filters } });
+  api.get('tickets/mine/', { params: { page, ...filters } });
 export const getTicket = (id) => api.get(`tickets/${id}/`);
 export const createTicket = (ticketData) => api.post('tickets/', ticketData);
 export const updateTicket = (id, ticketData) => api.patch(`tickets/${id}/`, ticketData);
 export const deleteTicket = (id) => api.delete(`tickets/${id}/`);
+
+// Ticket orders and refunds
+export const cancelOrder = (orderId) => api.post(`tickets/orders/${orderId}/cancel/`);
+export const refundOrder = (orderId, amountCents = null, reason = '') => 
+  api.post(`tickets/orders/${orderId}/refund/`, { amount_cents: amountCents, reason });
+export const getOrderRefunds = (orderId) => api.get(`tickets/orders/${orderId}/refunds/`);
+
+// Ticket check-in
+export const checkinTicket = (qrPayload, gate = '') => 
+  api.post('tickets/checkin/', { qr_payload: qrPayload, gate });
+export const validateTicket = (ticketId) => api.get(`tickets/${ticketId}/validate/`);
+export const useTicket = (ticketId) => api.post(`tickets/${ticketId}/use/`);
+
+// New ticket endpoints for realtime flows
+export const checkoutTickets = (checkoutData) => api.post('tickets/checkout/', checkoutData);
+export const getTicketQR = (ticketId) => api.get(`tickets/${ticketId}/qr/`);
+export const checkinTicketById = (ticketId, gate = '') => api.post(`tickets/${ticketId}/checkin/`, { gate });
 
 // ===== TICKET TYPES =====
 export const listTicketTypes = (eventId) => api.get(`events/${eventId}/ticket-types/`);
@@ -325,6 +388,20 @@ export const confirmPayment = (paymentIntentId) =>
 export const getPaymentHistory = (page = 1) => 
   api.get('payments/history/', { params: { page } });
 
+// Multi-provider payments
+export const createPaymentSession = (orderId, provider = 'stripe') => 
+  api.post('payments/session/', { order_id: orderId, provider });
+export const getAvailableProviders = () => api.get('payments/providers/');
+export const processRefund = (orderId, amountCents = null, reason = '') => 
+  api.post('payments/refund/', { order_id: orderId, amount_cents: amountCents, reason });
+export const confirmOfflinePayment = (orderId, bankReference, amount, notes = '') => 
+  api.post('payments/offline/confirm/', { 
+    order_id: orderId, 
+    bank_reference: bankReference, 
+    amount, 
+    notes 
+  });
+
 // ===== NOTIFICATIONS =====
 export const getNotifications = (page = 1) => 
   api.get('notifications/', { params: { page } });
@@ -341,10 +418,48 @@ export const uploadFile = (file, type = 'document') => {
   });
 };
 
-// ===== VENUES =====
-export const getVenues = (params = {}) =>
-  api.get('venues/', { params });
+// ===== REPORTS =====
+export const exportPDF = (kind, params = {}) => 
+  api.get('reports/export/pdf/', { params: { kind, ...params }, responseType: 'blob' });
+export const getReportData = (kind, params = {}) => 
+  api.get('reports/data/', { params: { kind, ...params } });
+export const getAvailableEvents = () => api.get('reports/events/');
+export const getReportSummary = () => api.get('reports/summary/');
 
+// ===== SETTINGS =====
+export const getSiteSettings = () => api.get('settings/site/');
+export const updateSiteSettings = (settings) => api.patch('settings/site/', settings);
+export const getPublicSiteSettings = () => api.get('settings/site/public/');
+export const toggleMaintenanceMode = () => api.post('settings/site/maintenance/toggle/');
+export const getFeatureFlags = () => api.get('settings/flags/');
+export const getSystemStatus = () => api.get('settings/status/');
+
+// Admin settings
+export const getAdminFeatureFlags = () => api.get('settings/admin/flags/');
+export const createFeatureFlag = (flagData) => api.post('settings/admin/flags/', flagData);
+export const updateFeatureFlag = (flagId, flagData) => api.patch(`settings/admin/flags/${flagId}/`, flagData);
+export const deleteFeatureFlag = (flagId) => api.delete(`settings/admin/flags/${flagId}/`);
+
+// ===== PRIVACY =====
+export const requestDataExport = () => api.post('privacy/export/request/');
+export const getExportStatus = (requestId) => api.get(`privacy/export/${requestId}/status/`);
+export const downloadExport = (requestId) => api.get(`privacy/export/${requestId}/download/`, { responseType: 'blob' });
+export const getUserExports = () => api.get('privacy/exports/');
+
+export const requestDataDeletion = (reason, confirmationText) => 
+  api.post('privacy/deletion/request/', { reason, confirmation_text: confirmationText });
+export const getDeletionStatus = (requestId) => api.get(`privacy/deletion/${requestId}/status/`);
+export const getUserDeletions = () => api.get('privacy/deletions/');
+
+// Admin privacy
+export const getAdminDeletionRequests = (status = null) => 
+  api.get('privacy/admin/deletions/', { params: { status } });
+export const approveDeletionRequest = (requestId, adminNotes = '', anonymize = true) => 
+  api.post(`privacy/admin/deletions/${requestId}/approve/`, { admin_notes: adminNotes, anonymize });
+export const rejectDeletionRequest = (requestId, adminNotes = '') => 
+  api.post(`privacy/admin/deletions/${requestId}/reject/`, { admin_notes: adminNotes });
+
+// ===== VENUE SLOTS =====
 export const addVenueSlots = (venueId, slotsData) =>
   api.post(`venues/${venueId}/slots/`, { slots: slotsData });
 
@@ -396,6 +511,9 @@ export const publicAPI = {
   // Get home page aggregated data
   getPublicHome: () => api.get('public/home/'),
   
+  // Get public statistics
+  getPublicStats: () => api.get('public/stats/'),
+  
   // List published events with filters
   listPublicEvents: (params = {}) => {
     const queryParams = new URLSearchParams(params);
@@ -417,7 +535,13 @@ export const publicAPI = {
   // List published news/announcements
   listPublicNews: (params = {}) => {
     const queryParams = new URLSearchParams(params);
-    return api.get(`public/news/?${queryParams}`);
+    return api.get(`cms/news/?${queryParams}`);
+  },
+  
+  // List public gallery
+  listPublicGallery: (params = {}) => {
+    const queryParams = new URLSearchParams(params);
+    return api.get(`media/gallery/?${queryParams}`);
   },
 };
 
@@ -660,5 +784,118 @@ export const reportsAPI = {
   // Get available divisions for filters
   getDivisions: () => api.get('events/divisions/'),
 };
+
+// ===== EVENTS API =====
+export const eventsAPI = {
+  // Get events list
+  getEvents: (queryString = '') => {
+    const url = `events/${queryString ? `?${queryString}` : ''}`;
+    return api.get(url);
+  },
+
+  // Get single event
+  getEvent: (id) => api.get(`events/${id}/`),
+
+  // Create event
+  createEvent: (data) => api.post('events/', data),
+
+  // Update event
+  updateEvent: (id, data) => api.patch(`events/${id}/`, data),
+
+  // Delete event
+  deleteEvent: (id) => api.delete(`events/${id}/`),
+
+  // Publish event
+  publishEvent: (id) => api.post(`events/${id}/publish/`),
+
+  // Unpublish event
+  unpublishEvent: (id) => api.post(`events/${id}/unpublish/`),
+
+  // Get event fixtures
+  getEventFixtures: (id, queryString = '') => {
+    const url = `events/${id}/fixtures/${queryString ? `?${queryString}` : ''}`;
+    return api.get(url);
+  },
+};
+
+// ===== VENUES API =====
+export const venuesAPI = {
+  // Get venues list
+  getVenues: (queryString = '') => {
+    const url = `venues/${queryString ? `?${queryString}` : ''}`;
+    return api.get(url);
+  },
+
+  // Get single venue
+  getVenue: (id) => api.get(`venues/${id}/`),
+
+  // Create venue
+  createVenue: (data) => api.post('venues/', data),
+
+  // Update venue
+  updateVenue: (id, data) => api.patch(`venues/${id}/`, data),
+
+  // Delete venue
+  deleteVenue: (id) => api.delete(`venues/${id}/`),
+
+  // Get venue availability
+  getVenueAvailability: (id, fromDate, toDate) => {
+    const params = new URLSearchParams({ from: fromDate, to: toDate });
+    return api.get(`venues/${id}/availability/?${params.toString()}`);
+  },
+
+  // Add venue slots
+  addVenueSlots: (id, slots) => api.post(`venues/${id}/slots/`, { slots }),
+
+  // Check venue conflicts
+  checkVenueConflicts: (data) => api.post('venues/check-conflicts/', data),
+};
+
+// ===== ADMIN USERS API =====
+export const adminUsersAPI = {
+  // Get users list
+  getUsers: (queryString = '') => {
+    const url = `admin/users/${queryString ? `?${queryString}` : ''}`;
+    return api.get(url);
+  },
+
+  // Get single user
+  getUser: (id) => api.get(`admin/users/${id}/`),
+
+  // Create user
+  createUser: (data) => api.post('admin/users/', data),
+
+  // Update user
+  updateUser: (id, data) => api.patch(`admin/users/${id}/`, data),
+
+  // Delete user
+  deleteUser: (id) => api.delete(`admin/users/${id}/`),
+
+  // Activate user
+  activateUser: (id) => api.post(`admin/users/${id}/activate/`),
+
+  // Deactivate user
+  deactivateUser: (id) => api.post(`admin/users/${id}/deactivate/`),
+
+  // Change user role
+  changeUserRole: (id, role) => api.post(`admin/users/${id}/change-role/`, { role }),
+};
+
+// ===== CONVENIENCE EXPORTS =====
+// Event functions (aliases for backward compatibility)
+export { listEvents as getEvents };
+
+// Venue functions (aliases for backward compatibility)
+export { listVenues as getVenues };
+
+// Admin user functions
+export const getAdminUsers = adminUsersAPI.getUsers;
+export const getAdminUser = adminUsersAPI.getUser;
+export const createAdminUser = adminUsersAPI.createUser;
+export const updateAdminUser = adminUsersAPI.updateUser;
+export const deleteAdminUser = adminUsersAPI.deleteUser;
+export const activateUser = adminUsersAPI.activateUser;
+export const deactivateUser = adminUsersAPI.deactivateUser;
+export const changeUserRole = adminUsersAPI.changeUserRole;
 
 export default api;

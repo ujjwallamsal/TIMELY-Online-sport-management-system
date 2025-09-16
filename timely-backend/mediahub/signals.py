@@ -84,6 +84,13 @@ def media_item_saved(sender, instance, created, **kwargs):
                 data
             )
             
+            # Also broadcast to content:public group for home page updates
+            send_realtime_update(
+                "content:public",
+                'media.approved',
+                data
+            )
+            
             if instance.event_id:
                 send_realtime_update(
                     f"media:event:{instance.event_id}",

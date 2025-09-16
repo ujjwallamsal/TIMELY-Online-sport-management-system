@@ -269,6 +269,125 @@ class RegistrationViewSet(viewsets.ModelViewSet):
         registration = self.get_object()
         payment_data = get_payment_status(registration)
         return Response(payment_data)
+    
+    @action(detail=True, methods=['post'])
+    def pay(self, request, pk=None):
+        """Create payment order for registration"""
+        registration = self.get_object()
+        
+        if registration.payment_status == 'paid':
+            return Response(
+                {'error': 'Registration is already paid'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if registration.fee_cents == 0:
+            return Response(
+                {'error': 'No payment required for this registration'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            payment_data = create_payment_intent(registration)
+            return Response(payment_data)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=True, methods=['get'])
+    def status(self, request, pk=None):
+        """Get registration status"""
+        registration = self.get_object()
+        return Response({
+            'id': registration.id,
+            'status': registration.status,
+            'payment_status': registration.payment_status,
+            'submitted_at': registration.submitted_at.isoformat(),
+            'decided_at': registration.decided_at.isoformat() if registration.decided_at else None,
+            'reason': registration.reason
+        })
+
+    @action(detail=True, methods=['post'])
+    def pay(self, request, pk=None):
+        """Create payment order for registration"""
+        registration = self.get_object()
+        
+        # Check if registration is eligible for payment
+        if registration.payment_status != 'pending':
+            return Response(
+                {'error': 'Registration is not eligible for payment'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Create payment intent
+            payment_intent = create_payment_intent(registration)
+            
+            # In development, return mock payment data
+            return Response({
+                'payment_intent_id': payment_intent.get('id', 'pi_mock_123'),
+                'client_secret': payment_intent.get('client_secret', 'pi_mock_123_secret'),
+                'amount': registration.event.price_cents,
+                'currency': 'usd',
+                'status': 'requires_payment_method'
+            })
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to create payment: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['patch'], url_path='approve')
+    def approve(self, request, pk=None):
+        """Approve registration (organizer only)"""
+        registration = self.get_object()
+        
+        # Check permissions
+        if not request.user.has_perm('registrations.can_manage_registration', registration):
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        reason = request.data.get('reason', '')
+        registration.approve(reason=reason)
+        
+        # Send notification
+        send_status_update(registration, 'approved')
+        
+        return Response({
+            'id': registration.id,
+            'status': registration.status,
+            'decided_at': registration.decided_at.isoformat(),
+            'reason': registration.reason
+        })
+
+    @action(detail=True, methods=['patch'], url_path='reject')
+    def reject(self, request, pk=None):
+        """Reject registration (organizer only)"""
+        registration = self.get_object()
+        
+        # Check permissions
+        if not request.user.has_perm('registrations.can_manage_registration', registration):
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        reason = request.data.get('reason', '')
+        registration.reject(reason=reason)
+        
+        # Send notification
+        send_status_update(registration, 'rejected')
+        
+        return Response({
+            'id': registration.id,
+            'status': registration.status,
+            'decided_at': registration.decided_at.isoformat(),
+            'reason': registration.reason
+        })
 
 
 class RegistrationDocumentViewSet(viewsets.ModelViewSet):
