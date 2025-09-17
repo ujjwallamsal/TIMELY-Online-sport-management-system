@@ -1,0 +1,25 @@
+Registration Confirmed - {{ event.name }}
+
+Hello {{ user.first_name|default:user.email }},
+
+Your registration for {{ event.name }} has been confirmed. We're excited to have you participate!
+
+Event Details:
+- Sport: {{ event.sport.name }}
+- Date: {{ event.start_date|date:"F j, Y" }} at {{ event.start_date|time:"g:i A" }}
+- Venue: {{ event.venue.name|default:"TBA" }}
+- Registration Type: {{ registration.get_type_display }}
+- Status: {{ registration.get_status_display }}
+
+What's Next?
+- Check your dashboard for event updates and announcements
+- Download any required documents or forms
+- Contact the event organizer if you have any questions
+
+View Event Details: {{ event_url }}
+Go to Dashboard: {{ dashboard_url }}
+
+If you have any questions about this event, please don't hesitate to contact us.
+
+Best regards,
+The Timely Sports Events Team

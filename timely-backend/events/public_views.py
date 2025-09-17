@@ -9,7 +9,7 @@ from common.auth import NoAuthentication
 
 from .models import Event
 from .serializers import EventSerializer
-from results.services import compute_event_leaderboard
+# from results.services import compute_event_leaderboard
 
 
 class PublicEventViewSet(viewsets.ReadOnlyModelViewSet):
@@ -22,11 +22,14 @@ class PublicEventViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = EventSerializer
 
     def get_queryset(self):
-        return Event.objects.filter(is_published=True).select_related("venue", "organizer")
+        return Event.objects.filter(
+            visibility='PUBLIC',
+            status__in=['UPCOMING', 'ONGOING', 'COMPLETED']
+        ).select_related("venue", "sport", "created_by")
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["sport_type", "venue", "status", "registration_open"]
-    search_fields = ["name", "description", "sport_type"]
+    filterset_fields = ["sport", "venue", "status"]
+    search_fields = ["name", "description"]
     ordering_fields = ["start_date", "name", "created_at"]
     ordering = ["-start_date"]
 
@@ -35,5 +38,6 @@ class PublicEventViewSet(viewsets.ReadOnlyModelViewSet):
         """
         GET /api/public/events/{id}/leaderboard/
         """
-        data = compute_event_leaderboard(int(pk))
-        return Response(data)
+        # data = compute_event_leaderboard(int(pk))
+        # return Response(data)
+        return Response({"message": "Leaderboard feature coming soon"})

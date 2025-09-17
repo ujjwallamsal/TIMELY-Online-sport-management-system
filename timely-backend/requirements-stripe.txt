@@ -2,3 +2,7 @@
 stripe>=7.0.0
 qrcode[pil]>=7.4.2
 Pillow>=10.0.0
+
+# Real-time features
+channels>=4.0.0
+channels-redis>=4.1.0

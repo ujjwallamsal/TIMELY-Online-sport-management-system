@@ -1,0 +1,24 @@
+django.contrib.contenttypes
+django.contrib.auth
+accounts",          # <- custom user lives here
+django.contrib.admin
+django.contrib.sessions
+django.contrib.messages
+django.contrib.staticfiles
+rest_framework
+rest_framework.authtoken
+django_filters
+drf_spectacular
+corsheaders
+api
+sports
+teams
+venues
+events
+registrations
+fixtures
+tickets
+results
+notifications
+public
+content.apps.ContentConfig

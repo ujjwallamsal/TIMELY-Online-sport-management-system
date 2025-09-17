@@ -1,0 +1,15 @@
+basename,file_paths
+VenueForm,components/VenueForm.jsx; pages/admin/VenueForm.jsx
+Hero,components/Hero.jsx; components/public/Hero.jsx
+api,lib/api.js; services/api.js
+MyTickets,pages/MyTickets.jsx; pages/athlete/MyTickets.jsx
+Notifications,pages/Notifications.jsx; pages/athlete/Notifications.jsx
+Venues,pages/Venues.jsx; pages/admin/Venues.jsx
+EventDetail,pages/EventDetail.jsx; pages/admin/EventDetail.jsx
+TeamDashboard,pages/TeamDashboard.jsx; pages/coach/TeamDashboard.jsx
+Messages,pages/Messages.jsx; pages/athlete/Messages.jsx
+Dashboard,pages/Dashboard.jsx; pages/admin/Dashboard.jsx; pages/athlete/Dashboard.jsx
+EventForm,pages/EventForm.jsx; pages/admin/EventForm.jsx
+MyRegistrations,pages/MyRegistrations.jsx; pages/athlete/MyRegistrations.jsx
+Home,pages/Home.jsx; pages/public/Home.jsx
+RegistrationWizard,pages/RegistrationWizard.jsx; pages/athlete/RegistrationWizard.jsx

@@ -51,6 +51,16 @@ class Event(models.Model):
         db_index=True,
         help_text="Event status"
     )
+    visibility = models.CharField(
+        max_length=20,
+        choices=[
+            ('PUBLIC', 'Public'),
+            ('PRIVATE', 'Private'),
+        ],
+        default='PUBLIC',
+        db_index=True,
+        help_text="Event visibility"
+    )
     
     # Audit fields
     created_by = models.ForeignKey(

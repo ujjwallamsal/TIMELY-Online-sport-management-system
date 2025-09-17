@@ -1,10 +1,15 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import EventViewSet, DivisionViewSet
+from .public_views import PublicEventViewSet
 
 # Create routers
 router = DefaultRouter()
 router.register(r'', EventViewSet, basename='event')
+
+# Public router
+public_router = DefaultRouter()
+public_router.register(r'', PublicEventViewSet, basename='public-event')
 
 urlpatterns = [
     # Event CRUD and lifecycle actions

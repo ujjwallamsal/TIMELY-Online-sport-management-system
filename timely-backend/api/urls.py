@@ -1,27 +1,37 @@
-# api/urls.py
+# api/urls.py - Unified API Router
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views
 
+# Create unified router
 router = DefaultRouter()
-router.register(r'announcements', views.AnnouncementViewSet, basename='announcement')
 
 urlpatterns = [
-    # Include accounts app URLs
-    path('accounts/', include('accounts.urls')),
+    # Authentication endpoints
+    path('auth/', include('accounts.urls')),
     
-    # Include other enabled app URLs
-    path('events/', include('events.urls')),
-    path('venues/', include('venues.urls')),
-    path('teams/', include('teams.urls')),
+    # User management
+    path('users/', include('accounts.urls')),
+    path('me/', include('accounts.urls')),
+    
+    # Sports & Venues
     path('sports/', include('sports.urls')),
-    path('registrations/', include('registrations.urls')),
-    path('fixtures/', include('fixtures.urls')),
-    path('tickets/', include('tickets.urls')),
-    path('results/', include('results.urls')),
-    path('notifications/', include('notifications.urls')),
-    path('public/', include('public.urls')),
+    path('venues/', include('venues.urls')),
     
-    # Include router URLs
+    # Events & Public Portal
+    path('events/', include('events.urls')),
+    path('public/events/', include('events.urls')),
+    
+    # Teams & Registrations
+    path('teams/', include('teams.urls')),
+    path('registrations/', include('registrations.urls')),
+    
+    # Fixtures & Results
+    path('fixtures/', include('fixtures.urls')),
+    path('results/', include('results.urls')),
+    
+    # Notifications & Announcements
+    path('notifications/', include('notifications.urls')),
+    
+    # Include router URLs (must be last)
     path('', include(router.urls)),
 ]

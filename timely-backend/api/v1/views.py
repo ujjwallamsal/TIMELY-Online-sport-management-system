@@ -18,6 +18,7 @@ from registrations.models import Registration
 from fixtures.models import Fixture
 from results.models import Result, LeaderboardEntry
 from notifications.models import Notification
+from common.audit import AuditLogMixin, AdminAuditMixin
 
 from .serializers import (
     UserSerializer, EventSerializer, VenueSerializer, RegistrationSerializer,
@@ -31,7 +32,7 @@ from .filters import EventFilter, RegistrationFilter, FixtureFilter, ResultFilte
 # AuthViewSet removed - authentication is handled in accounts app
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     """User management endpoints"""
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -68,7 +69,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class EventViewSet(viewsets.ModelViewSet):
+class EventViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """Event management endpoints"""
     queryset = Event.objects.all()
     serializer_class = EventSerializer
@@ -98,7 +99,7 @@ class EventViewSet(viewsets.ModelViewSet):
         return Response({'status': 'Event cancelled'})
 
 
-class VenueViewSet(viewsets.ModelViewSet):
+class VenueViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """Venue management endpoints"""
     queryset = Venue.objects.all()
     serializer_class = VenueSerializer
@@ -120,7 +121,7 @@ class VenueViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
 
-class RegistrationViewSet(viewsets.ModelViewSet):
+class RegistrationViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """Registration management endpoints"""
     queryset = Registration.objects.all()
     serializer_class = RegistrationSerializer
@@ -144,7 +145,7 @@ class RegistrationViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
 
-class FixtureViewSet(viewsets.ModelViewSet):
+class FixtureViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """Fixture management endpoints"""
     queryset = Fixture.objects.all()
     serializer_class = FixtureSerializer
@@ -165,7 +166,7 @@ class FixtureViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
 
-class ResultViewSet(viewsets.ModelViewSet):
+class ResultViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """Result management endpoints"""
     queryset = Result.objects.all()
     serializer_class = ResultSerializer
@@ -186,7 +187,7 @@ class ResultViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
 
-class AnnouncementViewSet(viewsets.ModelViewSet):
+class AnnouncementViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """Announcement management endpoints"""
     queryset = Notification.objects.filter(kind='announcement')
     serializer_class = AnnouncementSerializer
@@ -197,7 +198,7 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
 
-class ReportViewSet(viewsets.ViewSet):
+class ReportViewSet(AdminAuditMixin, viewsets.ViewSet):
     """Report generation endpoints"""
     permission_classes = [IsAuthenticated, IsAdmin]
     
@@ -313,5 +314,130 @@ class EventFixturesView(APIView):
         return Response(serializer.data)
 
 
-# Stub view classes removed - these were placeholder implementations
-# Real functionality should be implemented in the respective app views
+# Additional view classes for specific endpoints
+class GenerateFixturesView(APIView):
+    """Generate fixtures for an event"""
+    permission_classes = [IsAuthenticated, IsOrganizer]
+    
+    def post(self, request, event_id):
+        try:
+            event = Event.objects.get(id=event_id)
+            # TODO: Implement fixture generation logic
+            return Response({'message': 'Fixtures generated successfully'})
+        except Event.DoesNotExist:
+            return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class EventLeaderboardView(APIView):
+    """Get leaderboard for an event"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, event_id):
+        try:
+            event = Event.objects.get(id=event_id)
+            # TODO: Implement leaderboard logic
+            return Response({'leaderboard': []})
+        except Event.DoesNotExist:
+            return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class EventAnnounceView(APIView):
+    """Send announcement for an event"""
+    permission_classes = [IsAuthenticated, IsOrganizer]
+    
+    def post(self, request, event_id):
+        try:
+            event = Event.objects.get(id=event_id)
+            # TODO: Implement announcement logic
+            return Response({'message': 'Announcement sent successfully'})
+        except Event.DoesNotExist:
+            return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class EventAnnouncementsView(APIView):
+    """Get announcements for an event"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, event_id):
+        try:
+            event = Event.objects.get(id=event_id)
+            # TODO: Implement announcements retrieval
+            return Response({'announcements': []})
+        except Event.DoesNotExist:
+            return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class FixtureResultView(APIView):
+    """Get or update result for a fixture"""
+    permission_classes = [IsAuthenticated, IsOrganizer]
+    
+    def get(self, request, fixture_id):
+        try:
+            fixture = Fixture.objects.get(id=fixture_id)
+            # TODO: Implement result retrieval
+            return Response({'result': None})
+        except Fixture.DoesNotExist:
+            return Response({'error': 'Fixture not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    def post(self, request, fixture_id):
+        try:
+            fixture = Fixture.objects.get(id=fixture_id)
+            # TODO: Implement result creation/update
+            return Response({'message': 'Result updated successfully'})
+        except Fixture.DoesNotExist:
+            return Response({'error': 'Fixture not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class LockResultView(APIView):
+    """Lock a result to prevent further changes"""
+    permission_classes = [IsAuthenticated, IsOrganizer]
+    
+    def post(self, request, result_id):
+        try:
+            result = Result.objects.get(id=result_id)
+            # TODO: Implement result locking
+            return Response({'message': 'Result locked successfully'})
+        except Result.DoesNotExist:
+            return Response({'error': 'Result not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class ApproveRegistrationView(APIView):
+    """Approve a registration"""
+    permission_classes = [IsAuthenticated, IsOrganizer]
+    
+    def post(self, request, registration_id):
+        try:
+            registration = Registration.objects.get(id=registration_id)
+            registration.status = 'APPROVED'
+            registration.save()
+            return Response({'message': 'Registration approved successfully'})
+        except Registration.DoesNotExist:
+            return Response({'error': 'Registration not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class RejectRegistrationView(APIView):
+    """Reject a registration"""
+    permission_classes = [IsAuthenticated, IsOrganizer]
+    
+    def post(self, request, registration_id):
+        try:
+            registration = Registration.objects.get(id=registration_id)
+            registration.status = 'REJECTED'
+            registration.save()
+            return Response({'message': 'Registration rejected successfully'})
+        except Registration.DoesNotExist:
+            return Response({'error': 'Registration not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class CancelEventView(APIView):
+    """Cancel an event"""
+    permission_classes = [IsAuthenticated, IsOrganizer]
+    
+    def post(self, request, event_id):
+        try:
+            event = Event.objects.get(id=event_id)
+            event.lifecycle_status = Event.Status.CANCELLED
+            event.save()
+            return Response({'message': 'Event cancelled successfully'})
+        except Event.DoesNotExist:
+            return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)

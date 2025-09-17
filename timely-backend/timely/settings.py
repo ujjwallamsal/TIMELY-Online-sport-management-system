@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django_filters",
     "drf_spectacular",
     "corsheaders",
+    "channels",
     
     # First-party (Timely) - MVP apps
     "api",
@@ -46,6 +47,8 @@ INSTALLED_APPS = [
     "timely",
     "events",
     "venues",
+    "sports",
+    "teams",
     "registrations",
     "fixtures",
     "results",

@@ -1,0 +1,40 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Registration Confirmed - {{ event.name }}{% endblock %}
+
+{% block content %}
+<h1>Registration Confirmed!</h1>
+
+<p>Hello {{ user.first_name|default:user.email }},</p>
+
+<p>Your registration for <strong>{{ event.name }}</strong> has been confirmed. We're excited to have you participate!</p>
+
+<div class="event-card">
+    <div class="event-title">{{ event.name }}</div>
+    <div class="event-details">
+        <p><strong>Sport:</strong> {{ event.sport.name }}</p>
+        <p><strong>Date:</strong> {{ event.start_date|date:"F j, Y" }} at {{ event.start_date|time:"g:i A" }}</p>
+        <p><strong>Venue:</strong> {{ event.venue.name|default:"TBA" }}</p>
+        <p><strong>Registration Type:</strong> {{ registration.get_type_display }}</p>
+        <p><strong>Status:</strong> {{ registration.get_status_display }}</p>
+    </div>
+</div>
+
+<div class="success">
+    <p><strong>What's Next?</strong></p>
+    <ul>
+        <li>Check your dashboard for event updates and announcements</li>
+        <li>Download any required documents or forms</li>
+        <li>Contact the event organizer if you have any questions</li>
+    </ul>
+</div>
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ event_url }}" class="button">View Event Details</a>
+    <a href="{{ dashboard_url }}" class="button">Go to Dashboard</a>
+</div>
+
+<p>If you have any questions about this event, please don't hesitate to contact us.</p>
+
+<p>Best regards,<br>The Timely Sports Events Team</p>
+{% endblock %}
