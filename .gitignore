@@ -145,3 +145,5 @@ temp/
 .pytest_cache/
 .coverage
 htmlcov/
+# Ignore local sqlite db
+timely-backend/db.sqlite3
