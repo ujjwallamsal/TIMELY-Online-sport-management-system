@@ -42,30 +42,32 @@ INSTALLED_APPS = [
     
     # First-party (Timely) - MVP apps
     "api",
-    "sports",
-    "teams",
-    "venues",
+    "common",
+    "timely",
     "events",
+    "venues",
     "registrations",
     "fixtures",
-    "tickets",
     "results",
     "notifications",
-    "public",
     
-    # Phase-2 modules disabled; will re-enable as needed.
-    "content.apps.ContentConfig",
-    # "gallery",
-    # "payments",
-    # "mediahub",
+    # Phase-2 modules disabled; will re-enable incrementally.
     # "adminapi",
+    # "cms",
+    # "content",
+    # "gallery",
     # "kyc",
-    # "audit",
-    # "settingshub",
-    # "privacy",
-    # "scheduler",
-    # "realtime.apps.RealtimeConfig",
+    # "mediahub",
+    # "payments",
+    # "ticketing",
+    # "tickets",
     # "reports",
+    # "privacy",
+    # "settingshub",
+    # "audit",
+    # "scheduler",
+    # "realtime",
+    # "public",
 ]
 
 # --- Middleware ---
