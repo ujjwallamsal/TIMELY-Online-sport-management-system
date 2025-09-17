@@ -8,7 +8,8 @@ import {
   EyeSlashIcon, 
   ClockIcon,
   ArrowRightIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -51,7 +52,7 @@ export default function Login() {
     if (!formData.email) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+      newErrors.email = 'Please enter a valid email address';
     }
 
     if (!formData.password) {
@@ -72,6 +73,8 @@ export default function Login() {
     }
 
     setLoading(true);
+    setErrors({}); // Clear previous errors
+    
     try {
       await login(formData.email, formData.password);
       showToast({
@@ -84,6 +87,7 @@ export default function Login() {
       console.error('Login error:', error);
       const errorMessage = error.response?.data?.detail || 
                           error.response?.data?.non_field_errors?.[0] || 
+                          error.response?.data?.message ||
                           'Invalid email or password';
       
       showToast({
@@ -92,10 +96,18 @@ export default function Login() {
         message: errorMessage
       });
       
-      setErrors({
-        email: errorMessage.includes('email') ? errorMessage : '',
-        password: errorMessage.includes('password') ? errorMessage : ''
-      });
+      // Set general error for both fields if it's a general authentication error
+      if (errorMessage.includes('Invalid') || errorMessage.includes('credentials')) {
+        setErrors({
+          email: 'Invalid email or password',
+          password: 'Invalid email or password'
+        });
+      } else {
+        setErrors({
+          email: errorMessage.includes('email') ? errorMessage : '',
+          password: errorMessage.includes('password') ? errorMessage : ''
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -152,12 +164,15 @@ export default function Login() {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                error={errors.email}
+                error={!!errors.email}
                 placeholder="Enter your email"
                 className="w-full"
               />
               {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                <p className="mt-1 text-sm text-red-600 flex items-center">
+                  <ExclamationTriangleIcon className="w-4 h-4 mr-1" />
+                  {errors.email}
+                </p>
               )}
             </div>
 
@@ -174,13 +189,13 @@ export default function Login() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  error={errors.password}
+                  error={!!errors.password}
                   placeholder="Enter your password"
                   className="w-full pr-10"
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-gray-600 transition-colors"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
@@ -191,7 +206,10 @@ export default function Login() {
                 </button>
               </div>
               {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+                <p className="mt-1 text-sm text-red-600 flex items-center">
+                  <ExclamationTriangleIcon className="w-4 h-4 mr-1" />
+                  {errors.password}
+                </p>
               )}
             </div>
 
@@ -224,9 +242,10 @@ export default function Login() {
                 loading={loading}
                 className="w-full"
                 size="lg"
+                disabled={loading}
               >
                 {loading ? 'Signing in...' : 'Sign in'}
-                <ArrowRightIcon className="w-5 h-5 ml-2" />
+                {!loading && <ArrowRightIcon className="w-5 h-5 ml-2" />}
               </Button>
             </div>
           </form>

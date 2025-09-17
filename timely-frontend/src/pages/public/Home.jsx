@@ -160,7 +160,7 @@ export default function PublicHome() {
             <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
               Welcome to Timely Sports
             </h1>
-            <p className="text-xl text-indigo-100 mb-8 max-w-3xl mx-auto">
+            <p className="text-xl text-white mb-8 max-w-3xl mx-auto">
               Discover, register, and participate in the best sporting events. 
               From local tournaments to international championships.
             </p>
@@ -333,7 +333,7 @@ export default function PublicHome() {
           <h2 className="text-3xl font-bold text-white mb-4">
             Ready to Get Started?
           </h2>
-          <p className="text-indigo-100 mb-6 max-w-2xl mx-auto">
+          <p className="text-white mb-6 max-w-2xl mx-auto">
             Join thousands of athletes and sports enthusiasts who trust Timely Sports 
             for their event management needs.
           </p>

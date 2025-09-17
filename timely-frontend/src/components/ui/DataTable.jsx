@@ -1,113 +1,80 @@
-// src/components/ui/DataTable.jsx
-import React, { useState, useMemo, useCallback } from 'react';
-import { ChevronUpIcon, ChevronDownIcon, FunnelIcon } from '@heroicons/react/24/outline';
-import { debounce } from 'lodash';
+import React, { useState, useMemo } from 'react';
+import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 
 const DataTable = ({
   data = [],
   columns = [],
+  loading = false,
   pagination = true,
   pageSize = 10,
   onPageChange,
-  onSort,
-  onFilter,
-  loading = false,
+  onSortChange,
+  onRowClick,
+  onBulkAction,
+  bulkActions = [],
+  searchable = false,
+  onSearch,
+  searchPlaceholder = "Search...",
   emptyMessage = "No data available",
-  stickyHeader = true,
-  className = ""
+  className = "",
+  stickyHeader = false,
+  ...props
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-  const [filters, setFilters] = useState({});
+  const [sortField, setSortField] = useState('');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [selectedRows, setSelectedRows] = useState(new Set());
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Debounced search
-  const debouncedSearch = useCallback(
-    debounce((term) => {
-      if (onFilter) {
-        onFilter({ ...filters, search: term });
-      }
-    }, 300),
-    [filters, onFilter]
-  );
-
-  const handleSearch = (term) => {
-    setSearchTerm(term);
-    debouncedSearch(term);
-  };
-
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-    if (onSort) {
-      onSort({ key, direction });
-    }
-  };
-
-  const handleFilter = (columnKey, value) => {
-    const newFilters = { ...filters, [columnKey]: value };
-    setFilters(newFilters);
-    if (onFilter) {
-      onFilter({ ...newFilters, search: searchTerm });
-    }
-  };
-
+  // Filter data based on search term
   const filteredData = useMemo(() => {
-    let result = [...data];
+    if (!searchTerm || !searchable) return data;
     
-    // Apply search
-    if (searchTerm) {
-      result = result.filter(row =>
-        Object.values(row).some(value =>
-          String(value).toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      );
-    }
-    
-    // Apply filters
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value) {
-        result = result.filter(row => {
-          const cellValue = row[key];
-          if (typeof cellValue === 'string') {
-            return cellValue.toLowerCase().includes(value.toLowerCase());
-          }
-          return cellValue === value;
-        });
-      }
-    });
-    
-    return result;
-  }, [data, searchTerm, filters]);
+    return data.filter(row => 
+      columns.some(column => {
+        const value = column.accessor ? row[column.accessor] : '';
+        return String(value).toLowerCase().includes(searchTerm.toLowerCase());
+      })
+    );
+  }, [data, searchTerm, columns, searchable]);
 
+  // Sort data
   const sortedData = useMemo(() => {
-    if (!sortConfig.key) return filteredData;
+    if (!sortField) return filteredData;
     
     return [...filteredData].sort((a, b) => {
-      const aValue = a[sortConfig.key];
-      const bValue = b[sortConfig.key];
+      const aValue = a[sortField];
+      const bValue = b[sortField];
       
-      if (aValue < bValue) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
-      }
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [filteredData, sortConfig]);
+  }, [filteredData, sortField, sortDirection]);
 
+  // Paginate data
   const paginatedData = useMemo(() => {
     if (!pagination) return sortedData;
     
     const startIndex = (currentPage - 1) * pageSize;
-    return sortedData.slice(startIndex, startIndex + pageSize);
+    const endIndex = startIndex + pageSize;
+    return sortedData.slice(startIndex, endIndex);
   }, [sortedData, currentPage, pageSize, pagination]);
 
   const totalPages = Math.ceil(filteredData.length / pageSize);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+    
+    if (onSortChange) {
+      onSortChange(field, sortDirection === 'asc' ? 'desc' : 'asc');
+    }
+  };
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
@@ -116,13 +83,57 @@ const DataTable = ({
     }
   };
 
+  const handleRowSelect = (rowId, checked) => {
+    const newSelected = new Set(selectedRows);
+    if (checked) {
+      newSelected.add(rowId);
+    } else {
+      newSelected.delete(rowId);
+    }
+    setSelectedRows(newSelected);
+  };
+
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      const allIds = new Set(paginatedData.map(row => row.id));
+      setSelectedRows(allIds);
+    } else {
+      setSelectedRows(new Set());
+    }
+  };
+
+  const handleBulkAction = (action) => {
+    if (onBulkAction && selectedRows.size > 0) {
+      onBulkAction(action, Array.from(selectedRows));
+    }
+  };
+
+  const handleSearch = (term) => {
+    setSearchTerm(term);
+    if (onSearch) {
+      onSearch(term);
+    }
+  };
+
+  const renderCell = (row, column) => {
+    if (column.render) {
+      return column.render(row[column.accessor], row, column);
+    }
+    
+    if (column.accessor) {
+      return row[column.accessor];
+    }
+    
+    return '';
+  };
+
   if (loading) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="p-4">
-          <div className="animate-pulse space-y-4">
-            <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-            <div className="space-y-2">
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-6">
+          <div className="animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
+            <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
                 <div key={i} className="h-4 bg-gray-200 rounded"></div>
               ))}
@@ -134,68 +145,84 @@ const DataTable = ({
   }
 
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 overflow-hidden ${className}`}>
-      {/* Search and Filters */}
-      <div className="p-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            />
-          </div>
-          <div className="flex gap-2">
-            {columns
-              .filter(col => col.filterable)
-              .map(column => (
-                <select
-                  key={column.key}
-                  value={filters[column.key] || ''}
-                  onChange={(e) => handleFilter(column.key, e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                >
-                  <option value="">All {column.label}</option>
-                  {column.filterOptions?.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ))}
+    <div className={`bg-white rounded-lg shadow ${className}`}>
+      {/* Search and Bulk Actions */}
+      {(searchable || bulkActions.length > 0) && (
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            {searchable && (
+              <div className="flex-1 max-w-md">
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+            )}
+            
+            {bulkActions.length > 0 && selectedRows.size > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-500">
+                  {selectedRows.size} selected
+                </span>
+                {bulkActions.map((action, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleBulkAction(action)}
+                    className={`px-3 py-1 text-sm font-medium rounded-md ${
+                      action.variant === 'danger'
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                        : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                    }`}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="min-w-full divide-y divide-gray-200">
           <thead className={`bg-gray-50 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}>
             <tr>
-              {columns.map((column) => (
+              {bulkActions.length > 0 && (
+                <th className="px-6 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectedRows.size === paginatedData.length && paginatedData.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                </th>
+              )}
+              {columns.map((column, index) => (
                 <th
-                  key={column.key}
-                  className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                  key={index}
+                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
                     column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
                   }`}
-                  onClick={() => column.sortable && handleSort(column.key)}
+                  onClick={column.sortable ? () => handleSort(column.accessor) : undefined}
                 >
                   <div className="flex items-center space-x-1">
-                    <span>{column.label}</span>
+                    <span>{column.header}</span>
                     {column.sortable && (
                       <div className="flex flex-col">
                         <ChevronUpIcon
-                          className={`w-3 h-3 ${
-                            sortConfig.key === column.key && sortConfig.direction === 'asc'
+                          className={`h-3 w-3 ${
+                            sortField === column.accessor && sortDirection === 'asc'
                               ? 'text-blue-600'
                               : 'text-gray-400'
                           }`}
                         />
                         <ChevronDownIcon
-                          className={`w-3 h-3 -mt-1 ${
-                            sortConfig.key === column.key && sortConfig.direction === 'desc'
+                          className={`h-3 w-3 -mt-1 ${
+                            sortField === column.accessor && sortDirection === 'desc'
                               ? 'text-blue-600'
                               : 'text-gray-400'
                           }`}
@@ -208,32 +235,43 @@ const DataTable = ({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {paginatedData.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-4 py-12 text-center text-gray-500"
+            {paginatedData.length > 0 ? (
+              paginatedData.map((row, rowIndex) => (
+                <tr
+                  key={row.id || rowIndex}
+                  className={`hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''}`}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
-                  <div className="flex flex-col items-center">
-                    <FunnelIcon className="w-12 h-12 text-gray-300 mb-4" />
-                    <p className="text-lg font-medium text-gray-900 mb-2">No data found</p>
-                    <p className="text-sm text-gray-500">{emptyMessage}</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginatedData.map((row, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  {columns.map((column) => (
+                  {bulkActions.length > 0 && (
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.has(row.id)}
+                        onChange={(e) => handleRowSelect(row.id, e.target.checked)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                    </td>
+                  )}
+                  {columns.map((column, colIndex) => (
                     <td
-                      key={column.key}
-                      className="px-4 py-3 text-sm text-gray-900"
+                      key={colIndex}
+                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
                     >
-                      {column.render ? column.render(row[column.key], row) : row[column.key]}
+                      {renderCell(row, column)}
                     </td>
                   ))}
                 </tr>
               ))
+            ) : (
+              <tr>
+                <td
+                  colSpan={columns.length + (bulkActions.length > 0 ? 1 : 0)}
+                  className="px-6 py-12 text-center text-sm text-gray-500"
+                >
+                  {emptyMessage}
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -241,38 +279,43 @@ const DataTable = ({
 
       {/* Pagination */}
       {pagination && totalPages > 1 && (
-        <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+        <div className="px-6 py-4 border-t border-gray-200">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-700">
-              Showing {((currentPage - 1) * pageSize) + 1} to{' '}
-              {Math.min(currentPage * pageSize, filteredData.length)} of{' '}
-              {filteredData.length} results
+              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredData.length)} of {filteredData.length} results
             </div>
-            <div className="flex space-x-2">
+            <div className="flex items-center space-x-2">
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
               </button>
-              {[...Array(totalPages)].map((_, i) => (
-                <button
-                  key={i + 1}
-                  onClick={() => handlePageChange(i + 1)}
-                  className={`px-3 py-1 text-sm border rounded-md ${
-                    currentPage === i + 1
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
+              
+              {[...Array(totalPages)].map((_, index) => {
+                const page = index + 1;
+                const isCurrentPage = page === currentPage;
+                
+                return (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`px-3 py-1 text-sm font-medium rounded-md ${
+                      isCurrentPage
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+              
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
               </button>

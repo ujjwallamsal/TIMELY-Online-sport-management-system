@@ -4,6 +4,7 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import Input from '../components/ui/Input';
+import { useEventSchedule } from '../hooks/useLiveChannel';
 import { 
   getMatches, 
   getPublicEvents 
@@ -32,6 +33,20 @@ export default function Matches() {
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  
+  // Real-time fixtures data
+  const [liveFixtures, setLiveFixtures] = useState([]);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  
+  // Real-time hook for schedule updates
+  const { isConnected, lastMessage } = useEventSchedule(eventFilter, {
+    onScheduleUpdate: (data) => {
+      if (data.fixtures) {
+        setLiveFixtures(data.fixtures);
+        setLastUpdate(new Date());
+      }
+    }
+  });
 
   useEffect(() => {
     loadData();
@@ -382,6 +397,7 @@ export default function Matches() {
 
         {/* Header */}
         <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
+        <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <TrophyIcon className="w-8 h-8 text-blue-600" />
             <div>
@@ -389,6 +405,22 @@ export default function Matches() {
               <p className="text-gray-600">View all scheduled and completed matches</p>
             </div>
           </div>
+          
+          {/* Real-time Status Indicator */}
+          {eventFilter && (
+            <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+              <span className="text-sm text-gray-600">
+                {isConnected ? 'Live Updates' : 'Offline'}
+              </span>
+              {lastUpdate && (
+                <span className="text-xs text-gray-500">
+                  • {lastUpdate.toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         </div>
 
         {/* Content */}

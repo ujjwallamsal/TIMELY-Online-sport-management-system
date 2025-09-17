@@ -25,13 +25,13 @@ class PublicEventViewSet(viewsets.ReadOnlyModelViewSet):
         return Event.objects.filter(
             visibility='PUBLIC',
             status__in=['UPCOMING', 'ONGOING', 'COMPLETED']
-        ).select_related("venue", "sport", "created_by")
+        ).select_related("venue", "created_by")
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["sport", "venue", "status"]
     search_fields = ["name", "description"]
-    ordering_fields = ["start_date", "name", "created_at"]
-    ordering = ["-start_date"]
+    ordering_fields = ["start_datetime", "name", "created_at"]
+    ordering = ["-start_datetime"]
 
     @action(detail=True, methods=["get"], url_path="leaderboard")
     def leaderboard(self, request, pk: str | None = None):

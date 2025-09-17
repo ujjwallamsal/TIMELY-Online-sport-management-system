@@ -13,7 +13,7 @@ import {
   ExclamationTriangleIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import { useLiveChannel } from '../../hooks/useLiveChannel';
+import useLiveChannel from '../../hooks/useLiveChannel';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
@@ -32,8 +32,18 @@ export default function AdminDashboard() {
   const [recentRegistrations, setRecentRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Real-time updates for live data
-  const { data: liveData } = useLiveChannel('admin-dashboard');
+  // Real-time updates for live data - disabled for now
+  // const { 
+  //   isConnected, 
+  //   isConnecting, 
+  //   error: wsError, 
+  //   lastMessage: liveData 
+  // } = useLiveChannel('general', {
+  //   autoConnect: false, // Don't auto-connect for admin dashboard
+  //   onMessage: (data) => {
+  //     console.log('Received live data:', data);
+  //   }
+  // });
 
   useEffect(() => {
     const fetchDashboardData = async () => {

@@ -33,9 +33,8 @@ class EventSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'sport', 'description',
             'start_date', 'end_date',
-            'registration_open_at', 'registration_close_at',
-            'location', 'venue', 'capacity', 'fee_cents',
-            'status', 'phase', 'is_published',
+            'venue', 'eligibility',
+            'status', 'visibility', 'phase', 'is_published',
             'created_by', 'created_by_name',
             'created_at', 'updated_at', 'divisions'
         ]
@@ -86,8 +85,8 @@ class EventListSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'name', 'sport', 'description',
-            'start_date', 'end_date', 'location', 'venue',
-            'capacity', 'fee_cents', 'status', 'phase',
+            'start_date', 'end_date', 'venue',
+            'status', 'visibility', 'phase',
             'created_by_name', 'created_at'
         ]
 

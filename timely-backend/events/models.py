@@ -16,19 +16,19 @@ class Event(models.Model):
     
     # Basic Information
     name = models.CharField(max_length=200, help_text="Event name")
-    sport = models.ForeignKey(
-        'sports.Sport',
-        on_delete=models.CASCADE,
-        related_name='events',
-        help_text="Sport type"
-    )
+    sport = models.CharField(max_length=100, help_text="Sport type")
     description = models.TextField(blank=True, help_text="Event description")
     
     # Dates and Times
-    start_date = models.DateTimeField(help_text="Event start date and time")
-    end_date = models.DateTimeField(help_text="Event end date and time")
+    start_datetime = models.DateTimeField(help_text="Event start date and time")
+    end_datetime = models.DateTimeField(help_text="Event end date and time")
+    registration_open_at = models.DateTimeField(null=True, blank=True, help_text="Registration open date")
+    registration_close_at = models.DateTimeField(null=True, blank=True, help_text="Registration close date")
     
     # Location and Capacity
+    location = models.CharField(max_length=200, blank=True, help_text="Event location")
+    capacity = models.PositiveIntegerField(null=True, blank=True, help_text="Maximum capacity")
+    fee_cents = models.PositiveIntegerField(default=0, help_text="Registration fee in cents")
     venue = models.ForeignKey(
         'venues.Venue',
         on_delete=models.SET_NULL,
@@ -81,9 +81,9 @@ class Event(models.Model):
         if self.status == self.Status.COMPLETED:
             return "completed"
         
-        if now < self.start_date:
+        if now < self.start_datetime:
             return "upcoming"
-        elif now >= self.start_date and now <= self.end_date:
+        elif now >= self.start_datetime and now <= self.end_datetime:
             return "ongoing"
         else:
             return "completed"
@@ -93,8 +93,8 @@ class Event(models.Model):
         super().clean()
         
         # Validate datetime order
-        if self.start_date and self.end_date:
-            if self.start_date >= self.end_date:
+        if self.start_datetime and self.end_datetime:
+            if self.start_datetime >= self.end_datetime:
                 raise ValidationError("End date must be after start date")
     
     def save(self, *args, **kwargs):
@@ -103,14 +103,14 @@ class Event(models.Model):
         super().save(*args, **kwargs)
     
     def __str__(self):
-        return f"{self.name} ({self.sport.name})"
+        return f"{self.name} ({self.sport})"
     
     class Meta:
-        ordering = ['start_date', 'created_at']
+        ordering = ['start_datetime', 'created_at']
         indexes = [
-            models.Index(fields=['start_date']),
+            models.Index(fields=['start_datetime']),
             models.Index(fields=['status']),
-            models.Index(fields=['status', 'start_date']),
+            models.Index(fields=['status', 'start_datetime']),
             models.Index(fields=['sport']),
             models.Index(fields=['venue']),
             models.Index(fields=['created_by']),

@@ -1,155 +1,185 @@
-// src/hooks/useLiveChannel.js
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useToast } from './useToast';
+import { useEffect, useRef, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 /**
- * Custom hook for real-time data updates using WebSocket with EventSource fallback
- * @param {string} topic - The channel topic to subscribe to
- * @param {Object} options - Configuration options
- * @returns {Object} - Live data and connection status
+ * Custom hook for real-time updates via WebSocket and SSE fallback
+ * @param {string} topic - The topic/channel to subscribe to
+ * @param {function} onMessage - Callback function for received messages
+ * @param {object} options - Configuration options
  */
-export const useLiveChannel = (topic, options = {}) => {
-  const {
-    url = process.env.VITE_WS_URL || 'ws://localhost:8000/ws/',
-    fallbackUrl = process.env.VITE_EVENTSOURCE_URL || 'http://localhost:8000/events/',
-    reconnectInterval = 5000,
-    maxReconnectAttempts = 10,
-    onMessage = null,
-    onError = null,
-    onConnect = null,
-    onDisconnect = null,
-    autoConnect = true
-  } = options;
-
-  const [data, setData] = useState(null);
+export const useLiveChannel = (topic, onMessage, options = {}) => {
+  const { user } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionType, setConnectionType] = useState(null);
   const [error, setError] = useState(null);
-  const [reconnectAttempts, setReconnectAttempts] = useState(0);
   
   const wsRef = useRef(null);
   const eventSourceRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
-  const { showToast } = useToast();
+  const reconnectAttempts = useRef(0);
+  
+  const {
+    maxReconnectAttempts = 5,
+    reconnectInterval = 3000,
+    enableSSEFallback = true,
+    enableWebSocket = true,
+    debug = false
+  } = options;
 
-  const connectWebSocket = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+  const log = (message, ...args) => {
+    if (debug) {
+      console.log(`[useLiveChannel:${topic}]`, message, ...args);
+    }
+  };
+
+  const connectWebSocket = () => {
+    if (!enableWebSocket || !user) return;
 
     try {
-      const wsUrl = `${url}${topic}/`;
-      wsRef.current = new WebSocket(wsUrl);
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/${topic}/`;
+      
+      log('Connecting to WebSocket:', wsUrl);
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-      wsRef.current.onopen = () => {
+      ws.onopen = () => {
+        log('WebSocket connected');
         setIsConnected(true);
-        setIsConnecting(false);
+        setConnectionType('websocket');
         setError(null);
-        setReconnectAttempts(0);
-        onConnect?.();
-      };
-
-      wsRef.current.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          setData(message);
-          onMessage?.(message);
-        } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
+        reconnectAttempts.current = 0;
+        
+        // Send authentication if user is logged in
+        if (user) {
+          ws.send(JSON.stringify({
+            type: 'auth',
+            user_id: user.id,
+            token: localStorage.getItem('access_token')
+          }));
         }
       };
 
-      wsRef.current.onclose = () => {
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          log('WebSocket message received:', data);
+          
+          if (data.type === 'connection_established') {
+            log('Connection established for topic:', data.topic);
+          } else if (onMessage) {
+            onMessage(data);
+          }
+        } catch (err) {
+          log('Error parsing WebSocket message:', err);
+        }
+      };
+
+      ws.onclose = (event) => {
+        log('WebSocket closed:', event.code, event.reason);
         setIsConnected(false);
-        onDisconnect?.();
+        setConnectionType(null);
         
-        // Attempt reconnection if not manually closed
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            setReconnectAttempts(prev => prev + 1);
-            connectWebSocket();
-          }, reconnectInterval);
+        if (event.code !== 1000) { // Not a normal closure
+          scheduleReconnect();
         }
       };
 
-      wsRef.current.onerror = (err) => {
-        setError(err);
-        setIsConnecting(false);
-        onError?.(err);
+      ws.onerror = (error) => {
+        log('WebSocket error:', error);
+        setError('WebSocket connection error');
+        scheduleReconnect();
       };
 
     } catch (err) {
-      setError(err);
-      setIsConnecting(false);
-      onError?.(err);
+      log('Error creating WebSocket:', err);
+      setError('Failed to create WebSocket connection');
+      if (enableSSEFallback) {
+        connectSSE();
+      }
     }
-  }, [url, topic, reconnectAttempts, maxReconnectAttempts, reconnectInterval, onConnect, onMessage, onDisconnect, onError]);
+  };
 
-  const connectEventSource = useCallback(() => {
-    if (eventSourceRef.current?.readyState === EventSource.OPEN) return;
+  const connectSSE = () => {
+    if (!enableSSEFallback || !user) return;
 
     try {
-      const esUrl = `${fallbackUrl}${topic}/`;
-      eventSourceRef.current = new EventSource(esUrl);
+      const sseUrl = `/api/events/1/stream/`; // Default to event 1, should be dynamic
+      log('Connecting to SSE:', sseUrl);
+      
+      const eventSource = new EventSource(sseUrl);
+      eventSourceRef.current = eventSource;
+      setConnectionType('sse');
 
-      eventSourceRef.current.onopen = () => {
+      eventSource.onopen = () => {
+        log('SSE connected');
         setIsConnected(true);
-        setIsConnecting(false);
         setError(null);
-        setReconnectAttempts(0);
-        onConnect?.();
+        reconnectAttempts.current = 0;
       };
 
-      eventSourceRef.current.onmessage = (event) => {
+      eventSource.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data);
-          setData(message);
-          onMessage?.(message);
+          const data = JSON.parse(event.data);
+          log('SSE message received:', data);
+          
+          if (onMessage) {
+            onMessage(data);
+          }
         } catch (err) {
-          console.error('Failed to parse EventSource message:', err);
+          log('Error parsing SSE message:', err);
         }
       };
 
-      eventSourceRef.current.onerror = (err) => {
-        setError(err);
-        setIsConnecting(false);
-        onError?.(err);
-        
-        // Attempt WebSocket fallback
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            setReconnectAttempts(prev => prev + 1);
-            connectWebSocket();
-          }, reconnectInterval);
-        }
+      eventSource.onerror = (error) => {
+        log('SSE error:', error);
+        setError('SSE connection error');
+        eventSource.close();
+        scheduleReconnect();
       };
 
     } catch (err) {
-      setError(err);
-      setIsConnecting(false);
-      onError?.(err);
+      log('Error creating SSE:', err);
+      setError('Failed to create SSE connection');
     }
-  }, [fallbackUrl, topic, reconnectAttempts, maxReconnectAttempts, reconnectInterval, onConnect, onMessage, onError]);
+  };
 
-  const connect = useCallback(() => {
-    if (isConnecting) return;
-    
-    setIsConnecting(true);
-    setError(null);
-
-    // Try WebSocket first, fallback to EventSource
-    if (typeof WebSocket !== 'undefined') {
-      connectWebSocket();
-    } else {
-      connectEventSource();
+  const scheduleReconnect = () => {
+    if (reconnectAttempts.current >= maxReconnectAttempts) {
+      log('Max reconnection attempts reached');
+      setError('Connection failed after maximum attempts');
+      return;
     }
-  }, [isConnecting, connectWebSocket, connectEventSource]);
 
-  const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
 
+    reconnectAttempts.current += 1;
+    const delay = reconnectInterval * Math.pow(2, reconnectAttempts.current - 1); // Exponential backoff
+    
+    log(`Scheduling reconnection attempt ${reconnectAttempts.current} in ${delay}ms`);
+    
+    reconnectTimeoutRef.current = setTimeout(() => {
+      if (connectionType === 'websocket' || !connectionType) {
+        connectWebSocket();
+      } else if (connectionType === 'sse') {
+        connectSSE();
+      }
+    }, delay);
+  };
+
+  const disconnect = () => {
+    log('Disconnecting...');
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     if (wsRef.current) {
-      wsRef.current.close();
+      wsRef.current.close(1000, 'Component unmounting');
       wsRef.current = null;
     }
 
@@ -159,49 +189,60 @@ export const useLiveChannel = (topic, options = {}) => {
     }
 
     setIsConnected(false);
-    setIsConnecting(false);
-    setReconnectAttempts(0);
-  }, []);
+    setConnectionType(null);
+    setError(null);
+  };
 
-  const sendMessage = useCallback((message) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+  const sendMessage = (message) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
+      log('Message sent via WebSocket:', message);
     } else {
-      console.warn('WebSocket not connected. Cannot send message.');
+      log('Cannot send message: WebSocket not connected');
     }
-  }, []);
+  };
 
-  // Auto-connect on mount
+  const ping = () => {
+    sendMessage({
+      type: 'ping',
+      timestamp: Date.now()
+    });
+  };
+
+  // Connect on mount and when user changes
   useEffect(() => {
-    if (autoConnect && topic) {
-      connect();
+    if (user && topic) {
+      connectWebSocket();
     }
 
     return () => {
       disconnect();
     };
-  }, [autoConnect, topic, connect, disconnect]);
+  }, [user, topic]);
 
-  // Show connection status toasts
+  // Cleanup on unmount
   useEffect(() => {
-    if (error && reconnectAttempts > 0) {
-      showToast({
-        type: 'error',
-        title: 'Connection Error',
-        message: `Failed to connect to live updates. Attempting reconnection... (${reconnectAttempts}/${maxReconnectAttempts})`
-      });
-    }
-  }, [error, reconnectAttempts, maxReconnectAttempts, showToast]);
+    return () => {
+      disconnect();
+    };
+  }, []);
 
   return {
-    data,
     isConnected,
-    isConnecting,
+    connectionType,
     error,
-    reconnectAttempts,
-    connect,
+    sendMessage,
+    ping,
     disconnect,
-    sendMessage
+    reconnect: () => {
+      disconnect();
+      reconnectAttempts.current = 0;
+      if (enableWebSocket) {
+        connectWebSocket();
+      } else if (enableSSEFallback) {
+        connectSSE();
+      }
+    }
   };
 };
 

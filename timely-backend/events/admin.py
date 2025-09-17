@@ -26,13 +26,13 @@ def mark_completed(modeladmin, request, queryset):
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     list_display = [
-        "name", "sport", "venue", "start_date", "end_date", 
+        "name", "sport", "venue", "start_datetime", "end_datetime", 
         "status", "created_by"
     ]
-    search_fields = ["name", "sport__name", "venue__name", "created_by__email"]
-    list_filter = ["sport", "status", "start_date", "end_date"]
-    date_hierarchy = "start_date"
-    ordering = ["-start_date"]
+    search_fields = ["name", "sport", "venue__name", "created_by__email"]
+    list_filter = ["sport", "status", "start_datetime", "end_datetime"]
+    date_hierarchy = "start_datetime"
+    ordering = ["-start_datetime"]
     actions = [mark_ongoing, mark_completed]
     
     fieldsets = (
@@ -40,7 +40,7 @@ class EventAdmin(admin.ModelAdmin):
             'fields': ('name', 'sport', 'description')
         }),
         ('Date and Time', {
-            'fields': ('start_date', 'end_date')
+            'fields': ('start_datetime', 'end_datetime')
         }),
         ('Location and Venue', {
             'fields': ('venue', 'eligibility')

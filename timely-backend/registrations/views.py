@@ -34,9 +34,9 @@ class RegistrationViewSet(viewsets.ModelViewSet):
     queryset = Registration.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'payment_status', 'event', 'type']
+    filterset_fields = ['status', 'event', 'type']
     search_fields = ['team_name', 'user__email', 'user__first_name', 'user__last_name']
-    ordering_fields = ['submitted_at', 'status', 'payment_status']
+    ordering_fields = ['submitted_at', 'status']
     ordering = ['-submitted_at']
 
     def get_serializer_class(self):

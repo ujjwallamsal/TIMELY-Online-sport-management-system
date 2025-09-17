@@ -7,7 +7,7 @@ router = DefaultRouter()
 
 urlpatterns = [
     # Authentication endpoints
-    path('auth/', include('accounts.urls')),
+    path('accounts/', include('accounts.urls')),
     
     # User management
     path('users/', include('accounts.urls')),
@@ -19,7 +19,7 @@ urlpatterns = [
     
     # Events & Public Portal
     path('events/', include('events.urls')),
-    path('public/events/', include('events.urls')),
+    path('public/events/', include('events.public_urls')),
     
     # Teams & Registrations
     path('teams/', include('teams.urls')),
@@ -31,6 +31,10 @@ urlpatterns = [
     
     # Notifications & Announcements
     path('notifications/', include('notifications.urls')),
+    
+    # Event-specific endpoints
+    path('events/<int:event_id>/registrations/', include('registrations.urls')),
+    path('events/<int:event_id>/announce/', include('notifications.urls')),
     
     # Include router URLs (must be last)
     path('', include(router.urls)),

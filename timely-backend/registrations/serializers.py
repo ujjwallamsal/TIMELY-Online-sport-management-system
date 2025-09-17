@@ -31,7 +31,7 @@ class RegistrationListSerializer(serializers.ModelSerializer):
         model = Registration
         fields = [
             'id', 'event_name', 'event_sport', 'event_start_date', 'division_name',
-            'type', 'team_name', 'status', 'payment_status', 'fee_dollars',
+            'type', 'team', 'status', 'fee_dollars',
             'submitted_at', 'user_name'
         ]
 
@@ -39,24 +39,13 @@ class RegistrationListSerializer(serializers.ModelSerializer):
 class RegistrationDetailSerializer(serializers.ModelSerializer):
     """Serializer for registration detail views"""
     
-    event_name = serializers.CharField(source='event.name', read_only=True)
-    event_sport = serializers.CharField(source='event.sport', read_only=True)
-    event_start_date = serializers.DateTimeField(source='event.start_datetime', read_only=True)
-    event_end_date = serializers.DateTimeField(source='event.end_datetime', read_only=True)
-    event_location = serializers.CharField(source='event.location', read_only=True)
-    division_name = serializers.CharField(source='division.name', read_only=True)
-    user_name = serializers.CharField(source='user.email', read_only=True)
-    decided_by_name = serializers.CharField(source='decided_by.email', read_only=True)
-    fee_dollars = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     documents = RegistrationDocumentSerializer(many=True, read_only=True)
     
     class Meta:
         model = Registration
         fields = [
-            'id', 'event_name', 'event_sport', 'event_start_date', 'event_end_date',
-            'event_location', 'division_name', 'type', 'team_name', 'team_manager_name',
-            'team_contact', 'status', 'payment_status', 'fee_dollars', 'user_name',
-            'submitted_at', 'decided_at', 'decided_by_name', 'reason', 'documents'
+            'id', 'event', 'type', 'team', 'applicant', 'status', 'docs',
+            'submitted_at', 'decided_at', 'decided_by', 'reason', 'documents'
         ]
 
 
@@ -66,18 +55,18 @@ class RegistrationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Registration
         fields = [
-            'event', 'division', 'type', 'team_name', 'team_manager_name', 'team_contact'
+            'event', 'type', 'team', 'applicant', 'docs'
         ]
     
     def validate(self, data):
         """Validate registration data"""
         event = data.get('event')
-        division = data.get('division')
         reg_type = data.get('type')
-        team_name = data.get('team_name')
+        team = data.get('team')
+        applicant = data.get('applicant')
         
         # Check if event is published and within registration window
-        if not event.lifecycle_status == 'published':
+        if not event.is_published:
             raise serializers.ValidationError("Event is not published")
         
         now = timezone.now()
@@ -87,22 +76,18 @@ class RegistrationCreateSerializer(serializers.ModelSerializer):
         if event.registration_close_at and now > event.registration_close_at:
             raise serializers.ValidationError("Registration is closed")
         
-        # Validate division belongs to event
-        if division and division.event != event:
-            raise serializers.ValidationError("Division does not belong to this event")
-        
-        # Validate team registration requirements
-        if reg_type == 'team' and not team_name:
-            raise serializers.ValidationError("Team name is required for team registrations")
-        
-        # Set fee from event
-        data['fee_cents'] = event.fee_cents
+        # Validate registration requirements
+        if reg_type == Registration.Type.TEAM and not team:
+            raise serializers.ValidationError("Team is required for team registrations")
+        elif reg_type == Registration.Type.ATHLETE and not applicant:
+            raise serializers.ValidationError("Applicant is required for athlete registrations")
         
         return data
     
     def create(self, validated_data):
-        """Create registration with user from context"""
-        validated_data['user'] = self.context['request'].user
+        """Create registration with applicant from context"""
+        if not validated_data.get('applicant'):
+            validated_data['applicant'] = self.context['request'].user
         return super().create(validated_data)
 
 

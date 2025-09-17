@@ -1,6 +1,8 @@
 # accounts/permissions.py
 from rest_framework import permissions
 from .models import UserRole
+from teams.models import Team, TeamMember
+from events.models import Event
 
 
 class IsAdmin(permissions.BasePermission):
@@ -342,3 +344,217 @@ class HasRoleInContext(permissions.BasePermission):
             ).exists()
         
         return False
+
+
+# New RBAC Permission Classes
+class IsOrganizerOfEvent(permissions.BasePermission):
+    """
+    Permission to check if user is organizer of a specific event.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user is organizer (legacy role or UserRole)
+        return (request.user.role == 'ORGANIZER' or 
+                UserRole.objects.filter(
+                    user=request.user,
+                    is_active=True,
+                    role_type=UserRole.RoleType.ORGANIZER
+                ).exists())
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        
+        # For Event objects, check if user created the event
+        if isinstance(obj, Event):
+            return obj.created_by == request.user
+        
+        # For other objects, check if they belong to an event the user created
+        if hasattr(obj, 'event'):
+            return obj.event.created_by == request.user
+        
+        return False
+
+
+class IsCoachOfTeam(permissions.BasePermission):
+    """
+    Permission to check if user is coach of a specific team.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user is coach (legacy role or UserRole)
+        return (request.user.role == 'COACH' or 
+                UserRole.objects.filter(
+                    user=request.user,
+                    is_active=True,
+                    role_type=UserRole.RoleType.COACH
+                ).exists())
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        
+        # For Team objects, check if user is the coach
+        if isinstance(obj, Team):
+            return obj.coach == request.user
+        
+        # For TeamMember objects, check if user coaches the team
+        if isinstance(obj, TeamMember):
+            return obj.team.coach == request.user
+        
+        # For other objects, check if they belong to a team the user coaches
+        if hasattr(obj, 'team'):
+            return obj.team.coach == request.user
+        
+        return False
+
+
+class IsAthleteSelf(permissions.BasePermission):
+    """
+    Permission to check if user is accessing their own data as an athlete.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user is athlete (legacy role or UserRole)
+        return (request.user.role == 'ATHLETE' or 
+                UserRole.objects.filter(
+                    user=request.user,
+                    is_active=True,
+                    role_type=UserRole.RoleType.ATHLETE
+                ).exists())
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        
+        # For User objects, check if it's the same user
+        if hasattr(obj, 'id') and hasattr(request.user, 'id'):
+            return obj.id == request.user.id
+        
+        # For objects with user field, check if it's the same user
+        if hasattr(obj, 'user'):
+            return obj.user == request.user
+        
+        # For objects with athlete field, check if it's the same user
+        if hasattr(obj, 'athlete'):
+            return obj.athlete == request.user
+        
+        return False
+
+
+class IsSpectatorReadOnly(permissions.BasePermission):
+    """
+    Permission for spectators - read-only access to public data.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user is spectator (legacy role or UserRole)
+        is_spectator = (request.user.role == 'SPECTATOR' or 
+                       UserRole.objects.filter(
+                           user=request.user,
+                           is_active=True,
+                           role_type=UserRole.RoleType.SPECTATOR
+                       ).exists())
+        
+        # Spectators can only read (GET, HEAD, OPTIONS)
+        if is_spectator:
+            return request.method in permissions.SAFE_METHODS
+        
+        return False
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        
+        # Spectators can only read
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        return False
+
+
+class IsOwnerOrReadOnly(permissions.BasePermission):
+    """
+    Custom permission to only allow owners of an object to edit it.
+    """
+    
+    def has_object_permission(self, request, view, obj):
+        # Read permissions are allowed to any request,
+        # so we'll always allow GET, HEAD or OPTIONS requests.
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        # Write permissions are only allowed to the owner of the object.
+        if hasattr(obj, 'user'):
+            return obj.user == request.user
+        elif hasattr(obj, 'created_by'):
+            return obj.created_by == request.user
+        elif hasattr(obj, 'owner'):
+            return obj.owner == request.user
+        
+        return False
+
+
+class IsOrganizerOrReadOnly(permissions.BasePermission):
+    """
+    Custom permission to allow organizers to edit, others to read.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        
+        if not request.user.is_authenticated:
+            return False
+        
+        # Allow read access to all authenticated users
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        # Allow write access only to organizers
+        return (request.user.role == 'ORGANIZER' or 
+                UserRole.objects.filter(
+                    user=request.user,
+                    is_active=True,
+                    role_type=UserRole.RoleType.ORGANIZER
+                ).exists())
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        
+        # Allow read access to all authenticated users
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        # Allow write access only to organizers
+        return (request.user.role == 'ORGANIZER' or 
+                UserRole.objects.filter(
+                    user=request.user,
+                    is_active=True,
+                    role_type=UserRole.RoleType.ORGANIZER
+                ).exists())

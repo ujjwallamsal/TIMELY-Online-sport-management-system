@@ -9,7 +9,39 @@ from .serializers import (
     EventSerializer, EventListSerializer, DivisionSerializer,
     EventLifecycleActionSerializer
 )
-from .permissions import IsEventOwnerOrAdmin, IsOrganizerOrAdmin, IsAdminOrReadOnly
+from accounts.permissions import (
+    IsOrganizerOfEvent, IsCoachOfTeam, IsAthleteSelf, 
+    IsSpectatorReadOnly, IsAdmin, IsOwnerOrReadOnly
+)
+
+# Create a simple permission class for event ownership
+class IsEventOwnerOrAdmin(permissions.BasePermission):
+    """Allow access to event owners and admins"""
+    
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Admin users have access to everything
+        if request.user.role == 'ADMIN' or request.user.is_staff:
+            return True
+        
+        # For other operations, check object-level permissions
+        return True
+    
+    def has_object_permission(self, request, view, obj):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Admin users have access to everything
+        if request.user.role == 'ADMIN' or request.user.is_staff:
+            return True
+        
+        # Event owners have access to their events
+        if hasattr(obj, 'event') and obj.event.created_by == request.user:
+            return True
+        
+        return False
 
 
 class EventViewSet(viewsets.ModelViewSet):
@@ -35,10 +67,10 @@ class EventViewSet(viewsets.ModelViewSet):
             permission_classes = [permissions.AllowAny]
         elif self.action == 'create':
             # Only organizers and admins can create
-            permission_classes = [IsOrganizerOrAdmin]
+            permission_classes = [IsOrganizerOfEvent]
         else:
             # Owners and admins can update/delete
-            permission_classes = [IsEventOwnerOrAdmin]
+            permission_classes = [IsOrganizerOfEvent]
         
         return [permission() for permission in permission_classes]
     
@@ -46,23 +78,28 @@ class EventViewSet(viewsets.ModelViewSet):
         """Filter queryset based on user permissions and query params"""
         queryset = super().get_queryset()
         
-        # Public list defaults to published only
-        if self.action == 'list' and not self.request.user.is_authenticated:
-            queryset = queryset.filter(status=Event.Status.UPCOMING)
-        elif self.action == 'list' and self.request.user.is_authenticated:
-            # Admin sees all events, Organizer sees their own + published, others see published only
-            if self.request.user.role == 'ADMIN':
+        # Apply role-based filtering
+        if self.action == 'list':
+            if not self.request.user.is_authenticated:
+                # Public users see only public events
+                queryset = queryset.filter(visibility='PUBLIC', status=Event.Status.UPCOMING)
+            elif self.request.user.is_staff or self.request.user.role == 'ADMIN':
                 # Admin sees all events
                 pass
             elif self.request.user.role == 'ORGANIZER':
-                # Organizer sees their own events + published events
+                # Organizer sees their own events + public events
                 queryset = queryset.filter(
-                    Q(status=Event.Status.UPCOMING) |
-                    Q(created_by=self.request.user)
+                    Q(created_by=self.request.user) |
+                    Q(visibility='PUBLIC', status=Event.Status.UPCOMING)
                 )
             else:
-                # Other users see only published events
-                queryset = queryset.filter(status=Event.Status.UPCOMING)
+                # Other roles see only public events
+                queryset = queryset.filter(visibility='PUBLIC', status=Event.Status.UPCOMING)
+        
+        # Apply ?mine=true filter for organizers
+        if self.request.query_params.get('mine') == 'true' and self.request.user.is_authenticated:
+            if self.request.user.role == 'ORGANIZER':
+                queryset = queryset.filter(created_by=self.request.user)
         
         # Apply filters
         sport = self.request.query_params.get('sport')
@@ -72,16 +109,16 @@ class EventViewSet(viewsets.ModelViewSet):
         # Status filter (for admin/organizer)
         status_filter = self.request.query_params.get('status')
         if status_filter and self.request.user.is_authenticated:
-            if self.request.user.role in ['ADMIN', 'ORGANIZER']:
+            if self.request.user.is_staff or self.request.user.role in ['ADMIN', 'ORGANIZER']:
                 queryset = queryset.filter(status=status_filter)
         
         # Date range filter
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
         if date_from:
-            queryset = queryset.filter(start_date__gte=date_from)
+            queryset = queryset.filter(start_datetime__gte=date_from)
         if date_to:
-            queryset = queryset.filter(end_date__lte=date_to)
+            queryset = queryset.filter(end_datetime__lte=date_to)
         
         # Search query
         q = self.request.query_params.get('q')
@@ -165,8 +202,41 @@ class EventViewSet(viewsets.ModelViewSet):
         """Get fixtures for an event (for schedule/results pages)"""
         event = self.get_object()
         
-        # Only admin/organizer can access fixtures
-        if not request.user.is_authenticated or request.user.role not in ['ADMIN', 'ORGANIZER']:
+        # Check permissions based on role
+        if not request.user.is_authenticated:
+            return Response(
+                {"detail": "Authentication required"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Admin and organizer can see all fixtures
+        if request.user.is_staff or request.user.role in ['ADMIN', 'ORGANIZER']:
+            pass  # Full access
+        # Coach can see fixtures for their team's events
+        elif request.user.role == 'COACH':
+            # Check if user coaches any team in this event
+            from teams.models import Team
+            if not Team.objects.filter(event=event, coach=request.user).exists():
+                return Response(
+                    {"detail": "Permission denied - not a coach for this event"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        # Athlete can see fixtures for events they're registered in
+        elif request.user.role == 'ATHLETE':
+            from registrations.models import Registration
+            if not Registration.objects.filter(event=event, applicant=request.user).exists():
+                return Response(
+                    {"detail": "Permission denied - not registered for this event"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        # Spectator can see public fixtures
+        elif request.user.role == 'SPECTATOR':
+            if event.visibility != 'PUBLIC':
+                return Response(
+                    {"detail": "Permission denied - event not public"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        else:
             return Response(
                 {"detail": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN
@@ -193,10 +263,17 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         
         if request.method == 'GET':
-            # Only admin/organizer can view registrations
-            if not request.user.is_authenticated or request.user.role not in ['ADMIN', 'ORGANIZER']:
+            # Check permissions for viewing registrations
+            if not request.user.is_authenticated:
                 return Response(
-                    {"detail": "Permission denied"},
+                    {"detail": "Authentication required"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # Only admin/organizer can view all registrations
+            if not (request.user.is_staff or request.user.role in ['ADMIN', 'ORGANIZER']):
+                return Response(
+                    {"detail": "Permission denied - only organizers can view registrations"},
                     status=status.HTTP_403_FORBIDDEN
                 )
             
@@ -214,6 +291,19 @@ class EventViewSet(viewsets.ModelViewSet):
             })
         
         elif request.method == 'POST':
+            # Athletes can create registrations for themselves
+            if not request.user.is_authenticated:
+                return Response(
+                    {"detail": "Authentication required"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            if request.user.role not in ['ATHLETE', 'COACH']:
+                return Response(
+                    {"detail": "Permission denied - only athletes and coaches can register"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
             # Create new registration
             from registrations.models import Registration
             from registrations.serializers import RegistrationSerializer
@@ -234,9 +324,15 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         
         # Only admin/organizer can generate fixtures
-        if not request.user.is_authenticated or request.user.role not in ['ADMIN', 'ORGANIZER']:
+        if not request.user.is_authenticated:
             return Response(
-                {"detail": "Permission denied"},
+                {"detail": "Authentication required"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        if not (request.user.is_staff or request.user.role in ['ADMIN', 'ORGANIZER']):
+            return Response(
+                {"detail": "Permission denied - only organizers can generate fixtures"},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -322,7 +418,7 @@ class DivisionViewSet(viewsets.ModelViewSet):
     """Division ViewSet for managing event divisions"""
     
     serializer_class = DivisionSerializer
-    permission_classes = [IsEventOwnerOrAdmin]
+    permission_classes = [IsOrganizerOfEvent]
     
     def get_queryset(self):
         """Filter divisions by event"""

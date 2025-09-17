@@ -4,28 +4,25 @@ import { useAuth } from '../../context/AuthContext';
 import { useLiveChannel } from '../../hooks/useLiveChannel';
 import { api } from '../../services/api';
 
-const AthleteDashboard = () => {
+const CoachDashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
-    nextMatch: null,
-    activeTickets: 0,
+    upcomingFixtures: 0,
+    rosterCount: 0,
     unreadAnnouncements: 0,
-    myRegistrations: 0
+    recentResults: 0
   });
-  const [nextMatch, setNextMatch] = useState(null);
-  const [myFixtures, setMyFixtures] = useState([]);
-  const [myResults, setMyResults] = useState([]);
-  const [myRegistrations, setMyRegistrations] = useState([]);
+  const [upcomingFixtures, setUpcomingFixtures] = useState([]);
+  const [recentResults, setRecentResults] = useState([]);
+  const [roster, setRoster] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Subscribe to real-time updates
-  useLiveChannel('athlete_updates', (data) => {
+  useLiveChannel('coach_updates', (data) => {
     if (data.type === 'fixture_update') {
-      fetchMyFixtures();
+      fetchUpcomingFixtures();
     } else if (data.type === 'result_update') {
-      fetchMyResults();
-    } else if (data.type === 'registration_update') {
-      fetchMyRegistrations();
+      fetchRecentResults();
     } else if (data.type === 'announcement_update') {
       // Handle announcement updates
     }
@@ -35,47 +32,36 @@ const AthleteDashboard = () => {
     try {
       setLoading(true);
       
-      // Fetch my registrations
-      const registrationsResponse = await api.get('/api/registrations?applicant=me');
-      const registrations = registrationsResponse.data.results || registrationsResponse.data;
+      // Fetch teams I coach
+      const teamsResponse = await api.get('/api/teams?mine=true');
+      const teams = teamsResponse.data.results || teamsResponse.data;
       
-      // Fetch my team memberships
-      const teamMembershipsResponse = await api.get('/api/teams/members?athlete=me');
-      const teamMemberships = teamMembershipsResponse.data.results || teamMembershipsResponse.data;
-      
-      if (teamMemberships.length > 0) {
-        const team = teamMemberships[0].team;
+      if (teams.length > 0) {
+        const team = teams[0]; // For now, use first team
         
-        // Fetch fixtures for my team
-        const fixturesResponse = await api.get(`/api/fixtures?team=${team.id}`);
+        // Fetch upcoming fixtures for my teams
+        const fixturesResponse = await api.get(`/api/fixtures?team=${team.id}&status=upcoming`);
         const fixtures = fixturesResponse.data.results || fixturesResponse.data;
         
-        // Fetch results for my team
+        // Fetch recent results for my teams
         const resultsResponse = await api.get(`/api/results?team=${team.id}&finalized=true`);
         const results = resultsResponse.data.results || resultsResponse.data;
         
-        // Find next match
-        const upcomingFixtures = fixtures.filter(f => 
-          new Date(f.start_at) > new Date() && f.status === 'upcoming'
-        ).sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
+        // Fetch roster
+        const rosterResponse = await api.get(`/api/teams/${team.id}/members`);
+        const rosterData = rosterResponse.data.results || rosterResponse.data;
         
-        setNextMatch(upcomingFixtures[0] || null);
-        setMyFixtures(fixtures.slice(0, 5));
-        setMyResults(results.slice(0, 5));
+        setUpcomingFixtures(fixtures.slice(0, 5));
+        setRecentResults(results.slice(0, 5));
+        setRoster(rosterData);
+        
+        setStats({
+          upcomingFixtures: fixtures.length,
+          rosterCount: rosterData.length,
+          unreadAnnouncements: 0, // TODO: Implement announcement count
+          recentResults: results.length
+        });
       }
-      
-      setMyRegistrations(registrations);
-      
-      // Fetch active tickets
-      const ticketsResponse = await api.get('/api/tickets?status=active');
-      const tickets = ticketsResponse.data.results || ticketsResponse.data;
-      
-      setStats({
-        nextMatch: nextMatch,
-        activeTickets: tickets.length,
-        unreadAnnouncements: 0, // TODO: Implement announcement count
-        myRegistrations: registrations.length
-      });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -83,53 +69,37 @@ const AthleteDashboard = () => {
     }
   };
 
-  const fetchMyFixtures = async () => {
+  const fetchUpcomingFixtures = async () => {
     try {
-      const teamMembershipsResponse = await api.get('/api/teams/members?athlete=me');
-      const teamMemberships = teamMembershipsResponse.data.results || teamMembershipsResponse.data;
+      const teamsResponse = await api.get('/api/teams?mine=true');
+      const teams = teamsResponse.data.results || teamsResponse.data;
       
-      if (teamMemberships.length > 0) {
-        const team = teamMemberships[0].team;
-        const response = await api.get(`/api/fixtures?team=${team.id}`);
+      if (teams.length > 0) {
+        const team = teams[0];
+        const response = await api.get(`/api/fixtures?team=${team.id}&status=upcoming`);
         const fixtures = response.data.results || response.data;
-        setMyFixtures(fixtures.slice(0, 5));
-        
-        // Update next match
-        const upcomingFixtures = fixtures.filter(f => 
-          new Date(f.start_at) > new Date() && f.status === 'upcoming'
-        ).sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
-        
-        setNextMatch(upcomingFixtures[0] || null);
+        setUpcomingFixtures(fixtures.slice(0, 5));
+        setStats(prev => ({ ...prev, upcomingFixtures: fixtures.length }));
       }
     } catch (error) {
-      console.error('Error fetching my fixtures:', error);
+      console.error('Error fetching upcoming fixtures:', error);
     }
   };
 
-  const fetchMyResults = async () => {
+  const fetchRecentResults = async () => {
     try {
-      const teamMembershipsResponse = await api.get('/api/teams/members?athlete=me');
-      const teamMemberships = teamMembershipsResponse.data.results || teamMembershipsResponse.data;
+      const teamsResponse = await api.get('/api/teams?mine=true');
+      const teams = teamsResponse.data.results || teamsResponse.data;
       
-      if (teamMemberships.length > 0) {
-        const team = teamMemberships[0].team;
+      if (teams.length > 0) {
+        const team = teams[0];
         const response = await api.get(`/api/results?team=${team.id}&finalized=true`);
         const results = response.data.results || response.data;
-        setMyResults(results.slice(0, 5));
+        setRecentResults(results.slice(0, 5));
+        setStats(prev => ({ ...prev, recentResults: results.length }));
       }
     } catch (error) {
-      console.error('Error fetching my results:', error);
-    }
-  };
-
-  const fetchMyRegistrations = async () => {
-    try {
-      const response = await api.get('/api/registrations?applicant=me');
-      const registrations = response.data.results || response.data;
-      setMyRegistrations(registrations);
-      setStats(prev => ({ ...prev, myRegistrations: registrations.length }));
-    } catch (error) {
-      console.error('Error fetching my registrations:', error);
+      console.error('Error fetching recent results:', error);
     }
   };
 
@@ -137,21 +107,12 @@ const AthleteDashboard = () => {
     fetchDashboardData();
   }, []);
 
-  const handleJoinTeam = async (teamId) => {
+  const handleConfirmLineup = async (fixtureId) => {
     try {
-      // TODO: Implement join team functionality
-      console.log('Join team:', teamId);
+      // TODO: Implement lineup confirmation
+      console.log('Confirm lineup for fixture:', fixtureId);
     } catch (error) {
-      console.error('Error joining team:', error);
-    }
-  };
-
-  const handleRegisterForEvent = async (eventId) => {
-    try {
-      // TODO: Implement event registration
-      console.log('Register for event:', eventId);
-    } catch (error) {
-      console.error('Error registering for event:', error);
+      console.error('Error confirming lineup:', error);
     }
   };
 
@@ -168,8 +129,8 @@ const AthleteDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Athlete Dashboard</h1>
-          <p className="mt-2 text-gray-600">Track your matches, registrations, and tickets</p>
+          <h1 className="text-3xl font-bold text-gray-900">Coach Dashboard</h1>
+          <p className="mt-2 text-gray-600">Manage your team, fixtures, and results</p>
         </div>
 
         {/* Stats Grid */}
@@ -184,10 +145,8 @@ const AthleteDashboard = () => {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Next Match</p>
-                <p className="text-lg font-semibold text-gray-900">
-                  {nextMatch ? new Date(nextMatch.start_at).toLocaleDateString() : 'None'}
-                </p>
+                <p className="text-sm font-medium text-gray-500">Upcoming Fixtures</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.upcomingFixtures}</p>
               </div>
             </div>
           </div>
@@ -197,13 +156,13 @@ const AthleteDashboard = () => {
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
                   <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Active Tickets</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.activeTickets}</p>
+                <p className="text-sm font-medium text-gray-500">Roster Count</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.rosterCount}</p>
               </div>
             </div>
           </div>
@@ -229,13 +188,13 @@ const AthleteDashboard = () => {
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-purple-100 rounded-md flex items-center justify-center">
                   <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">My Registrations</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.myRegistrations}</p>
+                <p className="text-sm font-medium text-gray-500">Recent Results</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.recentResults}</p>
               </div>
             </div>
           </div>
@@ -249,33 +208,33 @@ const AthleteDashboard = () => {
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Link
-                to="/athlete/my-registrations"
+                to="/coach/roster"
                 className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                My Registrations
+                Manage Roster
               </Link>
               
               <Link
-                to="/athlete/my-tickets"
+                to="/coach/fixtures"
                 className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                </svg>
-                My Tickets
-              </Link>
-              
-              <Link
-                to="/events"
-                className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                Browse Events
+                View Fixtures
+              </Link>
+              
+              <Link
+                to="/coach/results"
+                className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                View Results
               </Link>
             </div>
           </div>
@@ -283,14 +242,14 @@ const AthleteDashboard = () => {
 
         {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* My Fixtures */}
+          {/* Upcoming Fixtures */}
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">My Fixtures</h2>
+              <h2 className="text-lg font-medium text-gray-900">Upcoming Fixtures</h2>
             </div>
             <div className="divide-y divide-gray-200">
-              {myFixtures.length > 0 ? (
-                myFixtures.map((fixture) => (
+              {upcomingFixtures.length > 0 ? (
+                upcomingFixtures.map((fixture) => (
                   <div key={fixture.id} className="px-6 py-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -301,28 +260,31 @@ const AthleteDashboard = () => {
                           {new Date(fixture.start_at).toLocaleDateString()} at {new Date(fixture.start_at).toLocaleTimeString()}
                         </p>
                       </div>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {fixture.status}
-                      </span>
+                      <button
+                        onClick={() => handleConfirmLineup(fixture.id)}
+                        className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                      >
+                        Confirm Lineup
+                      </button>
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="px-6 py-4 text-center text-gray-500">
-                  No fixtures found
+                  No upcoming fixtures
                 </div>
               )}
             </div>
           </div>
 
-          {/* My Results */}
+          {/* Recent Results */}
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">My Results</h2>
+              <h2 className="text-lg font-medium text-gray-900">Recent Results</h2>
             </div>
             <div className="divide-y divide-gray-200">
-              {myResults.length > 0 ? (
-                myResults.map((result) => (
+              {recentResults.length > 0 ? (
+                recentResults.map((result) => (
                   <div key={result.id} className="px-6 py-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -343,7 +305,7 @@ const AthleteDashboard = () => {
                 ))
               ) : (
                 <div className="px-6 py-4 text-center text-gray-500">
-                  No results found
+                  No recent results
                 </div>
               )}
             </div>
@@ -354,4 +316,4 @@ const AthleteDashboard = () => {
   );
 };
 
-export default AthleteDashboard;
+export default CoachDashboard;

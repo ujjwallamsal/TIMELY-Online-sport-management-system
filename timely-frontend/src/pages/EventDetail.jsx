@@ -8,12 +8,16 @@ import {
   PencilIcon,
   EyeIcon,
   XMarkIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  TrophyIcon,
+  ClockIcon,
+  SpeakerWaveIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
 import { getEvent, publishEvent, unpublishEvent, cancelEvent, listDivisions } from '../lib/api';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
+import useLiveChannel, { useEventResults, useEventSchedule, useEventAnnouncements } from '../hooks/useLiveChannel';
 
 const EventDetail = () => {
   const { id } = useParams();
@@ -25,6 +29,37 @@ const EventDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
+  
+  // Real-time data
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [fixtures, setFixtures] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  
+  // Real-time hooks
+  const { isConnected: resultsConnected, lastMessage: resultsMessage } = useEventResults(id, {
+    onResultsUpdate: (data) => {
+      if (data.leaderboard) {
+        setLeaderboard(data.leaderboard);
+      }
+    }
+  });
+  
+  const { isConnected: scheduleConnected, lastMessage: scheduleMessage } = useEventSchedule(id, {
+    onScheduleUpdate: (data) => {
+      if (data.fixtures) {
+        setFixtures(data.fixtures);
+      }
+    }
+  });
+  
+  const { isConnected: announcementsConnected, lastMessage: announcementMessage } = useEventAnnouncements(id, {
+    onAnnouncementUpdate: (data) => {
+      if (data.announcement) {
+        setAnnouncements(prev => [data.announcement, ...prev]);
+      }
+    }
+  });
 
   useEffect(() => {
     fetchEvent();
@@ -252,79 +287,316 @@ const EventDetail = () => {
           </div>
         )}
 
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8 px-6">
+              {[
+                { id: 'details', name: 'Details', icon: CalendarIcon },
+                { id: 'leaderboard', name: 'Leaderboard', icon: TrophyIcon },
+                { id: 'schedule', name: 'Schedule', icon: ClockIcon },
+                { id: 'announcements', name: 'Announcements', icon: SpeakerWaveIcon },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                const isLive = (tab.id === 'leaderboard' && resultsConnected) ||
+                              (tab.id === 'schedule' && scheduleConnected) ||
+                              (tab.id === 'announcements' && announcementsConnected);
+                
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`${
+                      isActive
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.name}
+                    {isLive && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Live
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Description */}
-            {event.description && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Description</h2>
-                <p className="text-gray-700 whitespace-pre-wrap">{event.description}</p>
-              </div>
-            )}
+            {/* Tab Content */}
+            {activeTab === 'details' && (
+              <>
+                {/* Description */}
+                {event.description && (
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Description</h2>
+                    <p className="text-gray-700 whitespace-pre-wrap">{event.description}</p>
+                  </div>
+                )}
 
-            {/* Event details */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Event Details</h2>
-              <div className="space-y-4">
-                <div className="flex items-start">
-                  <CalendarIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Start Date & Time</p>
-                    <p className="text-sm text-gray-600">{formatDate(event.start_datetime)}</p>
+                {/* Event details */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Event Details</h2>
+                  <div className="space-y-4">
+                    <div className="flex items-start">
+                      <CalendarIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Start Date & Time</p>
+                        <p className="text-sm text-gray-600">{formatDate(event.start_datetime)}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <CalendarIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">End Date & Time</p>
+                        <p className="text-sm text-gray-600">{formatDate(event.end_datetime)}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <MapPinIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Location</p>
+                        <p className="text-sm text-gray-600">{event.location}</p>
+                      </div>
+                    </div>
+                    
+                    {event.capacity > 0 && (
+                      <div className="flex items-start">
+                        <UserGroupIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Capacity</p>
+                          <p className="text-sm text-gray-600">{event.capacity} participants</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-start">
+                      <CurrencyDollarIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Registration Fee</p>
+                        <p className="text-sm text-gray-600">{formatFee(event.fee_cents)}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="flex items-start">
-                  <CalendarIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">End Date & Time</p>
-                    <p className="text-sm text-gray-600">{formatDate(event.end_datetime)}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start">
-                  <MapPinIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Location</p>
-                    <p className="text-sm text-gray-600">{event.location}</p>
-                  </div>
-                </div>
-                
-                {event.capacity > 0 && (
-                  <div className="flex items-start">
-                    <UserGroupIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Capacity</p>
-                      <p className="text-sm text-gray-600">{event.capacity} participants</p>
+
+                {/* Divisions */}
+                {divisions.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Divisions</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {divisions.map((division) => (
+                        <div key={division.id} className="border border-gray-200 rounded-lg p-4">
+                          <h3 className="font-medium text-gray-900">{division.name}</h3>
+                          {division.sort_order > 0 && (
+                            <p className="text-sm text-gray-600 mt-1">Order: {division.sort_order}</p>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
-                
-                <div className="flex items-start">
-                  <CurrencyDollarIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Registration Fee</p>
-                    <p className="text-sm text-gray-600">{formatFee(event.fee_cents)}</p>
+              </>
+            )}
+
+            {activeTab === 'leaderboard' && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Leaderboard</h2>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${resultsConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                    <span className="text-sm text-gray-600">
+                      {resultsConnected ? 'Live Updates' : 'Offline'}
+                    </span>
                   </div>
                 </div>
+                
+                {leaderboard.length === 0 ? (
+                  <div className="text-center py-8">
+                    <TrophyIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No results yet</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-3 px-4 font-medium text-gray-700">Pos</th>
+                          <th className="text-left py-3 px-4 font-medium text-gray-700">Team</th>
+                          <th className="text-center py-3 px-2 font-medium text-gray-700">P</th>
+                          <th className="text-center py-3 px-2 font-medium text-gray-700">W</th>
+                          <th className="text-center py-3 px-2 font-medium text-gray-700">D</th>
+                          <th className="text-center py-3 px-2 font-medium text-gray-700">L</th>
+                          <th className="text-center py-3 px-2 font-medium text-gray-700">GF</th>
+                          <th className="text-center py-3 px-2 font-medium text-gray-700">GA</th>
+                          <th className="text-center py-3 px-2 font-medium text-gray-700">GD</th>
+                          <th className="text-center py-3 px-2 font-medium text-gray-700">Pts</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboard.map((entry, index) => (
+                          <tr key={entry.team_id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-3 px-4 font-bold text-gray-800">
+                              {index + 1}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="font-medium text-gray-800">
+                                {entry.team_name}
+                              </div>
+                            </td>
+                            <td className="py-3 px-2 text-center font-medium text-gray-700">
+                              {entry.matches_played}
+                            </td>
+                            <td className="py-3 px-2 text-center text-green-600 font-medium">
+                              {entry.w}
+                            </td>
+                            <td className="py-3 px-2 text-center text-gray-600 font-medium">
+                              {entry.d}
+                            </td>
+                            <td className="py-3 px-2 text-center text-red-600 font-medium">
+                              {entry.l}
+                            </td>
+                            <td className="py-3 px-2 text-center font-medium text-gray-700">
+                              {entry.gf}
+                            </td>
+                            <td className="py-3 px-2 text-center font-medium text-gray-700">
+                              {entry.ga}
+                            </td>
+                            <td className="py-3 px-2 text-center font-medium text-gray-700">
+                              <span className={entry.gd >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                {entry.gd >= 0 ? '+' : ''}{entry.gd}
+                              </span>
+                            </td>
+                            <td className="py-3 px-2 text-center font-bold text-gray-800">
+                              {entry.pts}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Divisions */}
-            {divisions.length > 0 && (
+            {activeTab === 'schedule' && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Divisions</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {divisions.map((division) => (
-                    <div key={division.id} className="border border-gray-200 rounded-lg p-4">
-                      <h3 className="font-medium text-gray-900">{division.name}</h3>
-                      {division.sort_order > 0 && (
-                        <p className="text-sm text-gray-600 mt-1">Order: {division.sort_order}</p>
-                      )}
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Schedule</h2>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${scheduleConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                    <span className="text-sm text-gray-600">
+                      {scheduleConnected ? 'Live Updates' : 'Offline'}
+                    </span>
+                  </div>
                 </div>
+                
+                {fixtures.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ClockIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No fixtures scheduled yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {fixtures.map((fixture) => (
+                      <div key={fixture.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-4">
+                              <div className="text-center">
+                                <div className="font-medium text-gray-900">
+                                  {fixture.home_team?.name || 'TBD'}
+                                </div>
+                              </div>
+                              <div className="text-gray-500">vs</div>
+                              <div className="text-center">
+                                <div className="font-medium text-gray-900">
+                                  {fixture.away_team?.name || 'TBD'}
+                                </div>
+                              </div>
+                            </div>
+                            {fixture.venue && (
+                              <div className="text-sm text-gray-600 mt-2">
+                                <MapPinIcon className="h-4 w-4 inline mr-1" />
+                                {fixture.venue.name}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-gray-900">
+                              {new Date(fixture.start_at).toLocaleDateString()}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {new Date(fixture.start_at).toLocaleTimeString()}
+                            </div>
+                            <div className={`text-xs px-2 py-1 rounded-full mt-1 ${
+                              fixture.status === 'LIVE' ? 'bg-red-100 text-red-800' :
+                              fixture.status === 'FINAL' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {fixture.status}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'announcements' && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Announcements</h2>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${announcementsConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                    <span className="text-sm text-gray-600">
+                      {announcementsConnected ? 'Live Updates' : 'Offline'}
+                    </span>
+                  </div>
+                </div>
+                
+                {announcements.length === 0 ? (
+                  <div className="text-center py-8">
+                    <SpeakerWaveIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No announcements yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {announcements.map((announcement, index) => (
+                      <div key={announcement.id || index} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-medium text-gray-900">{announcement.title}</h3>
+                            <p className="text-gray-600 mt-1">{announcement.message}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm text-gray-500">
+                              {new Date(announcement.timestamp).toLocaleString()}
+                            </div>
+                            <div className={`text-xs px-2 py-1 rounded-full mt-1 ${
+                              announcement.priority === 'high' ? 'bg-red-100 text-red-800' :
+                              announcement.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-blue-100 text-blue-800'
+                            }`}>
+                              {announcement.priority}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

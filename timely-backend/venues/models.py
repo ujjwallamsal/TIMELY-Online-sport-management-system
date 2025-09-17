@@ -15,6 +15,7 @@ class Venue(models.Model):
     address = models.TextField(help_text="Full venue address")
     capacity = models.PositiveIntegerField(help_text="Maximum capacity (0 for unlimited)")
     facilities = models.JSONField(null=True, blank=True, help_text="Available facilities (JSON)")
+    timezone = models.CharField(max_length=50, default='UTC', help_text="Venue timezone")
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="created_venues", help_text="User who created this venue")
     
     # Audit fields

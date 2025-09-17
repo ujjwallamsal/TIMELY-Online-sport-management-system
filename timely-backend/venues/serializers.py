@@ -16,7 +16,7 @@ class VenueSerializer(serializers.ModelSerializer):
         model = Venue
         fields = [
             'id', 'name', 'address', 'capacity', 'facilities', 
-            'timezone', 'created_by', 'created_by_name', 'slot_count',
+            'created_by', 'created_by_name', 'slot_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
@@ -145,6 +145,6 @@ class VenueListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Venue
         fields = [
-            'id', 'name', 'address', 'capacity', 'timezone', 
+            'id', 'name', 'address', 'capacity', 
             'created_by_name', 'created_at'
         ]

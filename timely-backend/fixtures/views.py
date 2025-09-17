@@ -13,9 +13,9 @@ from .serializers import (
     FixtureAcceptSerializer, FixtureRescheduleSerializer, FixtureSwapEntriesSerializer,
     FixtureConflictSerializer, FixtureProposalSerializer
 )
-from .permissions import (
-    CanManageFixtures, CanViewFixtures, CanGenerateFixtures,
-    CanPublishFixtures, CanRescheduleFixtures
+from accounts.permissions import (
+    IsOrganizerOfEvent, IsCoachOfTeam, IsAthleteSelf, 
+    IsSpectatorReadOnly, IsAdmin
 )
 from .services.generator import (
     generate_round_robin, generate_knockout, get_available_teams_for_event,
@@ -47,30 +47,54 @@ class FixtureViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         """Return appropriate permissions based on action"""
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            permission_classes = [IsAuthenticated, CanManageFixtures]
+            permission_classes = [IsAuthenticated, IsOrganizerOfEvent]
         elif self.action in ['generate', 'accept', 'publish']:
-            permission_classes = [IsAuthenticated, CanGenerateFixtures]
+            permission_classes = [IsAuthenticated, IsOrganizerOfEvent]
         elif self.action in ['reschedule', 'swap_entries']:
-            permission_classes = [IsAuthenticated, CanRescheduleFixtures]
+            permission_classes = [IsAuthenticated, IsOrganizerOfEvent]
         else:
-            permission_classes = [IsAuthenticated, CanViewFixtures]
+            permission_classes = [IsAuthenticated]
         
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
-        """Filter fixtures based on user permissions"""
+        """Filter fixtures based on user role and permissions"""
         queryset = super().get_queryset()
         
-        # Public users can only see published fixtures
+        # Apply role-based filtering
         if not self.request.user.is_authenticated:
+            # Public users can only see published fixtures
             queryset = queryset.filter(status=Fixture.Status.PUBLISHED)
+        elif self.request.user.is_staff or self.request.user.role == 'ADMIN':
+            # Admin sees all fixtures
+            pass
+        elif self.request.user.role == 'ORGANIZER':
+            # Organizer sees fixtures for their events + published fixtures
+            queryset = queryset.filter(
+                Q(event__created_by=self.request.user) |
+                Q(status=Fixture.Status.PUBLISHED)
+            )
+        elif self.request.user.role == 'COACH':
+            # Coach sees fixtures for teams they coach + published fixtures
+            from teams.models import Team
+            team_ids = Team.objects.filter(coach=self.request.user).values_list('id', flat=True)
+            queryset = queryset.filter(
+                Q(home_id__in=team_ids) |
+                Q(away_id__in=team_ids) |
+                Q(status=Fixture.Status.PUBLISHED)
+            ).distinct()
+        elif self.request.user.role == 'ATHLETE':
+            # Athlete sees fixtures for teams they're in + published fixtures
+            from teams.models import TeamMember
+            team_ids = TeamMember.objects.filter(athlete=self.request.user).values_list('team_id', flat=True)
+            queryset = queryset.filter(
+                Q(home_id__in=team_ids) |
+                Q(away_id__in=team_ids) |
+                Q(status=Fixture.Status.PUBLISHED)
+            ).distinct()
         else:
-            # Non-admin users can only see fixtures for their own events
-            if not self.request.user.is_staff:
-                queryset = queryset.filter(
-                    Q(event__created_by=self.request.user) |
-                    Q(status=Fixture.Status.PUBLISHED)
-                )
+            # Spectator sees only published fixtures
+            queryset = queryset.filter(status=Fixture.Status.PUBLISHED)
         
         return queryset
 
@@ -334,27 +358,51 @@ class EventFixtureViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet for event-specific fixture operations.
     """
     serializer_class = FixtureListSerializer
-    permission_classes = [CanViewFixtures]
+    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status', 'venue']
     ordering_fields = ['start_at', 'round']
     ordering = ['start_at', 'round']
 
     def get_queryset(self):
-        """Get fixtures for a specific event"""
+        """Get fixtures for a specific event with role-based filtering"""
         event_id = self.kwargs.get('event_id')
         queryset = Fixture.objects.filter(event_id=event_id)
         
-        # Public users can only see published fixtures
+        # Apply role-based filtering
         if not self.request.user.is_authenticated:
+            # Public users can only see published fixtures
             queryset = queryset.filter(status=Fixture.Status.PUBLISHED)
+        elif self.request.user.is_staff or self.request.user.role == 'ADMIN':
+            # Admin sees all fixtures
+            pass
+        elif self.request.user.role == 'ORGANIZER':
+            # Organizer sees fixtures for their events + published fixtures
+            queryset = queryset.filter(
+                Q(event__created_by=self.request.user) |
+                Q(status=Fixture.Status.PUBLISHED)
+            )
+        elif self.request.user.role == 'COACH':
+            # Coach sees fixtures for teams they coach + published fixtures
+            from teams.models import Team
+            team_ids = Team.objects.filter(coach=self.request.user, event_id=event_id).values_list('id', flat=True)
+            queryset = queryset.filter(
+                Q(home_id__in=team_ids) |
+                Q(away_id__in=team_ids) |
+                Q(status=Fixture.Status.PUBLISHED)
+            ).distinct()
+        elif self.request.user.role == 'ATHLETE':
+            # Athlete sees fixtures for teams they're in + published fixtures
+            from teams.models import TeamMember
+            team_ids = TeamMember.objects.filter(athlete=self.request.user, team__event_id=event_id).values_list('team_id', flat=True)
+            queryset = queryset.filter(
+                Q(home_id__in=team_ids) |
+                Q(away_id__in=team_ids) |
+                Q(status=Fixture.Status.PUBLISHED)
+            ).distinct()
         else:
-            # Non-admin users can only see fixtures for their own events
-            if not self.request.user.is_staff:
-                queryset = queryset.filter(
-                    Q(event__created_by=self.request.user) |
-                    Q(status=Fixture.Status.PUBLISHED)
-                )
+            # Spectator sees only published fixtures
+            queryset = queryset.filter(status=Fixture.Status.PUBLISHED)
         
         return queryset
 

@@ -45,6 +45,7 @@ import ReportsManage from '../pages/admin/ReportsManage.jsx';
 import SettingsManage from '../pages/admin/SettingsManage.jsx';
 
 // Organizer Pages
+import OrganizerDashboard from '../pages/organizer/Dashboard.jsx';
 import EventEditor from '../pages/EventEditor.jsx';
 import CreateEvent from '../pages/CreateEvent.jsx';
 import EventManagement from '../pages/EventManagement.jsx';
@@ -65,6 +66,7 @@ import AthleteRegistrationWizard from '../pages/athlete/RegistrationWizard.jsx';
 import AthleteUploadDocs from '../pages/athlete/UploadDocs.jsx';
 
 // Coach Pages
+import CoachDashboard from '../pages/coach/Dashboard.jsx';
 import CoachRoster from '../pages/coach/Roster.jsx';
 import CoachTeamDashboard from '../pages/coach/TeamDashboard.jsx';
 import CoachTeamFixtures from '../pages/coach/TeamFixtures.jsx';
@@ -248,7 +250,7 @@ export default function AppRoutes() {
             <Route path="/organizer/*" element={
               <RoleGuard requiredRoles={['ORGANIZER', 'ADMIN']}>
                 <Routes>
-                  <Route path="/dashboard" element={<EventManagement />} />
+                  <Route path="/dashboard" element={<OrganizerDashboard />} />
                   <Route path="/events" element={<EventManagement />} />
                   <Route path="/events/create" element={<CreateEvent />} />
                   <Route path="/events/:id/edit" element={<EventEditor />} />
@@ -283,7 +285,7 @@ export default function AppRoutes() {
             <Route path="/coach/*" element={
               <RoleGuard requiredRoles={['COACH', 'ADMIN']}>
                 <Routes>
-                  <Route path="/dashboard" element={<CoachTeamDashboard />} />
+                  <Route path="/dashboard" element={<CoachDashboard />} />
                   <Route path="/roster" element={<CoachRoster />} />
                   <Route path="/fixtures" element={<CoachTeamFixtures />} />
                   <Route path="/registration" element={<CoachTeamRegistration />} />

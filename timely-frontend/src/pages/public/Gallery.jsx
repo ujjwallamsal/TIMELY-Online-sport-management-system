@@ -6,9 +6,7 @@ import {
   FunnelIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import useSocket from '../../hooks/useSocket';
 import api from '../../lib/api';
-import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState, { EmptyEvents } from '../../components/ui/EmptyState';
 
@@ -26,19 +24,8 @@ const PublicGallery = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // WebSocket connection for real-time updates
-  const { connectionStatus, lastMessage } = useSocket(
-    `${import.meta.env.VITE_WS_URL}/ws/spectator/`,
-    {
-      onMessage: (message) => {
-        console.log('Received message:', message);
-        handleRealtimeUpdate(message);
-      },
-      onPolling: () => {
-        fetchGallery();
-      }
-    }
-  );
+  // Real-time updates will be implemented later
+  const connectionStatus = 'connected';
 
   const fetchGallery = async (page = 1) => {
     try {
@@ -96,16 +83,7 @@ const PublicGallery = () => {
     }
   };
 
-  const handleRealtimeUpdate = (message) => {
-    switch (message.type) {
-      case 'content_update':
-        // Refresh gallery when content is updated
-        fetchGallery(currentPage);
-        break;
-      default:
-        break;
-    }
-  };
+  // Real-time updates will be implemented later
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -186,7 +164,10 @@ const PublicGallery = () => {
               <h1 className="text-3xl font-bold text-gray-900">Photo Gallery</h1>
               <p className="text-gray-600 mt-2">Browse through our collection of event photos and memories</p>
             </div>
-            <LiveIndicator status={connectionStatus} />
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-sm text-gray-500">Live</span>
+            </div>
           </div>
         </div>
       </div>
