@@ -37,7 +37,10 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
 
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/${topic}/`;
+      // Support both event-specific and general topics
+      const wsUrl = topic.startsWith('event_') 
+        ? `${protocol}//${window.location.host}/ws/events/${topic.replace('event_', '')}/`
+        : `${protocol}//${window.location.host}/ws/notifications/`;
       
       log('Connecting to WebSocket:', wsUrl);
       
@@ -66,8 +69,19 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
           const data = JSON.parse(event.data);
           log('WebSocket message received:', data);
           
-          if (data.type === 'connection_established') {
-            log('Connection established for topic:', data.topic);
+          if (data.type === 'connected') {
+            log('Connection established for topic:', data.event_id || data.user_id);
+            // Subscribe to specific streams based on topic
+            if (topic.startsWith('event_')) {
+              const eventId = topic.replace('event_', '');
+              if (topic.includes('_schedule')) {
+                ws.send(JSON.stringify({ type: 'subscribe_schedule' }));
+              } else if (topic.includes('_results')) {
+                ws.send(JSON.stringify({ type: 'subscribe_results' }));
+              } else if (topic.includes('_announcements')) {
+                ws.send(JSON.stringify({ type: 'subscribe_announcements' }));
+              }
+            }
           } else if (onMessage) {
             onMessage(data);
           }
@@ -105,7 +119,10 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
     if (!enableSSEFallback || !user) return;
 
     try {
-      const sseUrl = `/api/events/1/stream/`; // Default to event 1, should be dynamic
+      // Support both event-specific and general SSE endpoints
+      const sseUrl = topic.startsWith('event_') 
+        ? `/api/events/${topic.replace('event_', '').replace('_schedule', '').replace('_results', '').replace('_announcements', '')}/stream/`
+        : `/api/notifications/stream/`;
       log('Connecting to SSE:', sseUrl);
       
       const eventSource = new EventSource(sseUrl);

@@ -5,7 +5,7 @@ import {
   createVenue, 
   updateVenue, 
   deleteVenue 
-} from '../../lib/api';
+} from '../../services/api';
 import useSocket from '../../hooks/useSocket';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Skeleton from '../../components/ui/Skeleton';

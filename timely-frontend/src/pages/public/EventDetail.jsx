@@ -1,416 +1,114 @@
-// src/pages/public/EventDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import {
-  CalendarDaysIcon,
-  MapPinIcon,
-  ClockIcon,
+import { 
+  CalendarIcon, 
+  MapPinIcon, 
+  ClockIcon, 
   UserGroupIcon,
   TrophyIcon,
   PhotoIcon,
   NewspaperIcon,
   TicketIcon,
-  ShareIcon,
-  HeartIcon,
-  ChevronLeftIcon,
+  ArrowLeftIcon
 } from '@heroicons/react/24/outline';
-import Button from '../../components/ui/Button';
-import Card from '../../components/ui/Card';
-import Skeleton from '../../components/ui/Skeleton';
+import { getPublicEvent, getPublicEventFixtures, getPublicEventResults, getPublicEventLeaderboard } from '../services/api';
 
-const tabs = [
-  { id: 'overview', name: 'Overview', icon: CalendarDaysIcon },
-  { id: 'schedule', name: 'Schedule', icon: ClockIcon },
-  { id: 'results', name: 'Results', icon: TrophyIcon },
-  { id: 'leaderboard', name: 'Leaderboard', icon: UserGroupIcon },
-  { id: 'media', name: 'Media', icon: PhotoIcon },
-  { id: 'news', name: 'News', icon: NewspaperIcon },
-  { id: 'tickets', name: 'Tickets', icon: TicketIcon },
-];
-
-export default function EventDetail() {
+const EventDetail = () => {
   const { id } = useParams();
-  const [activeTab, setActiveTab] = useState('overview');
   const [event, setEvent] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [fixtures, setFixtures] = useState([]);
+  const [results, setResults] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isFavorited, setIsFavorited] = useState(false);
 
   useEffect(() => {
-    const fetchEvent = async () => {
-      try {
-        // Simulate API call
-        setEvent({
-          id: parseInt(id),
-          name: "Championship Finals 2024",
-          sport: "Basketball",
-          description: "The ultimate basketball championship featuring the best teams from around the world. This prestigious event brings together top athletes and teams for an unforgettable competition.",
-          startDate: "2024-03-15T18:00:00Z",
-          endDate: "2024-03-17T22:00:00Z",
-          venue: {
-            name: "Madison Square Garden",
-            address: "4 Pennsylvania Plaza, New York, NY 10001",
-            capacity: 20000
-          },
-          price: 75,
-          capacity: 20000,
-          registered: 18500,
-          status: "upcoming",
-          image: "/images/events/championship-2024.jpg",
-          rules: [
-            "All participants must be 18 years or older",
-            "Valid ID required for registration",
-            "No outside food or beverages allowed",
-            "Follow all venue safety protocols"
-          ],
-          prizes: [
-            "1st Place: $10,000 + Trophy",
-            "2nd Place: $5,000 + Medal",
-            "3rd Place: $2,500 + Medal"
-          ],
-          schedule: [
-            {
-              time: "09:00",
-              event: "Registration & Check-in",
-              location: "Main Entrance"
-            },
-            {
-              time: "10:00",
-              event: "Opening Ceremony",
-              location: "Main Arena"
-            },
-            {
-              time: "11:00",
-              event: "Preliminary Rounds",
-              location: "Courts 1-4"
-            },
-            {
-              time: "14:00",
-              event: "Quarter Finals",
-              location: "Main Court"
-            },
-            {
-              time: "16:00",
-              event: "Semi Finals",
-              location: "Main Court"
-            },
-            {
-              time: "18:00",
-              event: "Championship Game",
-              location: "Main Court"
-            },
-            {
-              time: "20:00",
-              event: "Awards Ceremony",
-              location: "Main Arena"
-            }
-          ],
-          results: [
-            {
-              team: "Team Alpha",
-              score: 95,
-              position: 1
-            },
-            {
-              team: "Team Beta",
-              score: 87,
-              position: 2
-            },
-            {
-              team: "Team Gamma",
-              score: 82,
-              position: 3
-            }
-          ],
-          leaderboard: [
-            {
-              position: 1,
-              team: "Team Alpha",
-              points: 95,
-              wins: 5,
-              losses: 0
-            },
-            {
-              position: 2,
-              team: "Team Beta",
-              points: 87,
-              wins: 4,
-              losses: 1
-            },
-            {
-              position: 3,
-              team: "Team Gamma",
-              points: 82,
-              wins: 3,
-              losses: 2
-            }
-          ],
-          media: [
-            {
-              type: "image",
-              url: "/images/gallery/event-1.jpg",
-              caption: "Opening ceremony highlights"
-            },
-            {
-              type: "video",
-              url: "/videos/event-highlights.mp4",
-              caption: "Best moments from the tournament"
-            }
-          ],
-          news: [
-            {
-              title: "Championship Finals Set to Begin",
-              date: "2024-03-10",
-              excerpt: "The highly anticipated championship finals are just days away..."
-            },
-            {
-              title: "Top Teams Announced",
-              date: "2024-03-08",
-              excerpt: "The final list of participating teams has been released..."
-            }
-          ],
-          tickets: [
-            {
-              type: "General Admission",
-              price: 75,
-              available: 1500,
-              description: "Access to all games and events"
-            },
-            {
-              type: "VIP",
-              price: 150,
-              available: 200,
-              description: "Premium seating and exclusive access"
-            },
-            {
-              type: "Student",
-              price: 45,
-              available: 500,
-              description: "Discounted tickets for students with valid ID"
-            }
-          ]
-        });
-      } catch (error) {
-        console.error('Error fetching event:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchEvent();
   }, [id]);
 
+  useEffect(() => {
+    if (event) {
+      fetchTabData();
+    }
+  }, [activeTab, event]);
+
+  const fetchEvent = async () => {
+    try {
+      setLoading(true);
+      const response = await getPublicEvent(id);
+      setEvent(response.data);
+    } catch (error) {
+      console.error('Error fetching event:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTabData = async () => {
+    try {
+      switch (activeTab) {
+        case 'schedule':
+          const fixturesResponse = await getPublicEventFixtures(id);
+          setFixtures(fixturesResponse.data.results || []);
+          break;
+        case 'results':
+          const resultsResponse = await getPublicEventResults(id);
+          setResults(resultsResponse.data.results || []);
+          break;
+        case 'leaderboard':
+          const leaderboardResponse = await getPublicEventLeaderboard(id);
+          setLeaderboard(leaderboardResponse.data.leaderboard || []);
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error(`Error fetching ${activeTab} data:`, error);
+    }
+  };
+
+  const tabs = [
+    { id: 'overview', name: 'Overview', icon: CalendarIcon },
+    { id: 'schedule', name: 'Schedule', icon: ClockIcon },
+    { id: 'results', name: 'Results', icon: TrophyIcon },
+    { id: 'leaderboard', name: 'Leaderboard', icon: UserGroupIcon },
+    { id: 'media', name: 'Media', icon: PhotoIcon },
+    { id: 'news', name: 'News', icon: NewspaperIcon },
+    { id: 'tickets', name: 'Tickets', icon: TicketIcon },
+  ];
+
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (dateString) => {
+    return new Date(dateString).toLocaleTimeString('en-US', {
+      hour: 'numeric',
       minute: '2-digit'
     });
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'upcoming':
-        return 'bg-blue-100 text-blue-800';
-      case 'ongoing':
-        return 'bg-green-100 text-green-800';
-      case 'completed':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const renderTabContent = () => {
-    if (!event) return null;
-
-    switch (activeTab) {
-      case 'overview':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Event Description</h3>
-              <p className="text-gray-600">{event.description}</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Rules & Regulations</h3>
-                <ul className="space-y-2">
-                  {event.rules.map((rule, index) => (
-                    <li key={index} className="flex items-start">
-                      <span className="flex-shrink-0 w-2 h-2 bg-indigo-600 rounded-full mt-2 mr-3"></span>
-                      <span className="text-gray-600">{rule}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Prizes</h3>
-                <ul className="space-y-2">
-                  {event.prizes.map((prize, index) => (
-                    <li key={index} className="flex items-start">
-                      <TrophyIcon className="flex-shrink-0 w-5 h-5 text-yellow-500 mt-0.5 mr-3" />
-                      <span className="text-gray-600">{prize}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'schedule':
-        return (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Event Schedule</h3>
-            <div className="space-y-4">
-              {event.schedule.map((item, index) => (
-                <div key={index} className="flex items-center p-4 bg-gray-50 rounded-lg">
-                  <div className="flex-shrink-0 w-20 text-sm font-medium text-indigo-600">
-                    {item.time}
-                  </div>
-                  <div className="ml-4 flex-1">
-                    <h4 className="text-sm font-medium text-gray-900">{item.event}</h4>
-                    <p className="text-sm text-gray-500">{item.location}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 'results':
-        return (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Latest Results</h3>
-            <div className="space-y-3">
-              {event.results.map((result, index) => (
-                <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center">
-                    <span className="text-2xl font-bold text-indigo-600 mr-4">#{result.position}</span>
-                    <span className="text-lg font-medium text-gray-900">{result.team}</span>
-                  </div>
-                  <span className="text-xl font-bold text-gray-900">{result.score}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 'leaderboard':
-        return (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Leaderboard</h3>
-            <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-300">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wins</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Losses</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {event.leaderboard.map((team, index) => (
-                    <tr key={index}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        #{team.position}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{team.team}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{team.points}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{team.wins}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{team.losses}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-
-      case 'media':
-        return (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Event Media</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {event.media.map((item, index) => (
-                <div key={index} className="bg-gray-100 rounded-lg p-4">
-                  <div className="aspect-video bg-gray-200 rounded-lg flex items-center justify-center mb-2">
-                    {item.type === 'image' ? (
-                      <PhotoIcon className="w-12 h-12 text-gray-400" />
-                    ) : (
-                      <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center">
-                        <span className="text-white text-lg">▶</span>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600">{item.caption}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 'news':
-        return (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Event News</h3>
-            <div className="space-y-4">
-              {event.news.map((article, index) => (
-                <Card key={index} className="p-6">
-                  <h4 className="text-lg font-medium text-gray-900 mb-2">{article.title}</h4>
-                  <p className="text-sm text-gray-500 mb-2">{article.date}</p>
-                  <p className="text-gray-600">{article.excerpt}</p>
-                </Card>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 'tickets':
-        return (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Available Tickets</h3>
-            <div className="space-y-4">
-              {event.tickets.map((ticket, index) => (
-                <Card key={index} className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-lg font-medium text-gray-900">{ticket.type}</h4>
-                      <p className="text-gray-600">{ticket.description}</p>
-                      <p className="text-sm text-gray-500">{ticket.available} tickets available</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-indigo-600">${ticket.price}</p>
-                      <Button size="sm" className="mt-2">
-                        Buy Now
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
+  const formatDateTime = (dateString) => {
+    return new Date(dateString).toLocaleString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Skeleton variant="title" width="400px" className="mb-4" />
-          <Skeleton variant="card" className="h-96" />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading event...</p>
         </div>
       </div>
     );
@@ -421,137 +119,293 @@ export default function EventDetail() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Event Not Found</h1>
-          <p className="text-gray-600 mb-8">The event you're looking for doesn't exist.</p>
-          <Link to="/">
-            <Button>Go Home</Button>
+          <p className="text-gray-600 mb-8">The event you're looking for doesn't exist or has been removed.</p>
+          <Link
+            to="/"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+          >
+            <ArrowLeftIcon className="h-4 w-4 mr-2" />
+            Back to Home
           </Link>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Link to="/" className="mr-4">
-                <ChevronLeftIcon className="w-6 h-6 text-gray-400" />
-              </Link>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">{event.name}</h1>
-                <p className="text-gray-600">{event.sport} • {event.venue.name}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setIsFavorited(!isFavorited)}
-                className={`p-2 rounded-full ${isFavorited ? 'text-red-500' : 'text-gray-400 hover:text-red-500'}`}
-              >
-                <HeartIcon className="w-6 h-6" />
-              </button>
-              <button className="p-2 text-gray-400 hover:text-gray-500">
-                <ShareIcon className="w-6 h-6" />
-              </button>
-            </div>
+  const renderOverview = () => (
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Event Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex items-center text-gray-600">
+            <CalendarIcon className="h-5 w-5 mr-3" />
+            <span>{formatDate(event.start_date)}</span>
+          </div>
+          <div className="flex items-center text-gray-600">
+            <ClockIcon className="h-5 w-5 mr-3" />
+            <span>{formatTime(event.start_date)}</span>
+          </div>
+          <div className="flex items-center text-gray-600">
+            <MapPinIcon className="h-5 w-5 mr-3" />
+            <span>{event.venue?.name || 'TBA'}</span>
+          </div>
+          <div className="flex items-center text-gray-600">
+            <UserGroupIcon className="h-5 w-5 mr-3" />
+            <span>{event.sport?.name || 'Sport'}</span>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2">
-            {/* Tabs */}
-            <div className="border-b border-gray-200 mb-6">
-              <nav className="-mb-px flex space-x-8 overflow-x-auto">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                        activeTab === tab.id
-                          ? 'border-indigo-500 text-indigo-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 mr-2" />
-                      {tab.name}
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Description</h3>
+        <p className="text-gray-600 leading-relaxed">{event.description}</p>
+      </div>
 
-            {/* Tab Content */}
-            <Card className="p-6">
-              {renderTabContent()}
-            </Card>
+      {event.venue && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Venue Information</h3>
+          <div className="space-y-2">
+            <p className="font-medium text-gray-900">{event.venue.name}</p>
+            <p className="text-gray-600">{event.venue.address}</p>
+            {event.venue.city && event.venue.state && (
+              <p className="text-gray-600">{event.venue.city}, {event.venue.state}</p>
+            )}
+            {event.venue.capacity && (
+              <p className="text-gray-600">Capacity: {event.venue.capacity} people</p>
+            )}
           </div>
+        </div>
+      )}
+    </div>
+  );
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Event Info */}
-            <Card className="p-6">
-              <div className="space-y-4">
-                <div className="flex items-center">
-                  <CalendarDaysIcon className="w-5 h-5 text-gray-400 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Date & Time</p>
-                    <p className="text-sm text-gray-600">{formatDate(event.startDate)}</p>
-                  </div>
+  const renderSchedule = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="px-6 py-4 border-b border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900">Event Schedule</h3>
+      </div>
+      <div className="divide-y divide-gray-200">
+        {fixtures.length > 0 ? (
+          fixtures.map((fixture) => (
+            <div key={fixture.id} className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900">{fixture.title || 'Match'}</p>
+                  <p className="text-sm text-gray-600">{fixture.venue?.name || 'TBA'}</p>
                 </div>
-                
-                <div className="flex items-center">
-                  <MapPinIcon className="w-5 h-5 text-gray-400 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Venue</p>
-                    <p className="text-sm text-gray-600">{event.venue.name}</p>
-                    <p className="text-sm text-gray-500">{event.venue.address}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center">
-                  <UserGroupIcon className="w-5 h-5 text-gray-400 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Capacity</p>
-                    <p className="text-sm text-gray-600">{event.registered.toLocaleString()} / {event.capacity.toLocaleString()}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
-                    {event.status}
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">
+                    {formatDateTime(fixture.start_at)}
+                  </p>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    fixture.status === 'completed' ? 'bg-green-100 text-green-800' :
+                    fixture.status === 'ongoing' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {fixture.status}
                   </span>
                 </div>
               </div>
-            </Card>
-
-            {/* Registration */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Register Now</h3>
-              <div className="space-y-4">
-                <div className="text-center">
-                  <span className="text-3xl font-bold text-indigo-600">${event.price}</span>
-                  <p className="text-sm text-gray-500">per person</p>
-                </div>
-                
-                <Button className="w-full" size="lg">
-                  Register for Event
-                </Button>
-                
-                <p className="text-xs text-gray-500 text-center">
-                  Registration closes 24 hours before the event
-                </p>
-              </div>
-            </Card>
+            </div>
+          ))
+        ) : (
+          <div className="px-6 py-8 text-center text-gray-500">
+            <ClockIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <p>No schedule available yet</p>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
-}
+
+  const renderResults = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="px-6 py-4 border-b border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900">Event Results</h3>
+      </div>
+      <div className="divide-y divide-gray-200">
+        {results.length > 0 ? (
+          results.map((result) => (
+            <div key={result.id} className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900">{result.fixture?.title || 'Match'}</p>
+                  <p className="text-sm text-gray-600">{result.fixture?.venue?.name || 'TBA'}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-semibold text-gray-900">
+                    {result.score_home} - {result.score_away}
+                  </p>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    result.is_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {result.is_verified ? 'Verified' : 'Pending'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="px-6 py-8 text-center text-gray-500">
+            <TrophyIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <p>No results available yet</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderLeaderboard = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="px-6 py-4 border-b border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900">Leaderboard</h3>
+      </div>
+      <div className="divide-y divide-gray-200">
+        {leaderboard.length > 0 ? (
+          leaderboard.map((entry, index) => (
+            <div key={index} className="px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  index === 0 ? 'bg-yellow-100 text-yellow-800' :
+                  index === 1 ? 'bg-gray-100 text-gray-800' :
+                  index === 2 ? 'bg-orange-100 text-orange-800' :
+                  'bg-gray-50 text-gray-600'
+                }`}>
+                  {index + 1}
+                </div>
+                <div className="ml-4">
+                  <p className="font-medium text-gray-900">{entry.name}</p>
+                  <p className="text-sm text-gray-600">{entry.team || 'Individual'}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-semibold text-gray-900">{entry.points || 0} pts</p>
+                <p className="text-sm text-gray-600">{entry.wins || 0}W - {entry.losses || 0}L</p>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="px-6 py-8 text-center text-gray-500">
+            <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <p>No leaderboard available yet</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderMedia = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="text-center text-gray-500">
+        <PhotoIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+        <p>Media gallery coming soon</p>
+      </div>
+    </div>
+  );
+
+  const renderNews = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="text-center text-gray-500">
+        <NewspaperIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+        <p>News and updates coming soon</p>
+      </div>
+    </div>
+  );
+
+  const renderTickets = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="text-center text-gray-500">
+        <TicketIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+        <p>Ticket information coming soon</p>
+      </div>
+    </div>
+  );
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'overview':
+        return renderOverview();
+      case 'schedule':
+        return renderSchedule();
+      case 'results':
+        return renderResults();
+      case 'leaderboard':
+        return renderLeaderboard();
+      case 'media':
+        return renderMedia();
+      case 'news':
+        return renderNews();
+      case 'tickets':
+        return renderTickets();
+      default:
+        return renderOverview();
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Link
+                to="/"
+                className="mr-4 text-gray-400 hover:text-gray-600"
+              >
+                <ArrowLeftIcon className="h-6 w-6" />
+              </Link>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">{event.title}</h1>
+                <p className="text-gray-600">{event.sport?.name || 'Sport'} • {formatDate(event.start_date)}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                event.status === 'published' ? 'bg-green-100 text-green-800' :
+                event.status === 'draft' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {event.status}
+              </span>
+              {event.registration_fee && (
+                <span className="text-lg font-semibold text-gray-900">
+                  ${event.registration_fee}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <tab.icon className="h-5 w-5 mr-2" />
+                {tab.name}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {renderTabContent()}
+      </div>
+    </div>
+  );
+};
+
+export default EventDetail;

@@ -10,7 +10,7 @@ import {
   SparklesIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import { publicAPI } from '../../lib/api';
+import { publicAPI } from '../../services/api';
 import useSocket from '../../hooks/useSocket';
 import Skeleton, { SkeletonCard } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';

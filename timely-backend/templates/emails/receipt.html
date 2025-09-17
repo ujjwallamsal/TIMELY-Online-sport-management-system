@@ -1,0 +1,55 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Payment Receipt - {{ event.title }}{% endblock %}
+{% block header_title %}Payment Receipt{% endblock %}
+{% block header_subtitle %}Thank you for your payment{% endblock %}
+
+{% block content %}
+<h2>Hello {{ user.first_name }},</h2>
+
+<p>Thank you for your payment! Here's your receipt for <strong>{{ event.title }}</strong>.</p>
+
+<div class="event-card">
+    <h3>{{ event.title }}</h3>
+    <p><strong>Sport:</strong> {{ event.sport.name }}</p>
+    <p><strong>Venue:</strong> {{ event.venue.name }}</p>
+    <p><strong>Date:</strong> {{ event.start_date|date:"F j, Y" }}</p>
+    <p><strong>Time:</strong> {{ event.start_date|time:"g:i A" }}</p>
+</div>
+
+<h3>Payment Details</h3>
+<div style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0;">
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Registration Fee:</strong></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6; text-align: right;">${{ payment.amount|floatformat:2 }}</td>
+        </tr>
+        {% if payment.tax %}
+        <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Tax:</strong></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6; text-align: right;">${{ payment.tax|floatformat:2 }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+            <td style="padding: 8px 0; font-weight: bold;"><strong>Total Paid:</strong></td>
+            <td style="padding: 8px 0; text-align: right; font-weight: bold;">${{ payment.total|floatformat:2 }}</td>
+        </tr>
+    </table>
+    
+    <p style="margin-top: 15px; font-size: 14px; color: #6c757d;">
+        <strong>Transaction ID:</strong> {{ payment.transaction_id }}<br>
+        <strong>Payment Method:</strong> {{ payment.method }}<br>
+        <strong>Date:</strong> {{ payment.date|date:"F j, Y g:i A" }}
+    </p>
+</div>
+
+<div class="status-badge status-approved">Payment Confirmed</div>
+
+<p>Your registration is now confirmed and you're all set for the event!</p>
+
+<a href="{{ site_url }}/events/{{ event.id }}" class="button">View Event Details</a>
+
+<p>Keep this receipt for your records. If you have any questions about your payment, please contact us.</p>
+
+<p>Best regards,<br>The Timely Team</p>
+{% endblock %}

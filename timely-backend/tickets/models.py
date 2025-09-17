@@ -8,16 +8,125 @@ from django.utils import timezone
 from django.conf import settings
 from django.core.validators import MinValueValidator
 
-from events.models import Event
+# from events.models import Event  # Temporarily commented out
 from accounts.models import User
+
+
+class Purchase(models.Model):
+    """Simplified purchase model for ticketing system"""
+    
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PAID = "paid", "Paid"
+        FAILED = "failed", "Failed"
+        REFUNDED = "refunded", "Refunded"
+    
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="purchases")
+    event_id = models.PositiveIntegerField(help_text="Event ID")
+    intent_id = models.CharField(max_length=255, unique=True, help_text="Stripe PaymentIntent ID")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    amount = models.PositiveIntegerField(help_text="Amount in cents")
+    currency = models.CharField(max_length=3, default='USD')
+    
+    # Audit fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['event_id', 'status']),
+            models.Index(fields=['intent_id']),
+        ]
+    
+    def __str__(self):
+        return f"Purchase {self.id} - {self.user.email} - {self.status}"
+    
+    @property
+    def amount_dollars(self):
+        """Get amount in dollars"""
+        return self.amount / 100
+
+
+class Ticket(models.Model):
+    """Simplified ticket model for ticketing system"""
+    
+    class Status(models.TextChoices):
+        VALID = "valid", "Valid"
+        USED = "used", "Used"
+        VOID = "void", "Void"
+    
+    purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE, related_name="tickets")
+    code = models.CharField(max_length=50, unique=True, help_text="Unique ticket code")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.VALID, db_index=True)
+    
+    # QR code data
+    qr_payload = models.TextField(help_text="QR code payload string")
+    
+    # Audit fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['purchase']),
+            models.Index(fields=['code']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self):
+        return f"Ticket {self.code} - Event {self.purchase.event_id}"
+    
+    def save(self, *args, **kwargs):
+        if not self.code:
+            # Generate unique code
+            self.code = f"TKT-{uuid.uuid4().hex[:8].upper()}"
+        
+        if not self.qr_payload:
+            # Generate QR payload
+            self.qr_payload = self._generate_qr_payload()
+        
+        super().save(*args, **kwargs)
+    
+    def _generate_qr_payload(self):
+        """Generate signed QR payload string"""
+        # Create payload data
+        payload_data = f"TKT:{self.id}:{self.purchase.id}:{self.code}"
+        
+        # Create hash for verification
+        hash_input = f"{payload_data}:{settings.SECRET_KEY}"
+        hash_value = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
+        
+        return f"{payload_data}:{hash_value}"
+    
+    @property
+    def is_valid(self):
+        """Check if ticket is valid for use"""
+        return self.status == self.Status.VALID
+    
+    def use_ticket(self):
+        """Mark ticket as used"""
+        if self.is_valid:
+            self.status = self.Status.USED
+            self.used_at = timezone.now()
+            self.save()
+            return True
+        return False
+    
+    def void_ticket(self):
+        """Void the ticket"""
+        self.status = self.Status.VOID
+        self.save()
 
 
 class TicketType(models.Model):
     """Ticket type model for events and fixtures - SRS compliant"""
     
     # Core relationships
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="ticket_types")
-    fixture = models.ForeignKey('fixtures.Fixture', on_delete=models.CASCADE, null=True, blank=True, related_name="ticket_types")
+    event_id = models.PositiveIntegerField(help_text="Event ID")
+    fixture_id = models.PositiveIntegerField(null=True, blank=True, help_text="Fixture ID")
     
     # Basic information
     name = models.CharField(max_length=200, help_text="Ticket type name")
@@ -49,16 +158,16 @@ class TicketType(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['event', 'fixture', 'price_cents']
+        ordering = ['event_id', 'fixture_id', 'price_cents']
         indexes = [
-            models.Index(fields=['event', 'fixture', 'on_sale']),
-            models.Index(fields=['event', 'on_sale']),
-            models.Index(fields=['fixture', 'on_sale']),
+            models.Index(fields=['event_id', 'fixture_id', 'on_sale']),
+            models.Index(fields=['event_id', 'on_sale']),
+            models.Index(fields=['fixture_id', 'on_sale']),
         ]
     
     def __str__(self) -> str:
-        fixture_str = f" - {self.fixture}" if self.fixture else ""
-        return f"{self.event.name}{fixture_str} - {self.name}"
+        fixture_str = f" - Fixture {self.fixture_id}" if self.fixture_id else ""
+        return f"Event {self.event_id}{fixture_str} - {self.name}"
     
     @property
     def price_dollars(self) -> float:
@@ -97,8 +206,8 @@ class TicketOrder(models.Model):
     
     # Core relationships
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ticket_orders")
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="ticket_orders")
-    fixture = models.ForeignKey('fixtures.Fixture', on_delete=models.CASCADE, null=True, blank=True, related_name="ticket_orders")
+    event_id = models.PositiveIntegerField(help_text="Event ID")
+    fixture_id = models.PositiveIntegerField(null=True, blank=True, help_text="Fixture ID")
     
     # Financial
     total_cents = models.PositiveIntegerField(
@@ -132,8 +241,8 @@ class TicketOrder(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['user', 'status']),
-            models.Index(fields=['event', 'status']),
-            models.Index(fields=['fixture', 'status']),
+            models.Index(fields=['event_id', 'status']),
+            models.Index(fields=['fixture_id', 'status']),
             models.Index(fields=['provider_session_id']),
         ]
     
@@ -207,88 +316,6 @@ class TicketOrder(models.Model):
         )
 
 
-class Ticket(models.Model):
-    """Individual ticket model - SRS compliant"""
-    
-    class Status(models.TextChoices):
-        VALID = "valid", "Valid"
-        USED = "used", "Used"
-        VOID = "void", "Void"
-    
-    # Core relationships
-    order = models.ForeignKey(TicketOrder, on_delete=models.CASCADE, related_name="tickets")
-    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE, related_name="tickets")
-    
-    # Ticket identification
-    qr_payload = models.TextField(help_text="QR code payload string")
-    serial = models.CharField(max_length=50, unique=True, help_text="Human-readable ticket serial")
-    
-    # Status
-    status = models.CharField(
-        max_length=10,
-        choices=Status.choices,
-        default=Status.VALID,
-        db_index=True
-    )
-    
-    # Timing
-    issued_at = models.DateTimeField(auto_now_add=True)
-    used_at = models.DateTimeField(null=True, blank=True, help_text="When ticket was used")
-    
-    class Meta:
-        ordering = ['order', 'issued_at']
-        indexes = [
-            models.Index(fields=['order']),
-            models.Index(fields=['ticket_type']),
-            models.Index(fields=['serial']),
-            models.Index(fields=['status']),
-        ]
-    
-    def __str__(self) -> str:
-        return f"Ticket {self.serial} - {self.ticket_type.name}"
-    
-    def save(self, *args, **kwargs):
-        if not self.serial:
-            # Generate unique serial
-            self.serial = f"TKT-{uuid.uuid4().hex[:8].upper()}"
-        
-        if not self.qr_payload:
-            # Generate QR payload
-            self.qr_payload = self._generate_qr_payload()
-        
-        super().save(*args, **kwargs)
-    
-    def _generate_qr_payload(self) -> str:
-        """Generate signed QR payload string"""
-        # Create payload data
-        payload_data = f"TKT:{self.id}:{self.order.id}:{self.serial}"
-        
-        # Create hash for verification
-        hash_input = f"{payload_data}:{settings.SECRET_KEY}"
-        hash_value = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
-        
-        return f"{payload_data}:{hash_value}"
-    
-    @property
-    def is_valid(self) -> bool:
-        """Check if ticket is valid for use"""
-        return self.status == self.Status.VALID
-    
-    def use_ticket(self):
-        """Mark ticket as used"""
-        if self.is_valid:
-            self.status = self.Status.USED
-            self.used_at = timezone.now()
-            self.save()
-            return True
-        return False
-    
-    def void_ticket(self):
-        """Void the ticket"""
-        self.status = self.Status.VOID
-        self.save()
-
-
 class Refund(models.Model):
     """Refund model for ticket orders"""
     
@@ -296,32 +323,43 @@ class Refund(models.Model):
         PENDING = "pending", "Pending"
         PROCESSED = "processed", "Processed"
         FAILED = "failed", "Failed"
+        CANCELLED = "cancelled", "Cancelled"
     
     # Core relationships
     order = models.ForeignKey(TicketOrder, on_delete=models.CASCADE, related_name="refunds")
-    processed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="processed_refunds")
+    processed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name="processed_refunds"
+    )
     
     # Financial
-    amount_cents = models.PositiveIntegerField(help_text="Refund amount in cents")
+    amount_cents = models.PositiveIntegerField(
+        validators=[MinValueValidator(0)],
+        help_text="Refund amount in cents"
+    )
     currency = models.CharField(max_length=3, default='USD', help_text="Currency code")
     
-    # Status
+    # Status and reason
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
         default=Status.PENDING,
         db_index=True
     )
+    reason = models.TextField(help_text="Refund reason")
     
-    # Provider data
-    provider_refund_id = models.CharField(max_length=255, null=True, blank=True, help_text="Provider refund ID")
-    provider_response = models.JSONField(default=dict, blank=True, help_text="Provider response data")
+    # Provider details
+    provider_refund_id = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True, 
+        help_text="Payment provider refund ID"
+    )
     
-    # Details
-    reason = models.TextField(blank=True, help_text="Refund reason")
-    notes = models.TextField(blank=True, help_text="Additional notes")
-    
-    # Audit
+    # Audit fields
     created_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
     
@@ -329,30 +367,32 @@ class Refund(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['order', 'status']),
-            models.Index(fields=['processed_by', 'status']),
-            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['status']),
+            models.Index(fields=['processed_by']),
         ]
     
-    def __str__(self):
-        return f"Refund {self.id} - {self.order} - {self.amount_cents}¢"
+    def __str__(self) -> str:
+        return f"Refund {self.id} - Order {self.order.id} - {self.status}"
     
     @property
-    def amount_dollars(self):
+    def amount_dollars(self) -> float:
         """Get refund amount in dollars"""
         return self.amount_cents / 100
     
-    def mark_processed(self, provider_refund_id: str = None, provider_response: dict = None):
+    def mark_processed(self, provider_refund_id: str = None):
         """Mark refund as processed"""
         self.status = self.Status.PROCESSED
         self.processed_at = timezone.now()
         if provider_refund_id:
             self.provider_refund_id = provider_refund_id
-        if provider_response:
-            self.provider_response = provider_response
         self.save()
     
-    def mark_failed(self, reason: str = ""):
+    def mark_failed(self):
         """Mark refund as failed"""
         self.status = self.Status.FAILED
-        self.notes = f"{self.notes}\nFailed: {reason}".strip()
+        self.save()
+    
+    def cancel(self):
+        """Cancel the refund"""
+        self.status = self.Status.CANCELLED
         self.save()

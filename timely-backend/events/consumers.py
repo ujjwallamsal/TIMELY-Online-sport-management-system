@@ -3,9 +3,11 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from .models import Event
 from results.models import Result, LeaderboardEntry
 from fixtures.models import Fixture
+from teams.models import Team
 
 User = get_user_model()
 
@@ -15,14 +17,22 @@ class EventConsumer(AsyncWebsocketConsumer):
     
     async def connect(self):
         self.event_id = self.scope['url_route']['kwargs']['event_id']
+        self.user = self.scope['user']
+        
+        # Define group names for different topics
         self.event_group_name = f'event_{self.event_id}'
         self.results_group_name = f'event_{self.event_id}_results'
         self.schedule_group_name = f'event_{self.event_id}_schedule'
         self.announcements_group_name = f'event_{self.event_id}_announcements'
         
-        # Verify event exists
+        # Verify event exists and user has permission
         event = await self.get_event(self.event_id)
         if not event:
+            await self.close()
+            return
+        
+        # Check permissions
+        if not await self.can_view_event(self.user, event):
             await self.close()
             return
         
@@ -38,7 +48,8 @@ class EventConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'connected',
             'event_id': self.event_id,
-            'message': 'Connected to event updates'
+            'message': 'Connected to event updates',
+            'topics': ['results', 'schedule', 'announcements']
         }))
     
     async def disconnect(self, close_code):
@@ -87,6 +98,13 @@ class EventConsumer(AsyncWebsocketConsumer):
                     'stream': 'announcements'
                 }))
                 
+            elif message_type == 'ping':
+                # Handle ping/pong for connection health
+                await self.send(text_data=json.dumps({
+                    'type': 'pong',
+                    'timestamp': data.get('timestamp')
+                }))
+                
         except json.JSONDecodeError:
             await self.send(text_data=json.dumps({
                 'type': 'error',
@@ -129,6 +147,29 @@ class EventConsumer(AsyncWebsocketConsumer):
             return Event.objects.get(id=event_id)
         except Event.DoesNotExist:
             return None
+    
+    @database_sync_to_async
+    def can_view_event(self, user, event):
+        """Check if user can view the event"""
+        # Public events can be viewed by anyone
+        if event.visibility == 'PUBLIC':
+            return True
+        
+        # Private events require authentication
+        if not user.is_authenticated:
+            return False
+        
+        # Event creator can always view
+        if event.created_by == user:
+            return True
+        
+        # Check if user is registered for the event
+        from registrations.models import Registration
+        return Registration.objects.filter(
+            event=event,
+            applicant=user,
+            status='APPROVED'
+        ).exists()
 
 
 class NotificationConsumer(AsyncWebsocketConsumer):

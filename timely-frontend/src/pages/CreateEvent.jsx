@@ -7,7 +7,7 @@ import Input from '../components/ui/Input';
 import { 
   createEvent, 
   listVenues
-} from '../lib/api';
+} from '../services/api';
 import { 
   CalendarIcon, 
   MapPinIcon, 

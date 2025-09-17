@@ -9,4 +9,5 @@ class FixturesConfig(AppConfig):
 
     def ready(self):
         """Import signals when app is ready"""
-        import fixtures.signals
+        # import fixtures.signals  # Temporarily commented out for migration
+        pass

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { addTeamMember, updateTeamMember } from '../lib/api';
+import { addTeamMember, updateTeamMember } from '../services/api';
 
 const RosterMemberForm = ({ teamId, member, onClose }) => {
   const [formData, setFormData] = useState({

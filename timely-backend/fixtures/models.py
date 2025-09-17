@@ -74,6 +74,7 @@ class Fixture(models.Model):
             models.Index(fields=["phase"]),
             models.Index(fields=["home"]),
             models.Index(fields=["away"]),
+            models.Index(fields=["status", "start_at"]),  # Required index
         ]
 
     def __str__(self) -> str:

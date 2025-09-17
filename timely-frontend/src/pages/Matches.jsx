@@ -8,7 +8,7 @@ import { useEventSchedule } from '../hooks/useLiveChannel';
 import { 
   getMatches, 
   getPublicEvents 
-} from '../lib/api';
+} from '../services/api';
 import { 
   CalendarIcon, 
   ClockIcon, 

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from .models import Event, Division
+from .models import Event, Division, Announcement
 
 
 class DivisionSerializer(serializers.ModelSerializer):
@@ -111,3 +111,43 @@ class EventLifecycleActionSerializer(serializers.Serializer):
             raise ValidationError(f"Cannot {action} event with status {current_status}")
         
         return value
+
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    """Serializer for announcements"""
+    
+    created_by_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
+    is_expired = serializers.ReadOnlyField()
+    target_team_names = serializers.StringRelatedField(
+        source="target_teams", 
+        many=True, 
+        read_only=True
+    )
+    
+    class Meta:
+        model = Announcement
+        fields = [
+            'id', 'event', 'title', 'message', 'type', 'priority',
+            'is_public', 'target_teams', 'target_team_names',
+            'is_active', 'expires_at', 'is_expired',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at', 'is_expired']
+    
+    def validate_expires_at(self, value):
+        """Validate expiration date"""
+        if value and value <= timezone.now():
+            raise ValidationError("Expiration date must be in the future")
+        return value
+    
+    def validate(self, data):
+        """Validate announcement data"""
+        # If targeting specific teams, ensure they belong to the event
+        if 'target_teams' in data and data.get('target_teams'):
+            event = data.get('event')
+            if event:
+                team_events = {team.event.id for team in data['target_teams']}
+                if len(team_events) > 1 or (team_events and event.id not in team_events):
+                    raise ValidationError("All targeted teams must belong to the same event")
+        
+        return data

@@ -23,7 +23,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const { login } = useAuth();
+  const { login, getRoleBasedPath } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -76,19 +76,21 @@ export default function Login() {
     setErrors({}); // Clear previous errors
     
     try {
-      await login(formData.email, formData.password);
+      const userData = await login(formData.email, formData.password);
       showToast({
         type: 'success',
         title: 'Welcome back!',
         message: 'You have successfully signed in.'
       });
-      navigate(from, { replace: true });
+      
+      // Route by role after successful login
+      const redirectPath = getRoleBasedPath(userData.role);
+      navigate(redirectPath, { replace: true });
     } catch (error) {
       console.error('Login error:', error);
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.non_field_errors?.[0] || 
-                          error.response?.data?.message ||
-                          'Invalid email or password';
+      
+      // Use the transformed error message from the API interceptor
+      const errorMessage = error.userMessage || 'Please try again.';
       
       showToast({
         type: 'error',
@@ -96,16 +98,20 @@ export default function Login() {
         message: errorMessage
       });
       
-      // Set general error for both fields if it's a general authentication error
-      if (errorMessage.includes('Invalid') || errorMessage.includes('credentials')) {
+      // Handle different error types
+      if (error.response?.status === 401) {
         setErrors({
           email: 'Invalid email or password',
           password: 'Invalid email or password'
         });
+      } else if (error.response?.status === 400) {
+        // Field validation errors
+        const fieldErrors = error.response?.data || {};
+        setErrors(fieldErrors);
       } else {
         setErrors({
-          email: errorMessage.includes('email') ? errorMessage : '',
-          password: errorMessage.includes('password') ? errorMessage : ''
+          email: errorMessage,
+          password: errorMessage
         });
       }
     } finally {

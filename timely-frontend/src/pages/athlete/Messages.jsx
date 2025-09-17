@@ -6,7 +6,7 @@ import {
   ClockIcon,
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
-import api from '../../lib/api';
+import api from '../../services/api';
 import useSocket from '../../hooks/useSocket';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';

@@ -4,7 +4,7 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Badge from '../components/ui/Badge';
-import { updateProfile, changePassword } from '../lib/api';
+import { updateProfile, changePassword } from '../services/api';
 import { 
   UserIcon, 
   LockClosedIcon, 

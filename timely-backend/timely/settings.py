@@ -42,29 +42,29 @@ INSTALLED_APPS = [
     "channels",
     
     # First-party (Timely) - MVP apps
-    "api",
+    "api",  # Re-enabled for full functionality
     "common",
     "timely",
-    "events",
+    "events",  # Re-enabled for CSV endpoints
     "venues",
     "sports",
-    "teams",
-    "registrations",
-    "fixtures",
-    "results",
+    "teams",  # Re-enabled for CSV endpoints
+    "registrations",  # Re-enabled for CSV endpoints
+    "fixtures",  # Re-enabled for CSV endpoints
+    "results",  # Re-enabled for CSV endpoints
     "notifications",
     
     # Phase-2 modules disabled; will re-enable incrementally.
     # "adminapi",
     # "cms",
-    # "content",
-    # "gallery",
+    "content",
+    "gallery",  # Re-enabled for media functionality
     # "kyc",
     # "mediahub",
     # "payments",
     # "ticketing",
-    # "tickets",
-    # "reports",
+    "tickets",  # Enable tickets for simplified ticketing system
+    "reports",  # Re-enabled for CSV endpoints
     # "privacy",
     # "settingshub",
     # "audit",
@@ -85,6 +85,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "common.middleware.PublicEndpointMiddleware",  # Add our custom middleware
     "common.security.SecurityHeadersMiddleware",  # Security headers
+    "api.middleware.AuditLoggingMiddleware",  # Re-enabled for full functionality
+    "api.middleware.RateLimitingMiddleware",  # Re-enabled for full functionality
 ]
 
 ROOT_URLCONF = "timely.urls"
@@ -415,5 +417,13 @@ if DEBUG:
 
 # Optional 2FA: django-otp integration (stub)
 # INSTALLED_APPS += ["django_otp", "django_otp.plugins.otp_totp"]
+
+# --- Stripe Configuration ---
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+
+# Email configuration for ticket receipts
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@timely.com')
 # MIDDLEWARE.insert(0, "django_otp.middleware.OTPMiddleware")
 

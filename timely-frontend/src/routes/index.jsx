@@ -5,35 +5,24 @@ import { useAuth } from '../context/AuthContext';
 
 // Layouts
 import AppLayout from '../components/layout/AppLayout.jsx';
-import AdminLayout from '../layouts/AdminLayout.jsx';
+import AdminLayout from '../components/admin/AdminLayout.jsx';
 
 // Public Pages
 import Home from '../pages/public/Home.jsx';
 import Login from '../pages/Login.jsx';
 import Signup from '../pages/Signup.jsx';
 import PasswordReset from '../pages/PasswordReset.jsx';
-import EventPublic from '../pages/public/EventPublic.jsx';
-import SpectatorEvents from '../pages/SpectatorEvents.jsx';
-import SpectatorSchedule from '../pages/SpectatorSchedule.jsx';
-import SpectatorResults from '../pages/SpectatorResults.jsx';
+import EventDetail from '../pages/public/EventDetail.jsx';
 import News from '../pages/public/News.jsx';
 import Gallery from '../pages/public/Gallery.jsx';
 import NotFound from '../pages/NotFound.jsx';
 import Error500 from '../pages/Error500.jsx';
 
-// Protected Pages
-import Dashboard from '../pages/Dashboard.jsx';
-import Profile from '../pages/Profile.jsx';
-import Settings from '../pages/Settings.jsx';
-import MyTickets from '../pages/MyTickets.jsx';
-import MyRegistrations from '../pages/MyRegistrations.jsx';
-import RegistrationWizard from '../pages/RegistrationWizard.jsx';
-
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard.jsx';
 import EventsManage from '../pages/admin/EventsManage.jsx';
 import EventForm from '../pages/admin/EventForm.jsx';
-import EventDetail from '../pages/admin/EventDetail.jsx';
+import EventDetailAdmin from '../pages/admin/EventDetail.jsx';
 import RegistrationsManage from '../pages/admin/RegistrationsManage.jsx';
 import FixturesManage from '../pages/admin/FixturesManage.jsx';
 import ResultsManage from '../pages/admin/ResultsManage.jsx';
@@ -44,34 +33,24 @@ import AnnouncementsManage from '../pages/admin/AnnouncementsManage.jsx';
 import ReportsManage from '../pages/admin/ReportsManage.jsx';
 import SettingsManage from '../pages/admin/SettingsManage.jsx';
 
-// Organizer Pages
-import OrganizerDashboard from '../pages/organizer/Dashboard.jsx';
-import EventEditor from '../pages/EventEditor.jsx';
-import CreateEvent from '../pages/CreateEvent.jsx';
-import EventManagement from '../pages/EventManagement.jsx';
-import RegistrationManagement from '../pages/RegistrationManagement.jsx';
-import Fixtures from '../pages/Fixtures.jsx';
-import Matches from '../pages/Matches.jsx';
-import Results from '../pages/Results.jsx';
-import VenuesPage from '../pages/Venues.jsx';
-
-// Athlete Pages
-import AthleteDashboard from '../pages/athlete/Dashboard.jsx';
-import AthleteMessages from '../pages/athlete/Messages.jsx';
-import AthleteMyRegistrations from '../pages/athlete/MyRegistrations.jsx';
-import AthleteMyTickets from '../pages/athlete/MyTickets.jsx';
-import AthleteNotifications from '../pages/athlete/Notifications.jsx';
-import AthletePayments from '../pages/athlete/Payments.jsx';
-import AthleteRegistrationWizard from '../pages/athlete/RegistrationWizard.jsx';
-import AthleteUploadDocs from '../pages/athlete/UploadDocs.jsx';
+// Organizer Pages (Admin-scoped)
+import OrganizerDashboard from '../pages/admin/Dashboard.jsx'; // Same as admin dashboard
 
 // Coach Pages
 import CoachDashboard from '../pages/coach/Dashboard.jsx';
-import CoachRoster from '../pages/coach/Roster.jsx';
 import CoachTeamDashboard from '../pages/coach/TeamDashboard.jsx';
 import CoachTeamFixtures from '../pages/coach/TeamFixtures.jsx';
-import CoachTeamRegistration from '../pages/coach/TeamRegistration.jsx';
-import CoachTeamResults from '../pages/coach/TeamResults.jsx';
+
+// Athlete Pages
+import AthleteDashboard from '../pages/athlete/Dashboard.jsx';
+import AthleteMyTickets from '../pages/athlete/MyTickets.jsx';
+import AthleteMyRegistrations from '../pages/athlete/MyRegistrations.jsx';
+import AthleteNotifications from '../pages/athlete/Notifications.jsx';
+import AthleteRegistrationWizard from '../pages/athlete/RegistrationWizard.jsx';
+
+// Spectator Pages (Public)
+import SpectatorEvents from '../pages/public/Home.jsx'; // Same as home
+import SpectatorTickets from '../pages/athlete/MyTickets.jsx'; // Reuse athlete tickets
 
 // Components
 import PrivateRoute from '../components/PrivateRoute.jsx';
@@ -192,35 +171,21 @@ export default function AppRoutes() {
           <Routes>
             {/* ==================== PUBLIC ROUTES ==================== */}
             
-            {/* Home & Landing */}
+            {/* Spectator Routes */}
             <Route path="/" element={<Home />} />
+            <Route path="/events/:id" element={<EventDetail />} />
+            <Route path="/news" element={<News />} />
+            <Route path="/media" element={<Gallery />} />
+            <Route path="/tickets" element={<SpectatorTickets />} />
             
             {/* Authentication */}
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/password-reset" element={<PasswordReset />} />
             
-            {/* Public Event Pages */}
-            <Route path="/events" element={<SpectatorEvents />} />
-            <Route path="/events/:id" element={<EventPublic />} />
-            <Route path="/schedule" element={<SpectatorSchedule />} />
-            <Route path="/results" element={<SpectatorResults />} />
-            <Route path="/news" element={<News />} />
-            <Route path="/gallery" element={<Gallery />} />
-            
-            {/* ==================== PROTECTED ROUTES ==================== */}
-            
-            {/* Common Protected Pages */}
-            <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-            <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-            <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
-            <Route path="/my-tickets" element={<PrivateRoute><MyTickets /></PrivateRoute>} />
-            <Route path="/my-registrations" element={<PrivateRoute><MyRegistrations /></PrivateRoute>} />
-            <Route path="/events/:eventId/register" element={<PrivateRoute><RegistrationWizard /></PrivateRoute>} />
-            
             {/* ==================== ROLE-BASED ROUTES ==================== */}
             
-            {/* Admin Routes */}
+            {/* Admin & Organizer Routes */}
             <Route path="/admin/*" element={
               <AdminGuard>
                 <AdminLayout>
@@ -229,7 +194,7 @@ export default function AppRoutes() {
                     <Route path="/events" element={<EventsManage />} />
                     <Route path="/events/new" element={<EventForm />} />
                     <Route path="/events/:id/edit" element={<EventForm />} />
-                    <Route path="/events/:id" element={<EventDetail />} />
+                    <Route path="/events/:id" element={<EventDetailAdmin />} />
                     <Route path="/registrations" element={<RegistrationsManage />} />
                     <Route path="/fixtures" element={<FixturesManage />} />
                     <Route path="/results" element={<ResultsManage />} />
@@ -246,20 +211,14 @@ export default function AppRoutes() {
               </AdminGuard>
             } />
             
-            {/* Organizer Routes */}
-            <Route path="/organizer/*" element={
-              <RoleGuard requiredRoles={['ORGANIZER', 'ADMIN']}>
+            {/* Coach Routes */}
+            <Route path="/coach/*" element={
+              <RoleGuard requiredRoles={['COACH', 'ADMIN']}>
                 <Routes>
-                  <Route path="/dashboard" element={<OrganizerDashboard />} />
-                  <Route path="/events" element={<EventManagement />} />
-                  <Route path="/events/create" element={<CreateEvent />} />
-                  <Route path="/events/:id/edit" element={<EventEditor />} />
-                  <Route path="/events/:eventId/registrations" element={<RegistrationManagement />} />
-                  <Route path="/fixtures" element={<Fixtures />} />
-                  <Route path="/matches" element={<Matches />} />
-                  <Route path="/results" element={<Results />} />
-                  <Route path="/venues" element={<VenuesPage />} />
-                  <Route path="*" element={<Navigate to="/organizer/dashboard" replace />} />
+                  <Route path="/" element={<CoachDashboard />} />
+                  <Route path="/teams/:id" element={<CoachTeamDashboard />} />
+                  <Route path="/events/:eventId" element={<CoachTeamFixtures />} />
+                  <Route path="*" element={<Navigate to="/coach" replace />} />
                 </Routes>
               </RoleGuard>
             } />
@@ -268,29 +227,10 @@ export default function AppRoutes() {
             <Route path="/athlete/*" element={
               <RoleGuard requiredRoles={['ATHLETE', 'ADMIN']}>
                 <Routes>
-                  <Route path="/dashboard" element={<AthleteDashboard />} />
-                  <Route path="/messages" element={<AthleteMessages />} />
-                  <Route path="/my-registrations" element={<AthleteMyRegistrations />} />
-                  <Route path="/my-tickets" element={<AthleteMyTickets />} />
-                  <Route path="/notifications" element={<AthleteNotifications />} />
-                  <Route path="/payments" element={<AthletePayments />} />
-                  <Route path="/registration-wizard" element={<AthleteRegistrationWizard />} />
-                  <Route path="/upload-docs" element={<AthleteUploadDocs />} />
-                  <Route path="*" element={<Navigate to="/athlete/dashboard" replace />} />
-                </Routes>
-              </RoleGuard>
-            } />
-            
-            {/* Coach Routes */}
-            <Route path="/coach/*" element={
-              <RoleGuard requiredRoles={['COACH', 'ADMIN']}>
-                <Routes>
-                  <Route path="/dashboard" element={<CoachDashboard />} />
-                  <Route path="/roster" element={<CoachRoster />} />
-                  <Route path="/fixtures" element={<CoachTeamFixtures />} />
-                  <Route path="/registration" element={<CoachTeamRegistration />} />
-                  <Route path="/results" element={<CoachTeamResults />} />
-                  <Route path="*" element={<Navigate to="/coach/dashboard" replace />} />
+                  <Route path="/" element={<AthleteDashboard />} />
+                  <Route path="/tickets" element={<AthleteMyTickets />} />
+                  <Route path="/teams/:id" element={<AthleteMyRegistrations />} />
+                  <Route path="*" element={<Navigate to="/athlete" replace />} />
                 </Routes>
               </RoleGuard>
             } />

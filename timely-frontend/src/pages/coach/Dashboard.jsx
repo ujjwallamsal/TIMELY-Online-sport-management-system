@@ -1,319 +1,335 @@
+// src/pages/coach/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { useLiveChannel } from '../../hooks/useLiveChannel';
-import { api } from '../../services/api';
+import { 
+  UserGroupIcon,
+  CalendarDaysIcon,
+  TrophyIcon,
+  BellIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  PlusIcon
+} from '@heroicons/react/24/outline';
+import useLiveChannel from '../../hooks/useLiveChannel';
+import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import Skeleton from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
 
-const CoachDashboard = () => {
-  const { user } = useAuth();
-  const [stats, setStats] = useState({
-    upcomingFixtures: 0,
-    rosterCount: 0,
-    unreadAnnouncements: 0,
-    recentResults: 0
-  });
+export default function CoachDashboard() {
+  const [teams, setTeams] = useState([]);
   const [upcomingFixtures, setUpcomingFixtures] = useState([]);
-  const [recentResults, setRecentResults] = useState([]);
-  const [roster, setRoster] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Subscribe to real-time updates
-  useLiveChannel('coach_updates', (data) => {
-    if (data.type === 'fixture_update') {
-      fetchUpcomingFixtures();
-    } else if (data.type === 'result_update') {
-      fetchRecentResults();
-    } else if (data.type === 'announcement_update') {
-      // Handle announcement updates
+  // Real-time updates for coach data
+  const { 
+    isConnected, 
+    error: wsError 
+  } = useLiveChannel('coach_updates', {
+    onMessage: (data) => {
+      if (data.type === 'team_update') {
+        setTeams(prev => prev.map(team => 
+          team.id === data.team_id ? { ...team, ...data.data } : team
+        ));
+      }
+      if (data.type === 'fixture_update') {
+        setUpcomingFixtures(prev => prev.map(fixture => 
+          fixture.id === data.fixture_id ? { ...fixture, ...data.data } : fixture
+        ));
+      }
+      if (data.type === 'announcement_update') {
+        setAnnouncements(prev => [data.data, ...prev.slice(0, 4)]);
+      }
     }
   });
 
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch teams I coach
-      const teamsResponse = await api.get('/api/teams?mine=true');
-      const teams = teamsResponse.data.results || teamsResponse.data;
-      
-      if (teams.length > 0) {
-        const team = teams[0]; // For now, use first team
-        
-        // Fetch upcoming fixtures for my teams
-        const fixturesResponse = await api.get(`/api/fixtures?team=${team.id}&status=upcoming`);
-        const fixtures = fixturesResponse.data.results || fixturesResponse.data;
-        
-        // Fetch recent results for my teams
-        const resultsResponse = await api.get(`/api/results?team=${team.id}&finalized=true`);
-        const results = resultsResponse.data.results || resultsResponse.data;
-        
-        // Fetch roster
-        const rosterResponse = await api.get(`/api/teams/${team.id}/members`);
-        const rosterData = rosterResponse.data.results || rosterResponse.data;
-        
-        setUpcomingFixtures(fixtures.slice(0, 5));
-        setRecentResults(results.slice(0, 5));
-        setRoster(rosterData);
-        
-        setStats({
-          upcomingFixtures: fixtures.length,
-          rosterCount: rosterData.length,
-          unreadAnnouncements: 0, // TODO: Implement announcement count
-          recentResults: results.length
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchUpcomingFixtures = async () => {
-    try {
-      const teamsResponse = await api.get('/api/teams?mine=true');
-      const teams = teamsResponse.data.results || teamsResponse.data;
-      
-      if (teams.length > 0) {
-        const team = teams[0];
-        const response = await api.get(`/api/fixtures?team=${team.id}&status=upcoming`);
-        const fixtures = response.data.results || response.data;
-        setUpcomingFixtures(fixtures.slice(0, 5));
-        setStats(prev => ({ ...prev, upcomingFixtures: fixtures.length }));
-      }
-    } catch (error) {
-      console.error('Error fetching upcoming fixtures:', error);
-    }
-  };
-
-  const fetchRecentResults = async () => {
-    try {
-      const teamsResponse = await api.get('/api/teams?mine=true');
-      const teams = teamsResponse.data.results || teamsResponse.data;
-      
-      if (teams.length > 0) {
-        const team = teams[0];
-        const response = await api.get(`/api/results?team=${team.id}&finalized=true`);
-        const results = response.data.results || response.data;
-        setRecentResults(results.slice(0, 5));
-        setStats(prev => ({ ...prev, recentResults: results.length }));
-      }
-    } catch (error) {
-      console.error('Error fetching recent results:', error);
-    }
-  };
-
   useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        // Mock data - replace with actual API calls
+        setTeams([
+          {
+            id: 1,
+            name: "Thunder Hawks",
+            sport: "Basketball",
+            memberCount: 12,
+            nextMatch: "2024-03-15",
+            status: "active"
+          },
+          {
+            id: 2,
+            name: "Lightning Bolts",
+            sport: "Soccer",
+            memberCount: 18,
+            nextMatch: "2024-03-18",
+            status: "active"
+          }
+        ]);
+
+        setUpcomingFixtures([
+          {
+            id: 1,
+            team: "Thunder Hawks",
+            opponent: "Storm Riders",
+            date: "2024-03-15",
+            time: "14:00",
+            venue: "Main Arena",
+            status: "scheduled"
+          },
+          {
+            id: 2,
+            team: "Lightning Bolts",
+            opponent: "Fire Dragons",
+            date: "2024-03-18",
+            time: "16:30",
+            venue: "Field A",
+            status: "scheduled"
+          }
+        ]);
+
+        setAnnouncements([
+          {
+            id: 1,
+            title: "Practice Schedule Update",
+            message: "Practice moved to 6 PM this week",
+            date: "2024-03-10",
+            priority: "high"
+          },
+          {
+            id: 2,
+            title: "Equipment Check",
+            message: "Please bring your gear for inspection",
+            date: "2024-03-08",
+            priority: "medium"
+          }
+        ]);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchDashboardData();
   }, []);
 
-  const handleConfirmLineup = async (fixtureId) => {
-    try {
-      // TODO: Implement lineup confirmation
-      console.log('Confirm lineup for fixture:', fixtureId);
-    } catch (error) {
-      console.error('Error confirming lineup:', error);
-    }
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="p-6">
+        <div className="mb-8">
+          <Skeleton variant="title" width="200px" className="mb-2" />
+          <Skeleton variant="text" width="400px" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} variant="card" className="h-32" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton variant="card" className="h-96" />
+          <Skeleton variant="card" className="h-96" />
+        </div>
       </div>
     );
   }
 
+  const totalRosterCount = teams.reduce((sum, team) => sum + team.memberCount, 0);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Coach Dashboard</h1>
-          <p className="mt-2 text-gray-600">Manage your team, fixtures, and results</p>
+    <div className="p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Coach Dashboard</h1>
+        <p className="text-gray-600 mt-2">
+          Manage your teams and track upcoming fixtures.
+        </p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">My Teams</p>
+              <p className="text-2xl font-bold text-gray-900">{teams.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <UserGroupIcon className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Upcoming Fixtures</p>
+              <p className="text-2xl font-bold text-gray-900">{upcomingFixtures.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <CalendarDaysIcon className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Roster Count</p>
+              <p className="text-2xl font-bold text-gray-900">{totalRosterCount}</p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <TrophyIcon className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Announcements</p>
+              <p className="text-2xl font-bold text-gray-900">{announcements.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <BellIcon className="w-6 h-6 text-yellow-600" />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="flex flex-wrap gap-4">
+          <Button variant="primary" size="md">
+            <CheckCircleIcon className="w-5 h-5 mr-2" />
+            Confirm Lineup
+          </Button>
+          <Button variant="outline" size="md">
+            <PlusIcon className="w-5 h-5 mr-2" />
+            Add Team Member
+          </Button>
         </div>
+      </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Upcoming Fixtures</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.upcomingFixtures}</p>
-              </div>
-            </div>
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* My Teams */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">My Teams</h2>
+            <Link to="/coach/teams">
+              <Button variant="outline" size="sm">View All</Button>
+            </Link>
           </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Roster Count</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.rosterCount}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-yellow-100 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L16 4l-4 4H4.828z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Unread Announcements</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.unreadAnnouncements}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-100 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Recent Results</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.recentResults}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow mb-8">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Link
-                to="/coach/roster"
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                Manage Roster
-              </Link>
-              
-              <Link
-                to="/coach/fixtures"
-                className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                View Fixtures
-              </Link>
-              
-              <Link
-                to="/coach/results"
-                className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                View Results
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Upcoming Fixtures */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">Upcoming Fixtures</h2>
-            </div>
-            <div className="divide-y divide-gray-200">
-              {upcomingFixtures.length > 0 ? (
-                upcomingFixtures.map((fixture) => (
-                  <div key={fixture.id} className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {fixture.home?.name} vs {fixture.away?.name}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(fixture.start_at).toLocaleDateString()} at {new Date(fixture.start_at).toLocaleTimeString()}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleConfirmLineup(fixture.id)}
-                        className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                      >
-                        Confirm Lineup
-                      </button>
-                    </div>
+          
+          {teams.length > 0 ? (
+            <div className="space-y-4">
+              {teams.map((team) => (
+                <div key={team.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <h3 className="font-medium text-gray-900">{team.name}</h3>
+                    <p className="text-sm text-gray-600">{team.sport}</p>
+                    <p className="text-xs text-gray-500">{team.memberCount} members</p>
                   </div>
-                ))
-              ) : (
-                <div className="px-6 py-4 text-center text-gray-500">
-                  No upcoming fixtures
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Results */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">Recent Results</h2>
-            </div>
-            <div className="divide-y divide-gray-200">
-              {recentResults.length > 0 ? (
-                recentResults.map((result) => (
-                  <div key={result.id} className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {result.fixture?.home?.name} {result.home_score} - {result.away_score} {result.fixture?.away?.name}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(result.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        result.winner?.id === result.fixture?.home?.id ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {result.winner?.id === result.fixture?.home?.id ? 'W' : 'L'}
-                      </span>
-                    </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600">Next: {team.nextMatch}</p>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      team.status === 'active' 
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {team.status}
+                    </span>
                   </div>
-                ))
-              ) : (
-                <div className="px-6 py-4 text-center text-gray-500">
-                  No recent results
                 </div>
-              )}
+              ))}
             </div>
+          ) : (
+            <EmptyState
+              icon={UserGroupIcon}
+              title="No Teams Yet"
+              description="You haven't been assigned to any teams yet."
+            />
+          )}
+        </Card>
+
+        {/* Upcoming Fixtures */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Upcoming Fixtures</h2>
+            <Link to="/coach/fixtures">
+              <Button variant="outline" size="sm">View All</Button>
+            </Link>
           </div>
-        </div>
+          
+          {upcomingFixtures.length > 0 ? (
+            <div className="space-y-4">
+              {upcomingFixtures.map((fixture) => (
+                <div key={fixture.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <h3 className="font-medium text-gray-900">{fixture.team} vs {fixture.opponent}</h3>
+                    <p className="text-sm text-gray-600">{fixture.venue}</p>
+                    <p className="text-xs text-gray-500">{fixture.date} at {fixture.time}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      fixture.status === 'scheduled' 
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {fixture.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={CalendarDaysIcon}
+              title="No Upcoming Fixtures"
+              description="No fixtures scheduled for your teams."
+            />
+          )}
+        </Card>
+
+        {/* Announcements */}
+        <Card className="p-6 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Recent Announcements</h2>
+            <Link to="/coach/announcements">
+              <Button variant="outline" size="sm">View All</Button>
+            </Link>
+          </div>
+          
+          {announcements.length > 0 ? (
+            <div className="space-y-4">
+              {announcements.map((announcement) => (
+                <div key={announcement.id} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+                  <div className={`w-2 h-2 rounded-full mt-2 ${
+                    announcement.priority === 'high' 
+                      ? 'bg-red-500'
+                      : announcement.priority === 'medium'
+                      ? 'bg-yellow-500'
+                      : 'bg-green-500'
+                  }`} />
+                  <div className="flex-1">
+                    <h3 className="font-medium text-gray-900">{announcement.title}</h3>
+                    <p className="text-sm text-gray-600 mt-1">{announcement.message}</p>
+                    <p className="text-xs text-gray-500 mt-2">{announcement.date}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={BellIcon}
+              title="No Announcements"
+              description="No recent announcements for your teams."
+            />
+          )}
+        </Card>
       </div>
     </div>
   );
-};
-
-export default CoachDashboard;
+}

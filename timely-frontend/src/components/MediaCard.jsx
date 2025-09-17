@@ -3,7 +3,7 @@
  * Shows thumbnails, metadata, and action menus for moderators/uploaders.
  */
 import React, { useState } from 'react';
-import { mediaAPI } from '../lib/api';
+import { mediaAPI } from '../services/api';
 
 const MediaCard = ({ 
   media, 

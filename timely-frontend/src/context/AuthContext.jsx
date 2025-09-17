@@ -1,7 +1,23 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import api from "../lib/api";
+import api from "../services/api";
 
 const AuthContext = createContext();
+
+// Helper function to get role-based redirect path
+const getRoleBasedPath = (role) => {
+  switch (role) {
+    case 'ADMIN':
+    case 'ORGANIZER':
+      return '/admin';
+    case 'COACH':
+      return '/coach';
+    case 'ATHLETE':
+      return '/athlete';
+    case 'SPECTATOR':
+    default:
+      return '/';
+  }
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -15,7 +31,7 @@ export function AuthProvider({ children }) {
     try {
       // With cookie-based auth, we don't need to check localStorage
       // The cookies are sent automatically with withCredentials: true
-      const { data } = await api.get('accounts/users/me/');
+      const { data } = await api.get('me');
       setUser(data);
     } catch (error) {
       // Don't log 401 errors as they're expected for unauthenticated users
@@ -32,14 +48,19 @@ export function AuthProvider({ children }) {
     const payload = { email, password };
     console.log('Login attempt with payload:', payload);
     try {
-      const { data } = await api.post('accounts/auth/login/', payload);
+      const { data } = await api.post('auth/login', payload);
       console.log('Login successful:', data);
       
-      // With cookie-based auth, tokens are automatically set in cookies by the backend
-      // No need to handle localStorage or Authorization headers
+      // Store tokens if provided
+      if (data.access_token) {
+        localStorage.setItem('access_token', data.access_token);
+      }
+      if (data.refresh_token) {
+        localStorage.setItem('refresh_token', data.refresh_token);
+      }
       
-      // Handle both possible response formats
-      const userData = data.user || data;
+      // Get user data after successful login
+      const { data: userData } = await api.get('me');
       setUser(userData);
       return userData;
     } catch (error) {
@@ -79,7 +100,7 @@ export function AuthProvider({ children }) {
 
   const refreshUser = async () => {
     try {
-      const { data } = await api.get('accounts/users/me/');
+      const { data } = await api.get('me');
       setUser(data);
       return data;
     } catch (error) {
@@ -97,6 +118,7 @@ export function AuthProvider({ children }) {
     signup,
     refreshUser,
     getMe: refreshUser, // Alias to prevent breaking existing code
+    getRoleBasedPath: (role) => getRoleBasedPath(role),
     isAuthenticated: !!user,
   };
 

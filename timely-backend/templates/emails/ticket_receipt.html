@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Ticket Receipt</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #007bff;
+            margin: 0;
+        }
+        .ticket-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .ticket-code {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+            text-align: center;
+            background-color: white;
+            padding: 15px;
+            border: 2px dashed #007bff;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #666;
+        }
+        .info-value {
+            color: #333;
+        }
+        .qr-section {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .qr-code {
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            display: inline-block;
+            background-color: white;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+            font-size: 14px;
+        }
+        .status-valid {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .status-used {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎫 Ticket Receipt</h1>
+            <p>Thank you for your purchase!</p>
+        </div>
+
+        <div class="ticket-info">
+            <h2>Ticket Details</h2>
+            
+            <div class="ticket-code">
+                {{ ticket.code }}
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Event ID:</span>
+                <span class="info-value">{{ purchase.event_id }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Purchase ID:</span>
+                <span class="info-value">{{ purchase.id }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Amount:</span>
+                <span class="info-value">${{ purchase.amount_dollars|floatformat:2 }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Currency:</span>
+                <span class="info-value">{{ purchase.currency|upper }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span class="info-value status-valid">{{ ticket.status|title }}</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="info-label">Purchased:</span>
+                <span class="info-value">{{ purchase.created_at|date:"F j, Y g:i A" }}</span>
+            </div>
+        </div>
+
+        <div class="qr-section">
+            <h3>QR Code</h3>
+            <p>Present this QR code at the event entrance:</p>
+            <div class="qr-code">
+                <!-- QR code will be generated and embedded here -->
+                <div style="width: 200px; height: 200px; background-color: #f0f0f0; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                    QR Code<br>
+                    {{ ticket.code }}
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>Important:</strong> Keep this ticket safe and present it at the event.</p>
+            <p>If you have any questions, please contact our support team.</p>
+            <p>© 2024 Timely Events. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

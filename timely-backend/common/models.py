@@ -40,6 +40,7 @@ class AuditLog(models.Model):
         on_delete=models.CASCADE,
         null=True,
         blank=True,
+        related_name='common_audit_logs',
         help_text="Type of object that was acted upon"
     )
     target_id = models.PositiveIntegerField(

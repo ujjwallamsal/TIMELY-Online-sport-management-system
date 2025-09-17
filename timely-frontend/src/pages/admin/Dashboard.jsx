@@ -11,7 +11,8 @@ import {
   ClockIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  EyeIcon
+  EyeIcon,
+  BellIcon
 } from '@heroicons/react/24/outline';
 import useLiveChannel from '../../hooks/useLiveChannel';
 import Button from '../../components/ui/Button';
@@ -32,18 +33,26 @@ export default function AdminDashboard() {
   const [recentRegistrations, setRecentRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Real-time updates for live data - disabled for now
-  // const { 
-  //   isConnected, 
-  //   isConnecting, 
-  //   error: wsError, 
-  //   lastMessage: liveData 
-  // } = useLiveChannel('general', {
-  //   autoConnect: false, // Don't auto-connect for admin dashboard
-  //   onMessage: (data) => {
-  //     console.log('Received live data:', data);
-  //   }
-  // });
+  // Real-time updates for admin/organizer data
+  const { 
+    isConnected, 
+    error: wsError 
+  } = useLiveChannel('admin_updates', {
+    onMessage: (data) => {
+      if (data.type === 'event_update') {
+        // Update events list
+        setRecentEvents(prev => prev.map(event => 
+          event.id === data.data.event_id ? { ...event, ...data.data } : event
+        ));
+      }
+      if (data.type === 'registration_update') {
+        // Update registrations list
+        setRecentRegistrations(prev => prev.map(reg => 
+          reg.id === data.data.registration_id ? { ...reg, ...data.data } : reg
+        ));
+      }
+    }
+  });
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -191,18 +200,18 @@ export default function AdminDashboard() {
       color: 'blue'
     },
     {
-      title: 'Manage Users',
-      description: 'View and manage user accounts',
-      href: '/admin/users',
-      icon: UserGroupIcon,
-      color: 'purple'
+      title: 'New Announcement',
+      description: 'Send announcement to users',
+      href: '/admin/announcements/new',
+      icon: BellIcon,
+      color: 'green'
     },
     {
       title: 'View Reports',
       description: 'Generate and view analytics',
       href: '/admin/reports',
       icon: ChartBarIcon,
-      color: 'green'
+      color: 'purple'
     },
     {
       title: 'Manage Venues',
@@ -237,9 +246,9 @@ export default function AdminDashboard() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Organizer Dashboard</h1>
         <p className="text-gray-600 mt-2">
-          Welcome back! Here's what's happening with your events and users.
+          Manage your events, track approvals, and monitor today's matches.
         </p>
       </div>
 

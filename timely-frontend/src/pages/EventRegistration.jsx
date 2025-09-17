@@ -5,7 +5,7 @@ import {
   getEvent, 
   listDivisions, 
   createRegistration
-} from '../lib/api';
+} from '../services/api';
 
 const DOCUMENT_TYPES = [
   { value: 'ID', label: 'Identity Document', required: true, description: 'Valid government-issued ID' },

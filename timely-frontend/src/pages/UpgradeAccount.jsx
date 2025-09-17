@@ -1,6 +1,6 @@
 // pages/UpgradeAccount.jsx
 import React, { useState, useEffect } from 'react';
-import { roleRequestAPI, kycAPI } from '../lib/api';
+import { roleRequestAPI, kycAPI } from '../services/api';
 import { toast } from 'react-hot-toast';
 
 const UpgradeAccount = () => {

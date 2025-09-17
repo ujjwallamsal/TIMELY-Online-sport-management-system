@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { 
   generateFixtures, acceptFixtures, getEventFixtures, publishEventFixtures,
   rescheduleFixture, getFixtureConflicts, getEvents, getTeams
-} from '../lib/api';
+} from '../services/api';
 import { useToast } from '../hooks/useToast.jsx';
 import useSocket from '../hooks/useSocket';
 import FixtureRow from '../components/FixtureRow';

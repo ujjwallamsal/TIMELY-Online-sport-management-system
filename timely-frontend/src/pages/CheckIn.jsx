@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { checkinTicket, validateTicket } from '../lib/api';
+import { checkinTicket, validateTicket } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const CheckIn = () => {

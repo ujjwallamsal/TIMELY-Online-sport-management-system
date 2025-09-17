@@ -46,11 +46,95 @@ class AlbumSerializer(serializers.ModelSerializer):
 
 
 
+class MediaUploadSerializer(serializers.ModelSerializer):
+    """Serializer for media upload"""
+    file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Media
+        fields = [
+            "id", "file", "type", "event", "fixture", "title", "description",
+            "status", "uploaded_by", "created_at", "file_url"
+        ]
+        read_only_fields = ["id", "status", "uploaded_by", "created_at", "file_url"]
+
+    def get_file_url(self, obj):
+        """Get the URL for the media file"""
+        return obj.file_url
+
+    def create(self, validated_data):
+        """Set uploaded_by to current user"""
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            validated_data["uploaded_by"] = request.user
+        return super().create(validated_data)
+
+
+class MediaModerationSerializer(serializers.ModelSerializer):
+    """Serializer for media moderation (admin/organizer only)"""
+    file_url = serializers.SerializerMethodField()
+    uploaded_by_email = serializers.SerializerMethodField()
+    event_name = serializers.SerializerMethodField()
+    fixture_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Media
+        fields = [
+            "id", "file", "type", "event", "fixture", "title", "description",
+            "status", "uploaded_by", "uploaded_by_email", "event_name", "fixture_name",
+            "created_at", "updated_at", "approved_at", "file_url"
+        ]
+        read_only_fields = ["id", "file", "type", "event", "fixture", "title", "description",
+                           "uploaded_by", "created_at", "file_url", "uploaded_by_email", 
+                           "event_name", "fixture_name"]
+
+    def get_file_url(self, obj):
+        return obj.file_url
+
+    def get_uploaded_by_email(self, obj):
+        return obj.uploaded_by.email if obj.uploaded_by else None
+
+    def get_event_name(self, obj):
+        return obj.event.name if obj.event else None
+
+    def get_fixture_name(self, obj):
+        return str(obj.fixture) if obj.fixture else None
+
+
+class PublicMediaSerializer(serializers.ModelSerializer):
+    """Serializer for public media display (only approved media)"""
+    file_url = serializers.SerializerMethodField()
+    event_name = serializers.SerializerMethodField()
+    fixture_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Media
+        fields = [
+            "id", "type", "event", "fixture", "title", "description",
+            "created_at", "approved_at", "file_url", "event_name", "fixture_name"
+        ]
+
+    def get_file_url(self, obj):
+        return obj.file_url
+
+    def get_event_name(self, obj):
+        return obj.event.name if obj.event else None
+
+    def get_fixture_name(self, obj):
+        return str(obj.fixture) if obj.fixture else None
+
+
 class MediaSerializer(serializers.ModelSerializer):
+    """General purpose media serializer"""
+    file_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = Media
         fields = "__all__"
-        read_only_fields = ["uploaded_by", "created_at"]
+        read_only_fields = ["uploaded_by", "created_at", "file_url"]
+
+    def get_file_url(self, obj):
+        return obj.file_url
 
     def create(self, validated_data):
         request = self.context.get("request")

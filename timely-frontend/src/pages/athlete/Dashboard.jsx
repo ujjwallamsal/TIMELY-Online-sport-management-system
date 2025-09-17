@@ -1,357 +1,386 @@
+// src/pages/athlete/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { useLiveChannel } from '../../hooks/useLiveChannel';
-import { api } from '../../services/api';
+import { 
+  CalendarDaysIcon,
+  TrophyIcon,
+  QrCodeIcon,
+  BellIcon,
+  UserPlusIcon,
+  ClockIcon,
+  CheckCircleIcon
+} from '@heroicons/react/24/outline';
+import useLiveChannel from '../../hooks/useLiveChannel';
+import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import Skeleton from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
 
-const AthleteDashboard = () => {
-  const { user } = useAuth();
-  const [stats, setStats] = useState({
-    nextMatch: null,
-    activeTickets: 0,
-    unreadAnnouncements: 0,
-    myRegistrations: 0
-  });
+export default function AthleteDashboard() {
   const [nextMatch, setNextMatch] = useState(null);
-  const [myFixtures, setMyFixtures] = useState([]);
   const [myResults, setMyResults] = useState([]);
-  const [myRegistrations, setMyRegistrations] = useState([]);
+  const [myTickets, setMyTickets] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Subscribe to real-time updates
-  useLiveChannel('athlete_updates', (data) => {
-    if (data.type === 'fixture_update') {
-      fetchMyFixtures();
-    } else if (data.type === 'result_update') {
-      fetchMyResults();
-    } else if (data.type === 'registration_update') {
-      fetchMyRegistrations();
-    } else if (data.type === 'announcement_update') {
-      // Handle announcement updates
+  // Real-time updates for athlete data
+  const { 
+    isConnected, 
+    error: wsError 
+  } = useLiveChannel('athlete_updates', {
+    onMessage: (data) => {
+      if (data.type === 'match_update') {
+        setNextMatch(prev => prev?.id === data.match_id ? { ...prev, ...data.data } : prev);
+      }
+      if (data.type === 'result_update') {
+        setMyResults(prev => prev.map(result => 
+          result.id === data.result_id ? { ...result, ...data.data } : result
+        ));
+      }
+      if (data.type === 'announcement_update') {
+        setAnnouncements(prev => [data.data, ...prev.slice(0, 4)]);
+      }
     }
   });
 
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch my registrations
-      const registrationsResponse = await api.get('/api/registrations?applicant=me');
-      const registrations = registrationsResponse.data.results || registrationsResponse.data;
-      
-      // Fetch my team memberships
-      const teamMembershipsResponse = await api.get('/api/teams/members?athlete=me');
-      const teamMemberships = teamMembershipsResponse.data.results || teamMembershipsResponse.data;
-      
-      if (teamMemberships.length > 0) {
-        const team = teamMemberships[0].team;
-        
-        // Fetch fixtures for my team
-        const fixturesResponse = await api.get(`/api/fixtures?team=${team.id}`);
-        const fixtures = fixturesResponse.data.results || fixturesResponse.data;
-        
-        // Fetch results for my team
-        const resultsResponse = await api.get(`/api/results?team=${team.id}&finalized=true`);
-        const results = resultsResponse.data.results || resultsResponse.data;
-        
-        // Find next match
-        const upcomingFixtures = fixtures.filter(f => 
-          new Date(f.start_at) > new Date() && f.status === 'upcoming'
-        ).sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
-        
-        setNextMatch(upcomingFixtures[0] || null);
-        setMyFixtures(fixtures.slice(0, 5));
-        setMyResults(results.slice(0, 5));
-      }
-      
-      setMyRegistrations(registrations);
-      
-      // Fetch active tickets
-      const ticketsResponse = await api.get('/api/tickets?status=active');
-      const tickets = ticketsResponse.data.results || ticketsResponse.data;
-      
-      setStats({
-        nextMatch: nextMatch,
-        activeTickets: tickets.length,
-        unreadAnnouncements: 0, // TODO: Implement announcement count
-        myRegistrations: registrations.length
-      });
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchMyFixtures = async () => {
-    try {
-      const teamMembershipsResponse = await api.get('/api/teams/members?athlete=me');
-      const teamMemberships = teamMembershipsResponse.data.results || teamMembershipsResponse.data;
-      
-      if (teamMemberships.length > 0) {
-        const team = teamMemberships[0].team;
-        const response = await api.get(`/api/fixtures?team=${team.id}`);
-        const fixtures = response.data.results || response.data;
-        setMyFixtures(fixtures.slice(0, 5));
-        
-        // Update next match
-        const upcomingFixtures = fixtures.filter(f => 
-          new Date(f.start_at) > new Date() && f.status === 'upcoming'
-        ).sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
-        
-        setNextMatch(upcomingFixtures[0] || null);
-      }
-    } catch (error) {
-      console.error('Error fetching my fixtures:', error);
-    }
-  };
-
-  const fetchMyResults = async () => {
-    try {
-      const teamMembershipsResponse = await api.get('/api/teams/members?athlete=me');
-      const teamMemberships = teamMembershipsResponse.data.results || teamMembershipsResponse.data;
-      
-      if (teamMemberships.length > 0) {
-        const team = teamMemberships[0].team;
-        const response = await api.get(`/api/results?team=${team.id}&finalized=true`);
-        const results = response.data.results || response.data;
-        setMyResults(results.slice(0, 5));
-      }
-    } catch (error) {
-      console.error('Error fetching my results:', error);
-    }
-  };
-
-  const fetchMyRegistrations = async () => {
-    try {
-      const response = await api.get('/api/registrations?applicant=me');
-      const registrations = response.data.results || response.data;
-      setMyRegistrations(registrations);
-      setStats(prev => ({ ...prev, myRegistrations: registrations.length }));
-    } catch (error) {
-      console.error('Error fetching my registrations:', error);
-    }
-  };
-
   useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        // Mock data - replace with actual API calls
+        setNextMatch({
+          id: 1,
+          event: "Championship Finals 2024",
+          opponent: "Storm Riders",
+          date: "2024-03-15",
+          time: "14:00",
+          venue: "Main Arena",
+          status: "upcoming"
+        });
+
+        setMyResults([
+          {
+            id: 1,
+            event: "Spring Qualifiers",
+            opponent: "Thunder Hawks",
+            date: "2024-03-10",
+            score: "3-1",
+            result: "win",
+            position: 1
+          },
+          {
+            id: 2,
+            event: "Regional Championship",
+            opponent: "Fire Dragons",
+            date: "2024-03-05",
+            score: "2-2",
+            result: "draw",
+            position: 2
+          }
+        ]);
+
+        setMyTickets([
+          {
+            id: 1,
+            event: "Championship Finals 2024",
+            date: "2024-03-15",
+            venue: "Main Arena",
+            qrCode: "QR123456",
+            status: "confirmed"
+          },
+          {
+            id: 2,
+            event: "Summer Olympics Qualifiers",
+            date: "2024-03-20",
+            venue: "Field A",
+            qrCode: "QR789012",
+            status: "confirmed"
+          }
+        ]);
+
+        setAnnouncements([
+          {
+            id: 1,
+            title: "Match Schedule Update",
+            message: "Your next match has been moved to 3 PM",
+            date: "2024-03-12",
+            priority: "high"
+          },
+          {
+            id: 2,
+            title: "Equipment Reminder",
+            message: "Don't forget to bring your gear",
+            date: "2024-03-10",
+            priority: "medium"
+          }
+        ]);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchDashboardData();
   }, []);
 
-  const handleJoinTeam = async (teamId) => {
-    try {
-      // TODO: Implement join team functionality
-      console.log('Join team:', teamId);
-    } catch (error) {
-      console.error('Error joining team:', error);
-    }
-  };
-
-  const handleRegisterForEvent = async (eventId) => {
-    try {
-      // TODO: Implement event registration
-      console.log('Register for event:', eventId);
-    } catch (error) {
-      console.error('Error registering for event:', error);
-    }
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="p-6">
+        <div className="mb-8">
+          <Skeleton variant="title" width="200px" className="mb-2" />
+          <Skeleton variant="text" width="400px" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} variant="card" className="h-32" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton variant="card" className="h-96" />
+          <Skeleton variant="card" className="h-96" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Athlete Dashboard</h1>
-          <p className="mt-2 text-gray-600">Track your matches, registrations, and tickets</p>
+    <div className="p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Athlete Dashboard</h1>
+        <p className="text-gray-600 mt-2">
+          Track your matches, results, and tickets.
+        </p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Next Match</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {nextMatch ? '1' : '0'}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <CalendarDaysIcon className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">My Results</p>
+              <p className="text-2xl font-bold text-gray-900">{myResults.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <TrophyIcon className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">My Tickets</p>
+              <p className="text-2xl font-bold text-gray-900">{myTickets.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <QrCodeIcon className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Announcements</p>
+              <p className="text-2xl font-bold text-gray-900">{announcements.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <BellIcon className="w-6 h-6 text-yellow-600" />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="flex flex-wrap gap-4">
+          <Button variant="primary" size="md">
+            <UserPlusIcon className="w-5 h-5 mr-2" />
+            Register/Join Team
+          </Button>
+          <Button variant="outline" size="md">
+            <QrCodeIcon className="w-5 h-5 mr-2" />
+            View QR Tickets
+          </Button>
         </div>
+      </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Next Match */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Next Match</h2>
+            <ClockIcon className="w-5 h-5 text-gray-400" />
+          </div>
+          
+          {nextMatch ? (
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <h3 className="font-medium text-gray-900">{nextMatch.event}</h3>
+              <p className="text-sm text-gray-600 mt-1">vs {nextMatch.opponent}</p>
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center text-sm text-gray-600">
+                  <CalendarDaysIcon className="w-4 h-4 mr-2" />
+                  {nextMatch.date} at {nextMatch.time}
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-4 h-4 mr-2">📍</span>
+                  {nextMatch.venue}
                 </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Next Match</p>
-                <p className="text-lg font-semibold text-gray-900">
-                  {nextMatch ? new Date(nextMatch.start_at).toLocaleDateString() : 'None'}
-                </p>
+              <div className="mt-4">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  nextMatch.status === 'upcoming' 
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {nextMatch.status}
+                </span>
               </div>
             </div>
-          </div>
+          ) : (
+            <EmptyState
+              icon={CalendarDaysIcon}
+              title="No Upcoming Matches"
+              description="You don't have any matches scheduled."
+            />
+          )}
+        </Card>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Active Tickets</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.activeTickets}</p>
-              </div>
-            </div>
+        {/* My Results */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">My Results</h2>
+            <Link to="/athlete/results">
+              <Button variant="outline" size="sm">View All</Button>
+            </Link>
           </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-yellow-100 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L16 4l-4 4H4.828z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Unread Announcements</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.unreadAnnouncements}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-100 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">My Registrations</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.myRegistrations}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow mb-8">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Link
-                to="/athlete/my-registrations"
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                My Registrations
-              </Link>
-              
-              <Link
-                to="/athlete/my-tickets"
-                className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                </svg>
-                My Tickets
-              </Link>
-              
-              <Link
-                to="/events"
-                className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Browse Events
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* My Fixtures */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">My Fixtures</h2>
-            </div>
-            <div className="divide-y divide-gray-200">
-              {myFixtures.length > 0 ? (
-                myFixtures.map((fixture) => (
-                  <div key={fixture.id} className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {fixture.home?.name} vs {fixture.away?.name}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(fixture.start_at).toLocaleDateString()} at {new Date(fixture.start_at).toLocaleTimeString()}
-                        </p>
-                      </div>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {fixture.status}
-                      </span>
-                    </div>
+          
+          {myResults.length > 0 ? (
+            <div className="space-y-4">
+              {myResults.slice(0, 3).map((result) => (
+                <div key={result.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <h3 className="font-medium text-gray-900">{result.event}</h3>
+                    <p className="text-sm text-gray-600">vs {result.opponent}</p>
+                    <p className="text-xs text-gray-500">{result.date}</p>
                   </div>
-                ))
-              ) : (
-                <div className="px-6 py-4 text-center text-gray-500">
-                  No fixtures found
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* My Results */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">My Results</h2>
-            </div>
-            <div className="divide-y divide-gray-200">
-              {myResults.length > 0 ? (
-                myResults.map((result) => (
-                  <div key={result.id} className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {result.fixture?.home?.name} {result.home_score} - {result.away_score} {result.fixture?.away?.name}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(result.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        result.winner?.id === result.fixture?.home?.id ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {result.winner?.id === result.fixture?.home?.id ? 'W' : 'L'}
-                      </span>
-                    </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900">{result.score}</p>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      result.result === 'win' 
+                        ? 'bg-green-100 text-green-800'
+                        : result.result === 'draw'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {result.result}
+                    </span>
+                    {result.position && (
+                      <p className="text-xs text-gray-500 mt-1">#{result.position}</p>
+                    )}
                   </div>
-                ))
-              ) : (
-                <div className="px-6 py-4 text-center text-gray-500">
-                  No results found
                 </div>
-              )}
+              ))}
             </div>
+          ) : (
+            <EmptyState
+              icon={TrophyIcon}
+              title="No Results Yet"
+              description="Your match results will appear here."
+            />
+          )}
+        </Card>
+
+        {/* My Tickets (QR) */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">My Tickets (QR)</h2>
+            <Link to="/athlete/tickets">
+              <Button variant="outline" size="sm">View All</Button>
+            </Link>
           </div>
-        </div>
+          
+          {myTickets.length > 0 ? (
+            <div className="space-y-4">
+              {myTickets.slice(0, 3).map((ticket) => (
+                <div key={ticket.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <h3 className="font-medium text-gray-900">{ticket.event}</h3>
+                    <p className="text-sm text-gray-600">{ticket.venue}</p>
+                    <p className="text-xs text-gray-500">{ticket.date}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center">
+                      <QrCodeIcon className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{ticket.qrCode}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={QrCodeIcon}
+              title="No Tickets Yet"
+              description="Your event tickets will appear here."
+            />
+          )}
+        </Card>
+
+        {/* Announcements */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Announcements</h2>
+            <Link to="/athlete/announcements">
+              <Button variant="outline" size="sm">View All</Button>
+            </Link>
+          </div>
+          
+          {announcements.length > 0 ? (
+            <div className="space-y-4">
+              {announcements.map((announcement) => (
+                <div key={announcement.id} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+                  <div className={`w-2 h-2 rounded-full mt-2 ${
+                    announcement.priority === 'high' 
+                      ? 'bg-red-500'
+                      : announcement.priority === 'medium'
+                      ? 'bg-yellow-500'
+                      : 'bg-green-500'
+                  }`} />
+                  <div className="flex-1">
+                    <h3 className="font-medium text-gray-900">{announcement.title}</h3>
+                    <p className="text-sm text-gray-600 mt-1">{announcement.message}</p>
+                    <p className="text-xs text-gray-500 mt-2">{announcement.date}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={BellIcon}
+              title="No Announcements"
+              description="No recent announcements for you."
+            />
+          )}
+        </Card>
       </div>
     </div>
   );
-};
-
-export default AthleteDashboard;
+}

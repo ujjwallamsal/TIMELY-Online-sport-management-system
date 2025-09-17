@@ -7,4 +7,5 @@ class ResultsConfig(AppConfig):
     
     def ready(self):
         """Import signals when app is ready"""
-        from . import signals  # noqa
+        # from . import signals  # noqa  # Temporarily commented out for migration
+        pass

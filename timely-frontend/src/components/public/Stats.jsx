@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { publicAPI } from '../../lib/api';
+import { publicAPI } from '../../services/api';
 import useSocket from '../../hooks/useSocket';
 import Skeleton from '../ui/Skeleton';
 import { 

@@ -264,7 +264,7 @@ export class API {
 
   // Authentication endpoints
   async login(email, password) {
-    const response = await this.post('/accounts/auth/login/', { email, password });
+    const response = await this.post('/auth/login', { email, password });
     if (response.access) {
       this.setToken(response.access);
     }
@@ -280,7 +280,7 @@ export class API {
   }
 
   async getCurrentUser() {
-    return this.get('/accounts/users/me/');
+    return this.get('/me');
   }
 
   // Events endpoints
@@ -475,3 +475,132 @@ export class APIError extends Error {
     this.data = data;
   }
 }
+
+// Create and export a default API instance
+const api = new API();
+export default api;
+
+// Export individual functions for backward compatibility
+export const getEvent = (id) => api.get(`/events/${id}/`);
+export const getEventRegistrations = (id) => api.get(`/events/${id}/registrations/`);
+export const getEventFixtures = (id) => api.get(`/events/${id}/fixtures/`);
+export const getEventResults = (id) => api.get(`/events/${id}/results/`);
+
+// Public API functions
+export const getPublicEvent = (id) => api.get(`/public/events/${id}/`);
+export const getPublicEvents = (params = {}) => api.get('/public/events/', { params });
+export const getPublicEventFixtures = (id) => api.get(`/public/events/${id}/fixtures/`);
+export const getPublicEventResults = (id) => api.get(`/public/events/${id}/results/`);
+export const getPublicEventLeaderboard = (id) => api.get(`/public/events/${id}/leaderboard/`);
+
+// Other commonly used functions
+export const listEvents = (params = {}) => api.get('/events/', { params });
+export const createEvent = (data) => api.post('/events/', data);
+export const updateEvent = (id, data) => api.put(`/events/${id}/`, data);
+export const deleteEvent = (id) => api.delete(`/events/${id}/`);
+
+// Public pages
+export const getPublicPage = (slug) => api.get(`/public/pages/${slug}/`);
+export const getPublicBanners = () => api.get('/public/banners/');
+
+// API modules for organized imports
+export const publicAPI = {
+  getEvent: getPublicEvent,
+  getEvents: getPublicEvents,
+  getEventFixtures: getPublicEventFixtures,
+  getEventResults: getPublicEventResults,
+  getEventLeaderboard: getPublicEventLeaderboard,
+  getPage: getPublicPage,
+  getBanners: getPublicBanners
+};
+
+export const eventsAPI = {
+  list: listEvents,
+  get: getEvent,
+  create: createEvent,
+  update: updateEvent,
+  delete: deleteEvent,
+  getRegistrations: getEventRegistrations,
+  getFixtures: getEventFixtures,
+  getResults: getEventResults
+};
+
+export const fixturesAPI = {
+  list: (params) => api.get('/fixtures/', { params }),
+  get: (id) => api.get(`/fixtures/${id}/`),
+  create: (data) => api.post('/fixtures/', data),
+  update: (id, data) => api.put(`/fixtures/${id}/`, data),
+  delete: (id) => api.delete(`/fixtures/${id}/`),
+  getConflicts: (id) => api.get(`/fixtures/${id}/conflicts/`)
+};
+
+export const mediaAPI = {
+  list: (params) => api.get('/media/', { params }),
+  get: (id) => api.get(`/media/${id}/`),
+  create: (data) => api.post('/media/', data),
+  update: (id, data) => api.put(`/media/${id}/`, data),
+  delete: (id) => api.delete(`/media/${id}/`),
+  upload: (data) => api.post('/media/upload/', data)
+};
+
+export const reportsAPI = {
+  getEvents: () => api.get('/reports/events/'),
+  getRegistrations: () => api.get('/reports/registrations/'),
+  getFixtures: () => api.get('/reports/fixtures/'),
+  getResults: () => api.get('/reports/results/')
+};
+
+export const kycAPI = {
+  get: () => api.get('/kyc/'),
+  submit: (data) => api.post('/kyc/', data),
+  update: (data) => api.put('/kyc/', data)
+};
+
+export const roleRequestAPI = {
+  get: () => api.get('/role-requests/'),
+  create: (data) => api.post('/role-requests/', data),
+  update: (id, data) => api.put(`/role-requests/${id}/`, data)
+};
+
+// Ticket functions
+export const checkinTicket = (qrPayload, gate) => api.post('/tickets/checkin/', { qr_payload: qrPayload, gate });
+export const validateTicket = (ticketId) => api.get(`/tickets/${ticketId}/validate/`);
+
+// Team member functions
+export const addTeamMember = (teamId, data) => api.post(`/teams/${teamId}/members/`, data);
+export const updateTeamMember = (teamId, memberId, data) => api.put(`/teams/${teamId}/members/${memberId}/`, data);
+
+// Additional missing functions
+export const getFixtureConflicts = (id) => api.get(`/fixtures/${id}/conflicts/`);
+
+// News and banner functions
+export const getNews = (params = {}) => api.get('/news/', { params });
+export const createNews = (data) => api.post('/news/', data);
+export const updateNews = (id, data) => api.put(`/news/${id}/`, data);
+export const deleteNews = (id) => api.delete(`/news/${id}/`);
+export const getBanners = (params = {}) => api.get('/banners/', { params });
+export const createBanner = (data) => api.post('/banners/', data);
+export const updateBanner = (id, data) => api.put(`/banners/${id}/`, data);
+export const deleteBanner = (id) => api.delete(`/banners/${id}/`);
+
+// Profile functions
+export const updateProfile = (data) => api.put('/profile/', data);
+export const changePassword = (data) => api.post('/change-password/', data);
+
+// Ticket checkout functions
+export const listTicketTypes = (eventId) => api.get(`/events/${eventId}/ticket-types/`);
+export const createTicketOrder = (data) => api.post('/orders/', data);
+export const createStripeCheckout = (orderId) => api.post(`/orders/${orderId}/stripe-checkout/`);
+export const createPayPalCheckout = (orderId) => api.post(`/orders/${orderId}/paypal-checkout/`);
+
+// Utility functions
+export const utils = {
+  formatDate: (date) => new Date(date).toLocaleDateString(),
+  formatCurrency: (amount) => `$${amount.toFixed(2)}`,
+  formatFileSize: (bytes) => {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    if (bytes === 0) return '0 Bytes';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  }
+};

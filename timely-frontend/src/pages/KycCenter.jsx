@@ -1,6 +1,6 @@
 // pages/KycCenter.jsx
 import React, { useState, useEffect } from 'react';
-import { kycAPI } from '../lib/api';
+import { kycAPI } from '../services/api';
 import KycStatusBadge from '../components/KycStatusBadge';
 import { toast } from 'react-hot-toast';
 

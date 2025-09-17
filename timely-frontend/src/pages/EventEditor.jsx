@@ -9,7 +9,7 @@ import {
   createDivision, 
   updateDivision, 
   deleteDivision 
-} from '../lib/api';
+} from '../services/api';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';

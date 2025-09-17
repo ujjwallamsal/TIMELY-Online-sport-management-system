@@ -9,7 +9,7 @@ import {
   approveDocument,
   rejectDocument,
   downloadDocument
-} from '../lib/api';
+} from '../services/api';
 
 export default function RegistrationManagement() {
   const { eventId } = useParams();

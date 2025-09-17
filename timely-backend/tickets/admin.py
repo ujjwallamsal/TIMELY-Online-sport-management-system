@@ -5,19 +5,19 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils import timezone
 
-from .models import TicketType, TicketOrder, Ticket
+from .models import TicketType, TicketOrder, Ticket, Purchase
 
 
 @admin.register(TicketType)
 class TicketTypeAdmin(admin.ModelAdmin):
     list_display = [
-        'name', 'event', 'price_dollars', 'available_quantity',
+        'name', 'event_id', 'price_dollars', 'available_quantity',
         'quantity_total', 'on_sale', 'created_at'
     ]
     list_filter = [
         'on_sale', 'created_at'
     ]
-    search_fields = ['name', 'event__name', 'description']
+    search_fields = ['name', 'description']
     readonly_fields = [
         'quantity_sold', 'available_quantity', 'created_at', 'updated_at'
     ]
@@ -25,7 +25,7 @@ class TicketTypeAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('event', 'fixture', 'name', 'description')
+            'fields': ('event_id', 'fixture_id', 'name', 'description')
         }),
         ('Pricing', {
             'fields': ('price_cents', 'currency')
@@ -51,17 +51,50 @@ class TicketTypeAdmin(admin.ModelAdmin):
     available_quantity.short_description = 'Available'
 
 
+@admin.register(Purchase)
+class PurchaseAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'user', 'event_id', 'status', 'amount_dollars', 'currency', 'created_at'
+    ]
+    list_filter = [
+        'status', 'currency', 'created_at'
+    ]
+    search_fields = [
+        'id', 'user__email', 'intent_id'
+    ]
+    readonly_fields = [
+        'amount_dollars', 'created_at', 'updated_at'
+    ]
+    list_editable = ['status']
+    
+    fieldsets = (
+        ('Purchase Information', {
+            'fields': ('user', 'event_id', 'status')
+        }),
+        ('Payment', {
+            'fields': ('intent_id', 'amount', 'currency')
+        }),
+        ('Timing', {
+            'fields': ('created_at', 'updated_at')
+        })
+    )
+    
+    def amount_dollars(self, obj):
+        return f"${obj.amount_dollars:.2f}"
+    amount_dollars.short_description = 'Amount'
+
+
 @admin.register(TicketOrder)
 class TicketOrderAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'user', 'event', 'status', 'total_dollars',
+        'id', 'user', 'event_id', 'status', 'total_dollars',
         'payment_provider', 'created_at'
     ]
     list_filter = [
         'status', 'payment_provider', 'currency', 'created_at'
     ]
     search_fields = [
-        'id', 'user__email', 'event__name'
+        'id', 'user__email'
     ]
     readonly_fields = [
         'total_dollars', 'created_at', 'updated_at'
@@ -70,7 +103,7 @@ class TicketOrderAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Order Information', {
-            'fields': ('user', 'event', 'fixture', 'status')
+            'fields': ('user', 'event_id', 'fixture_id', 'status')
         }),
         ('Payment', {
             'fields': (
@@ -91,44 +124,40 @@ class TicketOrderAdmin(admin.ModelAdmin):
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = [
-        'serial', 'order_link', 'ticket_type_name', 'status', 'issued_at', 'is_valid'
+        'code', 'purchase_link', 'status', 'created_at', 'is_valid'
     ]
     list_filter = [
-        'status', 'issued_at', 'ticket_type__name'
+        'status', 'created_at'
     ]
     search_fields = [
-        'serial', 'qr_payload', 'order__id'
+        'code', 'qr_payload', 'purchase__id'
     ]
     readonly_fields = [
-        'serial', 'qr_payload', 'issued_at', 'is_valid'
+        'code', 'qr_payload', 'created_at', 'is_valid'
     ]
     list_editable = ['status']
     
     fieldsets = (
         ('Ticket Information', {
-            'fields': ('serial', 'order', 'ticket_type', 'status')
+            'fields': ('code', 'purchase', 'status')
         }),
         ('QR Code', {
             'fields': ('qr_payload',)
         }),
         ('Timing', {
-            'fields': ('issued_at', 'used_at')
+            'fields': ('created_at', 'used_at')
         }),
         ('Validation', {
             'fields': ('is_valid',)
         })
     )
     
-    def order_link(self, obj):
-        if obj.order:
-            url = reverse('admin:tickets_ticketorder_change', args=[obj.order.id])
-            return format_html('<a href="{}">{}</a>', url, obj.order.id)
+    def purchase_link(self, obj):
+        if obj.purchase:
+            url = reverse('admin:tickets_purchase_change', args=[obj.purchase.id])
+            return format_html('<a href="{}">{}</a>', url, obj.purchase.id)
         return '-'
-    order_link.short_description = 'Order'
-    
-    def ticket_type_name(self, obj):
-        return obj.ticket_type.name if obj.ticket_type else '-'
-    ticket_type_name.short_description = 'Type'
+    purchase_link.short_description = 'Purchase'
     
     def is_valid(self, obj):
         return obj.is_valid

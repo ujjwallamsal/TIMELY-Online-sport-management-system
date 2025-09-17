@@ -1,109 +1,48 @@
-// src/pages/public/Home.jsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  CalendarDaysIcon,
-  MapPinIcon,
-  ClockIcon,
-  TrophyIcon,
-  FireIcon,
-  PlayIcon,
-  CheckCircleIcon,
+import { 
+  CalendarIcon, 
+  MapPinIcon, 
+  ClockIcon, 
   UserGroupIcon,
+  TrophyIcon,
+  FireIcon
 } from '@heroicons/react/24/outline';
-import Button from '../../components/ui/Button';
-import Card from '../../components/ui/Card';
-import Skeleton from '../../components/ui/Skeleton';
+import { getPublicEvents } from '../services/api';
 
-export default function PublicHome() {
-  const [upcomingEvents, setUpcomingEvents] = useState([]);
-  const [ongoingEvents, setOngoingEvents] = useState([]);
-  const [featuredEvents, setFeaturedEvents] = useState([]);
+const Home = () => {
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('upcoming');
 
   useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        // Simulate API calls
-        setFeaturedEvents([
-          {
-            id: 1,
-            name: "Championship Finals 2024",
-            sport: "Basketball",
-            startDate: "2024-03-15T18:00:00Z",
-            venue: "Madison Square Garden",
-            image: "/images/events/championship-2024.jpg",
-            description: "The ultimate basketball championship featuring the best teams from around the world.",
-            price: 75,
-            capacity: 20000,
-            registered: 18500,
-            status: "upcoming"
-          },
-          {
-            id: 2,
-            name: "Summer Olympics Qualifiers",
-            sport: "Swimming",
-            startDate: "2024-03-20T09:00:00Z",
-            venue: "Aquatic Center",
-            image: "/images/events/olympics-qualifiers.jpg",
-            description: "Qualifying rounds for the upcoming Summer Olympics swimming events.",
-            price: 45,
-            capacity: 5000,
-            registered: 3200,
-            status: "upcoming"
-          }
-        ]);
-
-        setUpcomingEvents([
-          {
-            id: 3,
-            name: "Local Basketball Tournament",
-            sport: "Basketball",
-            startDate: "2024-03-10T14:00:00Z",
-            venue: "Community Center",
-            price: 25,
-            status: "upcoming"
-          },
-          {
-            id: 4,
-            name: "Tennis Championship",
-            sport: "Tennis",
-            startDate: "2024-03-12T10:00:00Z",
-            venue: "Tennis Club",
-            price: 35,
-            status: "upcoming"
-          }
-        ]);
-
-        setOngoingEvents([
-          {
-            id: 5,
-            name: "Soccer League Finals",
-            sport: "Soccer",
-            startDate: "2024-03-08T16:00:00Z",
-            venue: "Stadium Complex",
-            price: 30,
-            status: "ongoing"
-          }
-        ]);
-      } catch (error) {
-        console.error('Error fetching events:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchEvents();
-  }, []);
+  }, [filter]);
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      const response = await getPublicEvents(1, '', '', '', { status: filter });
+      setEvents(response.data.results || []);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
+    return new Date(dateString).toLocaleDateString('en-US', {
+      weekday: 'short',
       year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (dateString) => {
+    return new Date(dateString).toLocaleTimeString('en-US', {
+      hour: 'numeric',
       minute: '2-digit'
     });
   };
@@ -121,232 +60,197 @@ export default function PublicHome() {
     }
   };
 
-  const getStatusIcon = (status) => {
+  const getStatusText = (status) => {
     switch (status) {
       case 'upcoming':
-        return ClockIcon;
+        return 'Upcoming';
       case 'ongoing':
-        return PlayIcon;
+        return 'Live Now';
       case 'completed':
-        return CheckCircleIcon;
+        return 'Completed';
       default:
-        return CalendarDaysIcon;
+        return status;
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="space-y-8">
-            <Skeleton variant="title" width="300px" className="mb-4" />
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[...Array(6)].map((_, i) => (
-                <Skeleton key={i} variant="card" className="h-64" />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="text-center">
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
-              Welcome to Timely Sports
+            <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
+              Welcome to Timely
             </h1>
-            <p className="text-xl text-white mb-8 max-w-3xl mx-auto">
-              Discover, register, and participate in the best sporting events. 
-              From local tournaments to international championships.
+            <p className="mt-6 text-xl leading-8 text-blue-100">
+              Discover and participate in exciting sports events happening around you.
+              From local tournaments to major competitions, find your next challenge.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" variant="white">
+            <div className="mt-10 flex items-center justify-center gap-x-6">
+              <Link
+                to="/events"
+                className="rounded-md bg-white px-6 py-3 text-sm font-semibold text-blue-600 shadow-sm hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
                 Browse Events
-              </Button>
-              <Button size="lg" variant="outline" className="border-white text-white hover:bg-white hover:text-indigo-600">
-                Create Event
-              </Button>
+              </Link>
+              <Link
+                to="/register"
+                className="text-sm font-semibold leading-6 text-white hover:text-blue-100"
+              >
+                Create Account <span aria-hidden="true">→</span>
+              </Link>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Events Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Featured Events */}
-        <section className="mb-16">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold text-gray-900">Featured Events</h2>
-            <Link to="/events" className="text-indigo-600 hover:text-indigo-500 font-medium">
-              View all events →
-            </Link>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {featuredEvents.map((event) => {
-              const StatusIcon = getStatusIcon(event.status);
-              return (
-                <Card key={event.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                  <div className="relative">
-                    <div className="h-48 bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center">
-                      <TrophyIcon className="h-16 w-16 text-white" />
-                    </div>
-                    <div className="absolute top-4 right-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
-                        <StatusIcon className="w-3 h-3 mr-1" />
-                        {event.status}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="p-6">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{event.name}</h3>
-                    <p className="text-gray-600 mb-4">{event.description}</p>
-                    
-                    <div className="space-y-2 mb-4">
-                      <div className="flex items-center text-sm text-gray-500">
-                        <CalendarDaysIcon className="w-4 h-4 mr-2" />
-                        {formatDate(event.startDate)}
-                      </div>
-                      <div className="flex items-center text-sm text-gray-500">
-                        <MapPinIcon className="w-4 h-4 mr-2" />
-                        {event.venue}
-                      </div>
-                      <div className="flex items-center text-sm text-gray-500">
-                        <UserGroupIcon className="w-4 h-4 mr-2" />
-                        {event.registered.toLocaleString()} / {event.capacity.toLocaleString()} registered
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="text-2xl font-bold text-indigo-600">${event.price}</span>
-                      <Button>
-                        Register Now
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        </section>
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+            Featured Events
+          </h2>
+          <p className="mt-4 text-lg text-gray-600">
+            Discover exciting sports events happening near you
+          </p>
+        </div>
 
-        {/* Upcoming Events */}
-        <section className="mb-16">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold text-gray-900">Upcoming Events</h2>
-            <Link to="/events?status=upcoming" className="text-indigo-600 hover:text-indigo-500 font-medium">
-              View all upcoming →
-            </Link>
+        {/* Filter Tabs */}
+        <div className="flex justify-center mb-8">
+          <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+            {[
+              { key: 'upcoming', label: 'Upcoming', icon: CalendarIcon },
+              { key: 'ongoing', label: 'Live Now', icon: FireIcon },
+              { key: 'completed', label: 'Completed', icon: TrophyIcon }
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  filter === tab.key
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <tab.icon className="h-4 w-4 mr-2" />
+                {tab.label}
+              </button>
+            ))}
           </div>
-          
+        </div>
+
+        {/* Events Grid */}
+        {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {upcomingEvents.map((event) => {
-              const StatusIcon = getStatusIcon(event.status);
-              return (
-                <Card key={event.id} className="p-6 hover:shadow-lg transition-shadow duration-300">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded mb-4"></div>
+                <div className="h-3 bg-gray-200 rounded mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded mb-4"></div>
+                <div className="flex space-x-2">
+                  <div className="h-6 bg-gray-200 rounded w-16"></div>
+                  <div className="h-6 bg-gray-200 rounded w-20"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : events.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {events.map((event) => (
+              <div key={event.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">{event.name}</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
+                      {event.title}
+                    </h3>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
-                      <StatusIcon className="w-3 h-3 mr-1" />
-                      {event.status}
+                      {getStatusText(event.status)}
                     </span>
                   </div>
                   
+                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                    {event.description}
+                  </p>
+                  
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center text-sm text-gray-500">
-                      <CalendarDaysIcon className="w-4 h-4 mr-2" />
-                      {formatDate(event.startDate)}
+                      <CalendarIcon className="h-4 w-4 mr-2" />
+                      {formatDate(event.start_date)}
                     </div>
                     <div className="flex items-center text-sm text-gray-500">
-                      <MapPinIcon className="w-4 h-4 mr-2" />
-                      {event.venue}
+                      <ClockIcon className="h-4 w-4 mr-2" />
+                      {formatTime(event.start_date)}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-500">
+                      <MapPinIcon className="h-4 w-4 mr-2" />
+                      {event.venue?.name || 'TBA'}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-500">
+                      <UserGroupIcon className="h-4 w-4 mr-2" />
+                      {event.sport?.name || 'Sport'}
                     </div>
                   </div>
                   
                   <div className="flex items-center justify-between">
-                    <span className="text-xl font-bold text-indigo-600">${event.price}</span>
-                    <Button size="sm">
-                      Register
-                    </Button>
+                    <div className="text-sm text-gray-500">
+                      {event.registration_fee ? `$${event.registration_fee}` : 'Free'}
+                    </div>
+                    <Link
+                      to={`/events/${event.id}`}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      View Details →
+                    </Link>
                   </div>
-                </Card>
-              );
-            })}
+                </div>
+              </div>
+            ))}
           </div>
-        </section>
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-4">
+              <CalendarIcon className="mx-auto h-12 w-12" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No events found</h3>
+            <p className="text-gray-500">
+              {filter === 'upcoming' 
+                ? 'No upcoming events at the moment. Check back later!'
+                : `No ${filter} events found.`
+              }
+            </p>
+          </div>
+        )}
+      </div>
 
-        {/* Ongoing Events */}
-        {ongoingEvents.length > 0 && (
-          <section className="mb-16">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-3xl font-bold text-gray-900">Live Events</h2>
-              <Link to="/events?status=ongoing" className="text-indigo-600 hover:text-indigo-500 font-medium">
-                View all live →
+      {/* CTA Section */}
+      <div className="bg-gray-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-white">
+              Ready to get started?
+            </h2>
+            <p className="mt-4 text-lg text-gray-300">
+              Join thousands of athletes and sports enthusiasts in our community.
+            </p>
+            <div className="mt-8 flex items-center justify-center gap-x-6">
+              <Link
+                to="/register"
+                className="rounded-md bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                Create Account
+              </Link>
+              <Link
+                to="/events"
+                className="text-sm font-semibold leading-6 text-white hover:text-gray-300"
+              >
+                Browse Events <span aria-hidden="true">→</span>
               </Link>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {ongoingEvents.map((event) => {
-                const StatusIcon = getStatusIcon(event.status);
-                return (
-                  <Card key={event.id} className="p-6 hover:shadow-lg transition-shadow duration-300 border-l-4 border-green-500">
-                    <div className="flex items-start justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">{event.name}</h3>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
-                        <StatusIcon className="w-3 h-3 mr-1" />
-                        {event.status}
-                      </span>
-                    </div>
-                    
-                    <div className="space-y-2 mb-4">
-                      <div className="flex items-center text-sm text-gray-500">
-                        <CalendarDaysIcon className="w-4 h-4 mr-2" />
-                        {formatDate(event.startDate)}
-                      </div>
-                      <div className="flex items-center text-sm text-gray-500">
-                        <MapPinIcon className="w-4 h-4 mr-2" />
-                        {event.venue}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="text-xl font-bold text-indigo-600">${event.price}</span>
-                      <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                        <FireIcon className="w-4 h-4 mr-1" />
-                        Watch Live
-                      </Button>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* Call to Action */}
-        <section className="bg-indigo-600 rounded-lg p-8 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Ready to Get Started?
-          </h2>
-          <p className="text-white mb-6 max-w-2xl mx-auto">
-            Join thousands of athletes and sports enthusiasts who trust Timely Sports 
-            for their event management needs.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" variant="white">
-              Create Account
-            </Button>
-            <Button size="lg" variant="outline" className="border-white text-white hover:bg-white hover:text-indigo-600">
-              Learn More
-            </Button>
           </div>
-        </section>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default Home;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getNews, createNews, updateNews, deleteNews, getBanners, createBanner, updateBanner, deleteBanner } from '../lib/api';
+import { getNews, createNews, updateNews, deleteNews, getBanners, createBanner, updateBanner, deleteBanner } from '../services/api';
 
 const NewsAdmin = () => {
   const [activeTab, setActiveTab] = useState('news');

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getPublicPage } from '../lib/api';
+import { getPublicPage } from '../services/api';
 
 const Contact = () => {
   const [page, setPage] = useState(null);

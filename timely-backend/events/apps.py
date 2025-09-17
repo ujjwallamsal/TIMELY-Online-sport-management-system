@@ -7,4 +7,5 @@ class EventsConfig(AppConfig):
     
     def ready(self):
         """Import signals when app is ready"""
-        import events.signals
+        # import events.signals  # Temporarily commented out for migration
+        pass

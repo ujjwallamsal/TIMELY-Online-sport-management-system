@@ -1,250 +1,187 @@
-// src/components/admin/AdminLayout.jsx
 import React, { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import {
+import { 
+  HomeIcon, 
+  CalendarIcon, 
+  UserGroupIcon, 
+  TrophyIcon, 
+  MapPinIcon, 
+  UsersIcon, 
+  MegaphoneIcon, 
+  ChartBarIcon, 
+  CogIcon,
   Bars3Icon,
   XMarkIcon,
   MagnifyingGlassIcon,
   BellIcon,
-  UserCircleIcon,
-  ChevronDownIcon,
-  HomeIcon,
-  CalendarDaysIcon,
-  UserGroupIcon,
-  TrophyIcon,
-  ChartBarIcon,
-  MegaphoneIcon,
-  Cog6ToothIcon,
-  BuildingOfficeIcon,
-  ClipboardDocumentListIcon,
-  TableCellsIcon,
-  DocumentChartBarIcon,
+  UserCircleIcon
 } from '@heroicons/react/24/outline';
-import { useAuth } from '../../context/AuthContext';
 
-const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: HomeIcon, current: false },
-  { name: 'Events', href: '/admin/events', icon: CalendarDaysIcon, current: false },
-  { name: 'Registrations', href: '/admin/registrations', icon: ClipboardDocumentListIcon, current: false },
-  { name: 'Fixtures', href: '/admin/fixtures', icon: TableCellsIcon, current: false },
-  { name: 'Results', href: '/admin/results', icon: TrophyIcon, current: false },
-  { name: 'Venues', href: '/admin/venues', icon: BuildingOfficeIcon, current: false },
-  { name: 'Users', href: '/admin/users', icon: UserGroupIcon, current: false },
-  { name: 'Announcements', href: '/admin/announcements', icon: MegaphoneIcon, current: false },
-  { name: 'Reports', href: '/admin/reports', icon: DocumentChartBarIcon, current: false },
-  { name: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon, current: false },
-];
-
-export default function AdminLayout() {
+const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Update current page based on location
-  const updatedNavigation = navigation.map(item => ({
-    ...item,
-    current: location.pathname === item.href || location.pathname.startsWith(item.href + '/')
-  }));
+  const navigation = [
+    { name: 'Dashboard', href: '/admin', icon: HomeIcon, current: location.pathname === '/admin' },
+    { name: 'Events', href: '/admin/events', icon: CalendarIcon, current: location.pathname.startsWith('/admin/events') },
+    { name: 'Registrations', href: '/admin/registrations', icon: UserGroupIcon, current: location.pathname.startsWith('/admin/registrations') },
+    { name: 'Fixtures', href: '/admin/fixtures', icon: TrophyIcon, current: location.pathname.startsWith('/admin/fixtures') },
+    { name: 'Results', href: '/admin/results', icon: ChartBarIcon, current: location.pathname.startsWith('/admin/results') },
+    { name: 'Venues', href: '/admin/venues', icon: MapPinIcon, current: location.pathname.startsWith('/admin/venues') },
+    { name: 'Users', href: '/admin/users', icon: UsersIcon, current: location.pathname.startsWith('/admin/users') },
+    { name: 'Announcements', href: '/admin/announcements', icon: MegaphoneIcon, current: location.pathname.startsWith('/admin/announcements') },
+    { name: 'Reports', href: '/admin/reports', icon: ChartBarIcon, current: location.pathname.startsWith('/admin/reports') },
+    { name: 'Settings', href: '/admin/settings', icon: CogIcon, current: location.pathname.startsWith('/admin/settings') },
+  ];
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      // Implement global search functionality
-      console.log('Searching for:', searchQuery);
-      // navigate(`/admin/search?q=${encodeURIComponent(searchQuery)}`);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/');
-    } catch (error) {
-      console.error('Logout failed:', error);
+      // Implement global search
+      navigate(`/admin/search?q=${encodeURIComponent(searchQuery)}`);
     }
   };
 
   return (
-    <div className="h-screen flex overflow-hidden bg-gray-100">
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 flex z-40 md:hidden">
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white">
-            <div className="absolute top-0 right-0 -mr-12 pt-2">
-              <button
-                type="button"
-                className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <XMarkIcon className="h-6 w-6 text-white" />
-              </button>
-            </div>
-            <SidebarContent navigation={updatedNavigation} />
+    <div className="min-h-screen bg-gray-50">
+      {/* Mobile sidebar */}
+      <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white shadow-xl">
+          <div className="flex h-16 items-center justify-between px-4">
+            <h1 className="text-xl font-bold text-gray-900">Timely Admin</h1>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
           </div>
+          <nav className="flex-1 px-4 py-4 space-y-1">
+            {navigation.map((item) => (
+              <a
+                key={item.name}
+                href={item.href}
+                className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                  item.current
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon
+                  className={`mr-3 h-5 w-5 ${
+                    item.current ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
+                  }`}
+                />
+                {item.name}
+              </a>
+            ))}
+          </nav>
         </div>
-      )}
+      </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex md:flex-shrink-0">
-        <div className="flex flex-col w-64">
-          <SidebarContent navigation={updatedNavigation} />
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+        <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
+          <div className="flex h-16 items-center px-4">
+            <h1 className="text-xl font-bold text-gray-900">Timely Admin</h1>
+          </div>
+          <nav className="flex-1 px-4 py-4 space-y-1">
+            {navigation.map((item) => (
+              <a
+                key={item.name}
+                href={item.href}
+                className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                  item.current
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon
+                  className={`mr-3 h-5 w-5 ${
+                    item.current ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
+                  }`}
+                />
+                {item.name}
+              </a>
+            ))}
+          </nav>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="flex flex-col w-0 flex-1 overflow-hidden">
-        {/* Topbar */}
-        <div className="relative z-10 flex-shrink-0 flex h-16 bg-white shadow">
+      <div className="lg:pl-64">
+        {/* Top bar */}
+        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
           <button
             type="button"
-            className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 md:hidden"
+            className="-m-2.5 p-2.5 text-gray-700 lg:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Bars3Icon className="h-6 w-6" />
           </button>
 
-          <div className="flex-1 px-4 flex justify-between">
-            <div className="flex-1 flex items-center">
-              {/* Global Search */}
-              <form className="w-full flex md:ml-0" onSubmit={handleSearch}>
-                <div className="relative w-full text-gray-400 focus-within:text-gray-600">
-                  <div className="absolute inset-y-0 left-0 flex items-center pointer-events-none">
-                    <MagnifyingGlassIcon className="h-5 w-5" />
-                  </div>
-                  <input
-                    id="search-field"
-                    className="block w-full h-full pl-8 pr-3 py-2 border-transparent text-gray-900 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-0 focus:border-transparent sm:text-sm"
-                    placeholder="Search events, users, venues..."
-                    type="search"
-                    name="search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-              </form>
-            </div>
+          {/* Separator */}
+          <div className="h-6 w-px bg-gray-200 lg:hidden" />
 
-            <div className="ml-4 flex items-center md:ml-6">
-              {/* Notifications */}
+          {/* Global search */}
+          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
+            <form className="relative flex flex-1" onSubmit={handleSearch}>
+              <label htmlFor="search-field" className="sr-only">
+                Search
+              </label>
+              <MagnifyingGlassIcon className="pointer-events-none absolute inset-y-0 left-0 h-full w-5 text-gray-400" />
+              <input
+                id="search-field"
+                className="block h-full w-full border-0 py-0 pl-8 pr-0 text-gray-900 placeholder:text-gray-400 focus:ring-0 sm:text-sm"
+                placeholder="Search events, users, venues..."
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </form>
+          </div>
+
+          <div className="flex items-center gap-x-4 lg:gap-x-6">
+            {/* Notifications */}
+            <button
+              type="button"
+              className="-m-2.5 p-2.5 text-gray-400 hover:text-gray-500"
+            >
+              <BellIcon className="h-6 w-6" />
+            </button>
+
+            {/* Separator */}
+            <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" />
+
+            {/* Profile dropdown */}
+            <div className="relative">
               <button
                 type="button"
-                className="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="-m-1.5 flex items-center p-1.5"
               >
-                <BellIcon className="h-6 w-6" />
+                <UserCircleIcon className="h-8 w-8 text-gray-400" />
+                <span className="hidden lg:flex lg:items-center">
+                  <span className="ml-4 text-sm font-semibold leading-6 text-gray-900">
+                    Admin User
+                  </span>
+                </span>
               </button>
-
-              {/* Profile dropdown */}
-              <div className="ml-3 relative">
-                <div>
-                  <button
-                    type="button"
-                    className="max-w-xs bg-white flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                    onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  >
-                    <span className="sr-only">Open user menu</span>
-                    <UserCircleIcon className="h-8 w-8 text-gray-400" />
-                    <span className="ml-2 text-sm font-medium text-gray-700 hidden md:block">
-                      {user?.first_name || user?.email}
-                    </span>
-                    <ChevronDownIcon className="ml-1 h-4 w-4 text-gray-400" />
-                  </button>
-                </div>
-
-                {userMenuOpen && (
-                  <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    <a
-                      href="/admin/profile"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      Your Profile
-                    </a>
-                    <a
-                      href="/admin/settings"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      Settings
-                    </a>
-                    <button
-                      onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>
 
         {/* Page content */}
-        <main className="flex-1 relative overflow-y-auto focus:outline-none">
-          <div className="py-6">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-              <Outlet />
-            </div>
+        <main className="py-6">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <Outlet />
           </div>
         </main>
       </div>
     </div>
   );
-}
+};
 
-function SidebarContent({ navigation }) {
-  const navigate = useNavigate();
-
-  return (
-    <div className="flex flex-col h-0 flex-1 border-r border-gray-200 bg-white">
-      {/* Logo */}
-      <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-        <div className="flex items-center flex-shrink-0 px-4">
-          <div className="flex items-center">
-            <TrophyIcon className="h-8 w-8 text-indigo-600" />
-            <span className="ml-2 text-xl font-bold text-gray-900">Timely Admin</span>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="mt-5 flex-1 px-2 space-y-1">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.name}
-                onClick={() => navigate(item.href)}
-                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left transition-colors duration-150 ${
-                  item.current
-                    ? 'bg-indigo-100 text-indigo-900'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <Icon
-                  className={`mr-3 flex-shrink-0 h-5 w-5 ${
-                    item.current ? 'text-indigo-500' : 'text-gray-400 group-hover:text-gray-500'
-                  }`}
-                />
-                {item.name}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
-      {/* Footer */}
-      <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-        <div className="flex-shrink-0 w-full group block">
-          <div className="flex items-center">
-            <div>
-              <div className="text-sm font-medium text-gray-700">Timely Sports</div>
-              <div className="text-xs text-gray-500">Event Management</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+export default AdminLayout;

@@ -1,178 +1,177 @@
+// src/pages/admin/EventForm.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { 
-  getEvent, 
-  createEvent, 
-  updateEvent 
-} from '../../lib/api';
-import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import Input from '../../components/ui/Input';
-import Button from '../../components/ui/Button';
-import { 
-  CheckCircleIcon, 
-  ExclamationTriangleIcon,
-  CalendarIcon,
+  CalendarDaysIcon,
   MapPinIcon,
-  CurrencyDollarIcon
+  ClockIcon,
+  UserGroupIcon
 } from '@heroicons/react/24/outline';
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
+import Card from '../../components/ui/Card';
+import Dialog from '../../components/ui/Dialog';
 
-const EventForm = () => {
+export default function EventForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  
-  const isEditing = Boolean(id);
-  const [loading, setLoading] = useState(isEditing);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
+  const isEdit = Boolean(id);
   
   const [formData, setFormData] = useState({
-    name: '',
-    sport: '',
+    title: '',
     description: '',
-    start_datetime: '',
-    end_datetime: '',
-    registration_open_at: '',
-    registration_close_at: '',
-    location: '',
-    capacity: 0,
-    fee_cents: 0
+    startDate: '',
+    endDate: '',
+    venue: '',
+    category: '',
+    maxParticipants: '',
+    registrationFee: '',
+    visibility: 'PUBLIC',
+    status: 'DRAFT'
   });
+  
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const categories = [
+    { value: 'BASKETBALL', label: 'Basketball' },
+    { value: 'SOCCER', label: 'Soccer' },
+    { value: 'TENNIS', label: 'Tennis' },
+    { value: 'VOLLEYBALL', label: 'Volleyball' },
+    { value: 'SWIMMING', label: 'Swimming' },
+    { value: 'TRACK', label: 'Track & Field' }
+  ];
+
+  const visibilityOptions = [
+    { value: 'PUBLIC', label: 'Public' },
+    { value: 'PRIVATE', label: 'Private' }
+  ];
+
+  const statusOptions = [
+    { value: 'DRAFT', label: 'Draft' },
+    { value: 'PUBLISHED', label: 'Published' },
+    { value: 'CANCELLED', label: 'Cancelled' }
+  ];
 
   useEffect(() => {
-    if (isEditing) {
-      fetchEvent();
+    if (isEdit) {
+      // Load event data for editing
+      loadEventData();
     }
-  }, [id, isEditing]);
+  }, [id, isEdit]);
 
-  const fetchEvent = async () => {
+  const loadEventData = async () => {
     try {
       setLoading(true);
-      const response = await getEvent(id);
-      const event = response.data;
-      
+      // Mock data - replace with actual API call
       setFormData({
-        name: event.name || '',
-        sport: event.sport || '',
-        description: event.description || '',
-        start_datetime: event.start_datetime ? event.start_datetime.slice(0, 16) : '',
-        end_datetime: event.end_datetime ? event.end_datetime.slice(0, 16) : '',
-        registration_open_at: event.registration_open_at ? event.registration_open_at.slice(0, 16) : '',
-        registration_close_at: event.registration_close_at ? event.registration_close_at.slice(0, 16) : '',
-        location: event.location || '',
-        capacity: event.capacity || 0,
-        fee_cents: event.fee_cents || 0
+        title: 'Championship Finals 2024',
+        description: 'The ultimate championship event',
+        startDate: '2024-03-15',
+        endDate: '2024-03-17',
+        venue: 'Main Arena',
+        category: 'BASKETBALL',
+        maxParticipants: '32',
+        registrationFee: '50',
+        visibility: 'PUBLIC',
+        status: 'PUBLISHED'
       });
-    } catch (err) {
-      console.error('Error fetching event:', err);
-      setError('Failed to load event details.');
+    } catch (error) {
+      console.error('Error loading event:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value, type } = e.target;
-    let processedValue = value;
-    
-    if (type === 'number') {
-      // Handle empty string and NaN values for number inputs
-      if (value === '' || isNaN(value)) {
-        processedValue = 0;
-      } else {
-        processedValue = parseFloat(value) || 0;
-      }
-    }
-    
+  const handleChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
-      [name]: processedValue
+      [field]: value
     }));
+    
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.title.trim()) {
+      newErrors.title = 'Title is required';
+    }
+    
+    if (!formData.startDate) {
+      newErrors.startDate = 'Start date is required';
+    }
+    
+    if (!formData.endDate) {
+      newErrors.endDate = 'End date is required';
+    }
+    
+    if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
+      newErrors.endDate = 'End date must be after start date';
+    }
+    
+    if (!formData.venue.trim()) {
+      newErrors.venue = 'Venue is required';
+    }
+    
+    if (!formData.category) {
+      newErrors.category = 'Category is required';
+    }
+    
+    if (formData.maxParticipants && (isNaN(formData.maxParticipants) || formData.maxParticipants < 1)) {
+      newErrors.maxParticipants = 'Max participants must be a positive number';
+    }
+    
+    if (formData.registrationFee && (isNaN(formData.registrationFee) || formData.registrationFee < 0)) {
+      newErrors.registrationFee = 'Registration fee must be a non-negative number';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (!validateForm()) {
+      return;
+    }
+    
     try {
-      setSaving(true);
-      setError(null);
-      setSuccess(false);
+      setLoading(true);
       
-      // Validate required fields
-      if (!formData.name.trim()) {
-        setError('Event name is required.');
-        return;
-      }
-      if (!formData.sport.trim()) {
-        setError('Sport is required.');
-        return;
-      }
-      if (!formData.start_datetime) {
-        setError('Start date and time is required.');
-        return;
-      }
-      if (!formData.end_datetime) {
-        setError('End date and time is required.');
-        return;
-      }
-      if (!formData.location.trim()) {
-        setError('Location is required.');
-        return;
-      }
+      // Mock API call - replace with actual API call
+      console.log('Saving event:', formData);
       
-      // Convert fee to cents
-      const eventData = {
-        ...formData,
-        fee_cents: Math.round(formData.fee_cents)
-      };
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      if (isEditing) {
-        await updateEvent(id, eventData);
-        setSuccess(true);
-        setTimeout(() => setSuccess(false), 3000);
-      } else {
-        await createEvent(eventData);
-        setSuccess(true);
-        // Navigate after showing success message
-        setTimeout(() => {
-          navigate('/admin/events');
-        }, 2000);
-      }
-      
-    } catch (err) {
-      console.error('Error saving event:', err);
-      
-      // Provide more specific error messages
-      if (err.response?.status === 400) {
-        const errorData = err.response.data;
-        if (typeof errorData === 'object' && errorData !== null) {
-          const errorMessages = Object.values(errorData).flat();
-          setError(errorMessages.join(', '));
-        } else {
-          setError('Please check your input and try again.');
-        }
-      } else if (err.response?.status === 401) {
-        setError('You are not authorized to perform this action.');
-      } else if (err.response?.status === 403) {
-        setError('You do not have permission to create/edit events.');
-      } else if (err.response?.status >= 500) {
-        setError('Server error. Please try again later.');
-      } else {
-        setError('Failed to save event. Please try again.');
-      }
+      // Navigate back to events list
+      navigate('/admin/events');
+    } catch (error) {
+      console.error('Error saving event:', error);
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
+  if (loading && isEdit) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-center items-center h-64">
-            <LoadingSpinner size="lg" />
+      <div className="p-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+          <div className="space-y-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-4 bg-gray-200 rounded"></div>
+            ))}
           </div>
         </div>
       </div>
@@ -180,188 +179,163 @@ const EventForm = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            {isEditing ? 'Edit Event' : 'Create Event'}
-          </h1>
-          <p className="mt-2 text-gray-600">
-            {isEditing ? 'Update event details' : 'Create a new sports event'}
-          </p>
-        </div>
-
-        {/* Status messages */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
-            <div className="flex items-center">
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-400 mr-2" />
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        )}
-        
-        {success && (
-          <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
-            <div className="flex items-center">
-              <CheckCircleIcon className="h-5 w-5 text-green-400 mr-2" />
-              <p className="text-sm text-green-700">
-                {isEditing ? 'Event updated successfully!' : 'Event created successfully! Redirecting...'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Basic Information */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Basic Information</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input
-                label="Event Name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                required
-                placeholder="Enter event name"
-              />
-              
-              <Input
-                label="Sport"
-                name="sport"
-                value={formData.sport}
-                onChange={handleInputChange}
-                required
-                placeholder="e.g., Football, Basketball"
-              />
-            </div>
-            
-            <div className="mt-6">
-              <Input
-                label="Description"
-                name="description"
-                as="textarea"
-                rows={4}
-                value={formData.description}
-                onChange={handleInputChange}
-                placeholder="Describe the event..."
-              />
-            </div>
-          </div>
-
-          {/* Date and Time */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Date and Time</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input
-                label="Start Date & Time"
-                name="start_datetime"
-                type="datetime-local"
-                value={formData.start_datetime}
-                onChange={handleInputChange}
-                required
-              />
-              
-              <Input
-                label="End Date & Time"
-                name="end_datetime"
-                type="datetime-local"
-                value={formData.end_datetime}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-              <Input
-                label="Registration Opens"
-                name="registration_open_at"
-                type="datetime-local"
-                value={formData.registration_open_at}
-                onChange={handleInputChange}
-                helperText="When participants can start registering"
-              />
-              
-              <Input
-                label="Registration Closes"
-                name="registration_close_at"
-                type="datetime-local"
-                value={formData.registration_close_at}
-                onChange={handleInputChange}
-                helperText="When registration ends"
-              />
-            </div>
-          </div>
-
-          {/* Location and Capacity */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Location and Capacity</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input
-                label="Location"
-                name="location"
-                value={formData.location}
-                onChange={handleInputChange}
-                required
-                placeholder="Event venue or location"
-              />
-              
-              <Input
-                label="Capacity"
-                name="capacity"
-                type="number"
-                min="0"
-                value={formData.capacity}
-                onChange={handleInputChange}
-                helperText="Maximum number of participants (0 for unlimited)"
-              />
-            </div>
-          </div>
-
-          {/* Registration Fee */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Registration Fee</h2>
-            
-            <Input
-              label="Fee (USD)"
-              name="fee_cents"
-              type="number"
-              min="0"
-              step="0.01"
-              value={formData.fee_cents / 100}
-              onChange={(e) => {
-                const feeValue = parseFloat(e.target.value) || 0;
-                setFormData(prev => ({ ...prev, fee_cents: Math.round(feeValue * 100) }));
-              }}
-              helperText="Registration fee in USD (0 for free)"
-            />
-          </div>
-
-          {/* Submit buttons */}
-          <div className="flex justify-end space-x-4">
-            <Button
-              type="button"
-              onClick={() => navigate('/admin/events')}
-              className="bg-gray-600 hover:bg-gray-700 text-white"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              loading={saving}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {isEditing ? 'Update Event' : 'Create Event'}
-            </Button>
-          </div>
-        </form>
+    <div className="p-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">
+          {isEdit ? 'Edit Event' : 'Create Event'}
+        </h1>
+        <p className="text-gray-600 mt-2">
+          {isEdit ? 'Update event details and settings.' : 'Fill in the details to create a new event.'}
+        </p>
       </div>
+
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Basic Information */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
+            
+            <div className="space-y-4">
+              <Input
+                label="Event Title"
+                value={formData.title}
+                onChange={(e) => handleChange('title', e.target.value)}
+                error={errors.title}
+                placeholder="Enter event title"
+                required
+              />
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => handleChange('description', e.target.value)}
+                  rows={4}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter event description"
+                />
+              </div>
+              
+              <Select
+                label="Category"
+                value={formData.category}
+                onChange={(value) => handleChange('category', value)}
+                options={categories}
+                error={errors.category}
+                placeholder="Select category"
+                required
+              />
+              
+              <Select
+                label="Visibility"
+                value={formData.visibility}
+                onChange={(value) => handleChange('visibility', value)}
+                options={visibilityOptions}
+                placeholder="Select visibility"
+              />
+            </div>
+          </Card>
+
+          {/* Date & Time */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Date & Time</h2>
+            
+            <div className="space-y-4">
+              <Input
+                label="Start Date"
+                type="date"
+                value={formData.startDate}
+                onChange={(e) => handleChange('startDate', e.target.value)}
+                error={errors.startDate}
+                required
+              />
+              
+              <Input
+                label="End Date"
+                type="date"
+                value={formData.endDate}
+                onChange={(e) => handleChange('endDate', e.target.value)}
+                error={errors.endDate}
+                required
+              />
+              
+              <Input
+                label="Venue"
+                value={formData.venue}
+                onChange={(e) => handleChange('venue', e.target.value)}
+                error={errors.venue}
+                placeholder="Enter venue name"
+                required
+              />
+            </div>
+          </Card>
+
+          {/* Registration Settings */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Registration Settings</h2>
+            
+            <div className="space-y-4">
+              <Input
+                label="Max Participants"
+                type="number"
+                value={formData.maxParticipants}
+                onChange={(e) => handleChange('maxParticipants', e.target.value)}
+                error={errors.maxParticipants}
+                placeholder="Enter maximum participants"
+              />
+              
+              <Input
+                label="Registration Fee ($)"
+                type="number"
+                step="0.01"
+                value={formData.registrationFee}
+                onChange={(e) => handleChange('registrationFee', e.target.value)}
+                error={errors.registrationFee}
+                placeholder="Enter registration fee"
+              />
+              
+              {isEdit && (
+                <Select
+                  label="Status"
+                  value={formData.status}
+                  onChange={(value) => handleChange('status', value)}
+                  options={statusOptions}
+                  placeholder="Select status"
+                />
+              )}
+            </div>
+          </Card>
+
+          {/* Actions */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Actions</h2>
+            
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                loading={loading}
+                className="flex-1"
+              >
+                {isEdit ? 'Update Event' : 'Create Event'}
+              </Button>
+              
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => navigate('/admin/events')}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </form>
     </div>
   );
-};
-
-export default EventForm;
+}

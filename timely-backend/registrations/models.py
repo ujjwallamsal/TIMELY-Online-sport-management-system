@@ -85,6 +85,7 @@ class Registration(models.Model):
             models.Index(fields=['team']),
             models.Index(fields=['type']),
             models.Index(fields=['submitted_at']),
+            models.Index(fields=['status', 'submitted_at']),  # Required index
         ]
     
     def __str__(self):

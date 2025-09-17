@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { ChevronUpIcon, ChevronDownIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 const DataTable = ({
   data = [],
@@ -7,6 +7,8 @@ const DataTable = ({
   loading = false,
   pagination = true,
   pageSize = 10,
+  currentPage = 1,
+  totalCount = 0,
   onPageChange,
   onSortChange,
   onRowClick,
@@ -17,18 +19,35 @@ const DataTable = ({
   searchPlaceholder = "Search...",
   emptyMessage = "No data available",
   className = "",
-  stickyHeader = false,
+  stickyHeader = true,
+  serverPagination = false,
   ...props
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState('');
   const [sortDirection, setSortDirection] = useState('asc');
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
-  // Filter data based on search term
+  // Debounce search term with 300ms delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Call onSearch when debounced term changes
+  useEffect(() => {
+    if (onSearch && searchable) {
+      onSearch(debouncedSearchTerm);
+    }
+  }, [debouncedSearchTerm, onSearch, searchable]);
+
+  // Filter data based on search term (only for client-side filtering)
   const filteredData = useMemo(() => {
-    if (!searchTerm || !searchable) return data;
+    if (serverPagination || !searchTerm || !searchable) return data;
     
     return data.filter(row => 
       columns.some(column => {
@@ -36,11 +55,11 @@ const DataTable = ({
         return String(value).toLowerCase().includes(searchTerm.toLowerCase());
       })
     );
-  }, [data, searchTerm, columns, searchable]);
+  }, [data, searchTerm, columns, searchable, serverPagination]);
 
-  // Sort data
+  // Sort data (only for client-side sorting)
   const sortedData = useMemo(() => {
-    if (!sortField) return filteredData;
+    if (serverPagination || !sortField) return filteredData;
     
     return [...filteredData].sort((a, b) => {
       const aValue = a[sortField];
@@ -50,18 +69,18 @@ const DataTable = ({
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [filteredData, sortField, sortDirection]);
+  }, [filteredData, sortField, sortDirection, serverPagination]);
 
-  // Paginate data
+  // Paginate data (only for client-side pagination)
   const paginatedData = useMemo(() => {
-    if (!pagination) return sortedData;
+    if (serverPagination || !pagination) return sortedData;
     
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
     return sortedData.slice(startIndex, endIndex);
-  }, [sortedData, currentPage, pageSize, pagination]);
+  }, [sortedData, currentPage, pageSize, pagination, serverPagination]);
 
-  const totalPages = Math.ceil(filteredData.length / pageSize);
+  const totalPages = serverPagination ? Math.ceil(totalCount / pageSize) : Math.ceil(filteredData.length / pageSize);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -148,17 +167,22 @@ const DataTable = ({
     <div className={`bg-white rounded-lg shadow ${className}`}>
       {/* Search and Bulk Actions */}
       {(searchable || bulkActions.length > 0) && (
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200">
           <div className="flex items-center justify-between">
             {searchable && (
               <div className="flex-1 max-w-md">
-                <input
-                  type="text"
-                  placeholder={searchPlaceholder}
-                  value={searchTerm}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder={searchPlaceholder}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
               </div>
             )}
             
@@ -192,7 +216,7 @@ const DataTable = ({
           <thead className={`bg-gray-50 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}>
             <tr>
               {bulkActions.length > 0 && (
-                <th className="px-6 py-3 text-left">
+                <th className="px-4 py-3 text-left">
                   <input
                     type="checkbox"
                     checked={selectedRows.size === paginatedData.length && paginatedData.length > 0}
@@ -204,7 +228,7 @@ const DataTable = ({
               {columns.map((column, index) => (
                 <th
                   key={index}
-                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                  className={`px-4 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider ${
                     column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
                   }`}
                   onClick={column.sortable ? () => handleSort(column.accessor) : undefined}
@@ -243,7 +267,7 @@ const DataTable = ({
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
                   {bulkActions.length > 0 && (
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <input
                         type="checkbox"
                         checked={selectedRows.has(row.id)}
@@ -256,7 +280,7 @@ const DataTable = ({
                   {columns.map((column, colIndex) => (
                     <td
                       key={colIndex}
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                      className="px-4 py-3 whitespace-nowrap text-sm text-gray-900"
                     >
                       {renderCell(row, column)}
                     </td>
@@ -279,10 +303,14 @@ const DataTable = ({
 
       {/* Pagination */}
       {pagination && totalPages > 1 && (
-        <div className="px-6 py-4 border-t border-gray-200">
+        <div className="px-4 py-3 border-t border-gray-200">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-700">
-              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredData.length)} of {filteredData.length} results
+              {serverPagination ? (
+                <>Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} results</>
+              ) : (
+                <>Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredData.length)} of {filteredData.length} results</>
+              )}
             </div>
             <div className="flex items-center space-x-2">
               <button

@@ -2,10 +2,71 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
-from .models import TicketType, TicketOrder, Ticket
+from .models import Purchase, Ticket, TicketType, TicketOrder
 from .services.pricing import format_price
 
 User = get_user_model()
+
+
+class PurchaseSerializer(serializers.ModelSerializer):
+    """Serializer for Purchase model"""
+    
+    amount_dollars = serializers.ReadOnlyField()
+    event_name = serializers.CharField(source='event.name', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    
+    class Meta:
+        model = Purchase
+        fields = [
+            'id', 'user', 'user_email', 'event', 'event_name',
+            'intent_id', 'status', 'amount', 'amount_dollars', 'currency',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class TicketSerializer(serializers.ModelSerializer):
+    """Serializer for simplified Ticket model"""
+    
+    event_name = serializers.CharField(source='purchase.event.name', read_only=True)
+    purchase_status = serializers.CharField(source='purchase.status', read_only=True)
+    
+    class Meta:
+        model = Ticket
+        fields = [
+            'id', 'purchase', 'code', 'status', 'qr_payload',
+            'event_name', 'purchase_status', 'created_at', 'used_at'
+        ]
+        read_only_fields = ['id', 'code', 'qr_payload', 'created_at']
+
+
+class CheckoutSerializer(serializers.Serializer):
+    """Serializer for checkout request"""
+    
+    event_id = serializers.IntegerField()
+    amount = serializers.IntegerField(min_value=1, help_text="Amount in cents")
+    currency = serializers.CharField(max_length=3, default='USD')
+    
+    def validate_event_id(self, value):
+        """Validate event exists"""
+        from events.models import Event
+        try:
+            Event.objects.get(id=value)
+        except Event.DoesNotExist:
+            raise serializers.ValidationError("Event not found")
+        return value
+
+
+class TicketVerificationSerializer(serializers.Serializer):
+    """Serializer for ticket verification"""
+    
+    code = serializers.CharField(max_length=50)
+    
+    def validate_code(self, value):
+        """Validate ticket code format"""
+        if not value.startswith('TKT-'):
+            raise serializers.ValidationError("Invalid ticket code format")
+        return value
 
 
 class TicketTypeSerializer(serializers.ModelSerializer):

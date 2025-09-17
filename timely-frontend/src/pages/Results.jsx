@@ -7,7 +7,7 @@ import Input from '../components/ui/Input';
 import { 
   getPublicResults, 
   getPublicEvents 
-} from '../lib/api';
+} from '../services/api';
 import { 
   TrophyIcon, 
   CalendarIcon, 

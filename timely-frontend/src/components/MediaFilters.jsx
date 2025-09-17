@@ -3,7 +3,7 @@
  * Provides search, kind selection, and event/fixture filtering.
  */
 import React, { useState, useEffect } from 'react';
-import { eventsAPI, fixturesAPI } from '../lib/api';
+import { eventsAPI, fixturesAPI } from '../services/api';
 
 const MediaFilters = ({ 
   filters, 

@@ -1,7 +1,7 @@
 // components/RescheduleDialog.jsx
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../hooks/useToast.jsx';
-import * as api from '../lib/api';
+import * as api from '../services/api';
 
 export default function RescheduleDialog({ match, onClose, onSuccess }) {
   const { show, error: showError, success } = useToast();

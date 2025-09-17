@@ -2,20 +2,29 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from . import views, views_stripe, webhooks
+from . import views, views_stripe, webhooks, views_ticketing
 
 app_name = 'tickets'
 
 urlpatterns = [
+    # New simplified ticketing endpoints
+    path('checkout/', views_ticketing.checkout, name='checkout'),
+    path('webhook/', views_ticketing.webhook, name='webhook'),
+    path('me/tickets/', views_ticketing.MyTicketsView.as_view(), name='my-tickets'),
+    path('tickets/<int:ticket_id>/qr/', views_ticketing.TicketQRView.as_view(), name='ticket-qr'),
+    path('verify/', views_ticketing.verify_ticket, name='verify-ticket'),
+    path('tickets/<int:ticket_id>/use/', views_ticketing.use_ticket, name='use-ticket'),
+    
+    # Original complex ticketing endpoints (keeping for backward compatibility)
     # Public/Authenticated ticket type views
     path('events/<int:event_id>/types/', 
          views.TicketTypeListView.as_view(), 
          name='event-ticket-types'),
     
-    # Order management
-    path('checkout/', 
+    # Order management (legacy)
+    path('legacy/checkout/', 
          views.checkout, 
-         name='checkout'),
+         name='legacy-checkout'),
     
     # Stripe integration
     path('stripe/checkout/', 
