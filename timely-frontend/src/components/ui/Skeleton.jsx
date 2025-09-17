@@ -1,92 +1,102 @@
+// src/components/ui/Skeleton.jsx
 import React from 'react';
 
-const Skeleton = ({ 
-  className = '', 
-  variant = 'rectangular',
+const Skeleton = ({
+  className = '',
+  variant = 'text',
   width,
   height,
-  children,
-  ...props 
+  rounded = true,
+  animate = true,
+  ...props
 }) => {
-  const baseClasses = 'animate-pulse bg-gray-200 rounded';
-  
-  const variantClasses = {
-    rectangular: 'rounded',
-    circular: 'rounded-full',
+  const baseClasses = `
+    bg-gray-200 ${animate ? 'animate-pulse' : ''} ${rounded ? 'rounded' : ''}
+    ${className}
+  `;
+
+  const variants = {
     text: 'h-4',
-    button: 'h-10 rounded-md',
-    card: 'h-32 rounded-lg',
-    avatar: 'w-10 h-10 rounded-full',
-    list: 'h-16 rounded-md'
+    title: 'h-6',
+    subtitle: 'h-5',
+    avatar: 'h-10 w-10 rounded-full',
+    button: 'h-10 w-24 rounded-lg',
+    card: 'h-32 w-full rounded-lg',
+    image: 'h-48 w-full rounded-lg',
+    table: 'h-12 w-full rounded-lg',
+    list: 'h-16 w-full rounded-lg'
   };
 
-  const style = {};
-  if (width) style.width = width;
-  if (height) style.height = height;
+  const style = {
+    ...(width && { width }),
+    ...(height && { height })
+  };
 
   return (
     <div
-      className={`${baseClasses} ${variantClasses[variant]} ${className}`}
+      className={`${baseClasses} ${variants[variant]}`}
       style={style}
       {...props}
-    >
-      {children}
-    </div>
+    />
   );
 };
 
-// Predefined skeleton components
-export const SkeletonText = ({ lines = 1, className = '' }) => (
-  <div className={`space-y-2 ${className}`}>
-    {Array.from({ length: lines }).map((_, i) => (
-      <Skeleton
-        key={i}
-        variant="text"
-        className={`${i === lines - 1 ? 'w-3/4' : 'w-full'}`}
-      />
-    ))}
-  </div>
-);
-
+// Skeleton components for common layouts
 export const SkeletonCard = ({ className = '' }) => (
-  <div className={`p-4 border rounded-lg ${className}`}>
-    <Skeleton variant="avatar" className="mb-3" />
-    <SkeletonText lines={3} />
-    <div className="mt-4 flex gap-2">
-      <Skeleton variant="button" className="w-20" />
-      <Skeleton variant="button" className="w-16" />
+  <div className={`p-6 border border-gray-200 rounded-lg ${className}`}>
+    <div className="flex items-center space-x-4">
+      <Skeleton variant="avatar" />
+      <div className="flex-1 space-y-2">
+        <Skeleton variant="title" width="60%" />
+        <Skeleton variant="text" width="40%" />
+      </div>
+    </div>
+    <div className="mt-4 space-y-2">
+      <Skeleton variant="text" />
+      <Skeleton variant="text" width="80%" />
     </div>
   </div>
 );
 
-export const SkeletonList = ({ items = 3, className = '' }) => (
+export const SkeletonTable = ({ rows = 5, columns = 4, className = '' }) => (
   <div className={`space-y-3 ${className}`}>
-    {Array.from({ length: items }).map((_, i) => (
-      <div key={i} className="flex items-center gap-3 p-3 border rounded-lg">
-        <Skeleton variant="avatar" />
-        <div className="flex-1">
-          <SkeletonText lines={2} />
-        </div>
-        <Skeleton variant="button" className="w-16" />
+    {/* Header */}
+    <div className="flex space-x-4">
+      {[...Array(columns)].map((_, i) => (
+        <Skeleton key={i} variant="text" width="20%" />
+      ))}
+    </div>
+    {/* Rows */}
+    {[...Array(rows)].map((_, rowIndex) => (
+      <div key={rowIndex} className="flex space-x-4">
+        {[...Array(columns)].map((_, colIndex) => (
+          <Skeleton key={colIndex} variant="text" width="20%" />
+        ))}
       </div>
     ))}
   </div>
 );
 
-export const SkeletonTable = ({ rows = 5, columns = 4, className = '' }) => (
-  <div className={`space-y-2 ${className}`}>
-    {/* Header */}
-    <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
-      {Array.from({ length: columns }).map((_, i) => (
-        <Skeleton key={i} variant="text" className="h-6" />
-      ))}
-    </div>
-    {/* Rows */}
-    {Array.from({ length: rows }).map((_, i) => (
-      <div key={i} className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
-        {Array.from({ length: columns }).map((_, j) => (
-          <Skeleton key={j} variant="text" className="h-4" />
-        ))}
+export const SkeletonList = ({ items = 5, className = '' }) => (
+  <div className={`space-y-3 ${className}`}>
+    {[...Array(items)].map((_, i) => (
+      <div key={i} className="flex items-center space-x-3">
+        <Skeleton variant="avatar" />
+        <div className="flex-1 space-y-2">
+          <Skeleton variant="text" width="70%" />
+          <Skeleton variant="text" width="50%" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+export const SkeletonForm = ({ fields = 4, className = '' }) => (
+  <div className={`space-y-4 ${className}`}>
+    {[...Array(fields)].map((_, i) => (
+      <div key={i} className="space-y-2">
+        <Skeleton variant="text" width="25%" />
+        <Skeleton variant="button" width="100%" />
       </div>
     ))}
   </div>

@@ -1,0 +1,36 @@
+TICKET PURCHASE CONFIRMATION
+============================
+
+Thank you for your purchase!
+
+ORDER DETAILS
+-------------
+Order ID: {{ order_id }}
+Event: {{ event_name }}
+Total Amount: ${{ total_amount|floatformat:2 }} {{ currency }}
+Purchase Date: {{ order_date|date:"F j, Y \a\t g:i A" }}
+
+YOUR TICKETS
+------------
+{% for ticket in tickets %}
+Ticket #{{ ticket.serial }}
+Event: {{ event_name }}
+Ticket Type: {{ ticket.ticket_type_name }}
+Price: ${{ ticket.price_cents|floatformat:2 }}
+QR Code: {{ ticket.qr_payload }}
+
+{% endfor %}
+
+VIEW YOUR TICKETS
+-----------------
+Visit: {{ ticket_url }}
+
+IMPORTANT INFORMATION
+---------------------
+- Please bring a valid ID and this confirmation email to the event
+- Your QR code will be scanned at the entrance
+- Keep this email safe as proof of purchase
+
+If you have any questions, please contact us at support@timely.local
+
+Thank you for choosing Timely!

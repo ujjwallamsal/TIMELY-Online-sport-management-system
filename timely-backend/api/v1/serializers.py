@@ -7,7 +7,9 @@ from registrations.models import Registration
 from fixtures.models import Fixture
 from results.models import Result, LeaderboardEntry
 from notifications.models import Notification
-from api.models import Sport, Team, TeamMember, Announcement
+from sports.models import Sport
+from teams.models import Team, TeamMember
+from api.models import Announcement
 
 
 class UserSerializer(serializers.ModelSerializer):

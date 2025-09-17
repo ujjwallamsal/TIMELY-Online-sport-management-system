@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import Toast from './Toast';
+import Toast from './ui/Toast';
 
 /**
  * Toast context for managing global toast notifications

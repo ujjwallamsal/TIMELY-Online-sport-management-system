@@ -28,24 +28,7 @@ from .permissions import IsAdmin, IsOrganizer, IsCoach, IsAthlete, IsSpectator
 from .filters import EventFilter, RegistrationFilter, FixtureFilter, ResultFilter
 
 
-class AuthViewSet(viewsets.ViewSet):
-    """Authentication endpoints"""
-    permission_classes = [AllowAny]
-    
-    @action(detail=False, methods=['post'])
-    def login(self, request):
-        # Implementation for login
-        pass
-    
-    @action(detail=False, methods=['post'])
-    def refresh(self, request):
-        # Implementation for token refresh
-        pass
-    
-    @action(detail=False, methods=['post'])
-    def register(self, request):
-        # Implementation for registration
-        pass
+# AuthViewSet removed - authentication is handled in accounts app
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -330,87 +313,5 @@ class EventFixturesView(APIView):
         return Response(serializer.data)
 
 
-class GenerateFixturesView(APIView):
-    """Generate fixtures for an event"""
-    permission_classes = [IsAuthenticated, IsOrganizer]
-    
-    def post(self, request, event_id):
-        # Implementation for fixture generation
-        return Response({'status': 'Fixtures generated'})
-
-
-class EventLeaderboardView(APIView):
-    """Get leaderboard for an event"""
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, event_id):
-        leaderboard = LeaderboardEntry.objects.filter(event_id=event_id)
-        serializer = LeaderboardEntrySerializer(leaderboard, many=True)
-        return Response(serializer.data)
-
-
-class EventAnnounceView(APIView):
-    """Send announcement for an event"""
-    permission_classes = [IsAuthenticated, IsOrganizer]
-    
-    def post(self, request, event_id):
-        # Implementation for sending announcements
-        return Response({'status': 'Announcement sent'})
-
-
-class EventAnnouncementsView(APIView):
-    """Get announcements for an event"""
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, event_id):
-        announcements = Notification.objects.filter(
-            kind='announcement',
-            # Add event filtering logic here
-        )
-        serializer = AnnouncementSerializer(announcements, many=True)
-        return Response(serializer.data)
-
-
-class FixtureResultView(APIView):
-    """Enter result for a fixture"""
-    permission_classes = [IsAuthenticated, IsOrganizer]
-    
-    def post(self, request, fixture_id):
-        # Implementation for entering results
-        return Response({'status': 'Result entered'})
-
-
-class LockResultView(APIView):
-    """Lock a result"""
-    permission_classes = [IsAuthenticated, IsOrganizer]
-    
-    def post(self, request, result_id):
-        # Implementation for locking results
-        return Response({'status': 'Result locked'})
-
-
-class ApproveRegistrationView(APIView):
-    """Approve a registration"""
-    permission_classes = [IsAuthenticated, IsOrganizer]
-    
-    def patch(self, request, registration_id):
-        # Implementation for approving registrations
-        return Response({'status': 'Registration approved'})
-
-
-class RejectRegistrationView(APIView):
-    """Reject a registration"""
-    permission_classes = [IsAuthenticated, IsOrganizer]
-    
-    def patch(self, request, registration_id):
-        # Implementation for rejecting registrations
-        return Response({'status': 'Registration rejected'})
-
-
-class CancelEventView(APIView):
-    """Cancel an event"""
-    permission_classes = [IsAuthenticated, IsOrganizer]
-    
-    def post(self, request, event_id):
-        # Implementation for cancelling events
-        return Response({'status': 'Event cancelled'})
+# Stub view classes removed - these were placeholder implementations
+# Real functionality should be implemented in the respective app views

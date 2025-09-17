@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 
 from events.models import Event
 from fixtures.models import Fixture
-from api.models import Team
+from teams.models import Team
 from notifications.models import Notification
 from scheduler.tasks import (
     send_fixture_reminders,

@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 
 from events.models import Event
 from venues.models import Venue
-from api.models import Team
+from teams.models import Team
 
 User = get_user_model()
 
@@ -37,7 +37,7 @@ class Fixture(models.Model):
     
     # Teams
     home = models.ForeignKey(
-        'api.Team',
+        'teams.Team',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -45,7 +45,7 @@ class Fixture(models.Model):
         help_text="Home team"
     )
     away = models.ForeignKey(
-        'api.Team',
+        'teams.Team',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

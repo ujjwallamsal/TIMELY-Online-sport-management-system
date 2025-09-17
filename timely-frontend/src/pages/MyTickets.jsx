@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ticketingAPI } from '../lib/api';
-import QRTicket from '../components/QRTicket';
+import QrTicket from '../components/ui/QrTicket';
 
 const MyTickets = () => {
   const navigate = useNavigate();
@@ -258,7 +258,7 @@ const MyTickets = () => {
                     </svg>
                   </button>
                 </div>
-                <QRTicket ticket={selectedTicket} showDetails={true} />
+                <QrTicket ticket={selectedTicket} showDetails={true} />
               </div>
             </div>
           </div>

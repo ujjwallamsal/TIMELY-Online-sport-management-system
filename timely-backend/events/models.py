@@ -17,7 +17,7 @@ class Event(models.Model):
     # Basic Information
     name = models.CharField(max_length=200, help_text="Event name")
     sport = models.ForeignKey(
-        'api.Sport',
+        'sports.Sport',
         on_delete=models.CASCADE,
         related_name='events',
         help_text="Sport type"

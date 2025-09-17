@@ -2,7 +2,7 @@ import React from 'react';
 import { StarIcon } from '@heroicons/react/24/solid';
 import { 
   SparklesIcon,
-  QuoteIcon,
+  ChatBubbleLeftRightIcon,
   ArrowLeftIcon,
   ArrowRightIcon
 } from '@heroicons/react/24/outline';
@@ -104,7 +104,7 @@ const Testimonials = () => {
             >
               {/* Quote Icon */}
               <div className="absolute top-6 right-6">
-                <QuoteIcon className="w-8 h-8 text-gray-200 group-hover:text-blue-200 transition-colors duration-300" />
+                <ChatBubbleLeftRightIcon className="w-8 h-8 text-gray-200 group-hover:text-blue-200 transition-colors duration-300" />
               </div>
               
               {/* Rating */}

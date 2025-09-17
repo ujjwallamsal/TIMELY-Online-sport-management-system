@@ -187,6 +187,90 @@ class EventViewSet(viewsets.ModelViewSet):
             'to_date': to_date
         })
     
+    @action(detail=True, methods=['get', 'post'])
+    def registrations(self, request, pk=None):
+        """Get or create registrations for an event"""
+        event = self.get_object()
+        
+        if request.method == 'GET':
+            # Only admin/organizer can view registrations
+            if not request.user.is_authenticated or request.user.role not in ['ADMIN', 'ORGANIZER']:
+                return Response(
+                    {"detail": "Permission denied"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Get registrations for this event
+            from registrations.models import Registration
+            from registrations.serializers import RegistrationSerializer
+            
+            registrations = Registration.objects.filter(event=event).select_related('applicant', 'team')
+            serializer = RegistrationSerializer(registrations, many=True)
+            
+            return Response({
+                'event_id': event.id,
+                'event_name': event.name,
+                'registrations': serializer.data
+            })
+        
+        elif request.method == 'POST':
+            # Create new registration
+            from registrations.models import Registration
+            from registrations.serializers import RegistrationSerializer
+            
+            data = request.data.copy()
+            data['event'] = event.id
+            data['applicant'] = request.user.id
+            
+            serializer = RegistrationSerializer(data=data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'], url_path='fixtures/generate')
+    def generate_fixtures(self, request, pk=None):
+        """Generate fixtures for an event (Round Robin or Knockout)"""
+        event = self.get_object()
+        
+        # Only admin/organizer can generate fixtures
+        if not request.user.is_authenticated or request.user.role not in ['ADMIN', 'ORGANIZER']:
+            return Response(
+                {"detail": "Permission denied"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        mode = request.query_params.get('mode', 'rr')  # Default to Round Robin
+        
+        if mode not in ['rr', 'ko']:
+            return Response(
+                {"detail": "Mode must be 'rr' (Round Robin) or 'ko' (Knockout)"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Import fixture generator
+            from fixtures.services.generator import generate_round_robin, generate_knockout
+            
+            if mode == 'rr':
+                fixtures = generate_round_robin(event)
+            else:
+                fixtures = generate_knockout(event)
+            
+            return Response({
+                'event_id': event.id,
+                'event_name': event.name,
+                'mode': mode,
+                'fixtures_generated': len(fixtures),
+                'message': f'Generated {len(fixtures)} fixtures using {mode.upper()} mode'
+            })
+            
+        except Exception as e:
+            return Response(
+                {"detail": f"Error generating fixtures: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
     def _send_realtime_update(self, event, action, extra_data=None):
         """Send realtime update via WebSocket (safe no-op if Channels not available)"""
         try:

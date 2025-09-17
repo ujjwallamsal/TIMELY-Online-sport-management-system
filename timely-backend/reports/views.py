@@ -3,7 +3,9 @@ from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
+import csv
+import io
 
 from .pdf import generate_pdf_report, get_report_data
 from events.models import Event
@@ -245,3 +247,181 @@ def get_report_summary(request):
     }
     
     return Response(summary)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def export_csv(request, report_type):
+    """
+    Export report as CSV
+    
+    URL parameters:
+    - report_type: type of report (registrations, fixtures, results, ticket_sales)
+    
+    Query parameters:
+    - event: event ID to filter by
+    - date_from: start date (YYYY-MM-DD)
+    - date_to: end date (YYYY-MM-DD)
+    """
+    # Check permissions (admin or organizer)
+    if not (request.user.is_staff or request.user.is_superuser):
+        return Response(
+            {'error': 'Admin access required'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Validate report type
+    valid_types = ['registrations', 'fixtures', 'results', 'ticket_sales']
+    if report_type not in valid_types:
+        return Response(
+            {'error': f'Invalid report type. Must be one of: {", ".join(valid_types)}'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Parse filters
+    filters = {}
+    
+    event_id = request.query_params.get('event')
+    if event_id:
+        try:
+            filters['event'] = Event.objects.get(id=event_id)
+        except Event.DoesNotExist:
+            return Response(
+                {'error': 'Event not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    # Create CSV response
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{report_type}_report.csv"'
+    
+    # Generate CSV data based on report type
+    if report_type == 'registrations':
+        _generate_registrations_csv(response, filters)
+    elif report_type == 'fixtures':
+        _generate_fixtures_csv(response, filters)
+    elif report_type == 'results':
+        _generate_results_csv(response, filters)
+    elif report_type == 'ticket_sales':
+        _generate_ticket_sales_csv(response, filters)
+    
+    return response
+
+
+def _generate_registrations_csv(response, filters):
+    """Generate registrations CSV"""
+    from registrations.models import Registration
+    from django.db.models import Q
+    
+    queryset = Registration.objects.select_related('event', 'applicant', 'team')
+    
+    if filters.get('event'):
+        queryset = queryset.filter(event=filters['event'])
+    
+    writer = csv.writer(response)
+    writer.writerow([
+        'ID', 'Event', 'Applicant', 'Team', 'Type', 'Status', 
+        'Submitted At', 'Decided At', 'Decided By', 'Reason'
+    ])
+    
+    for reg in queryset:
+        writer.writerow([
+            reg.id,
+            reg.event.name,
+            reg.applicant.email if reg.applicant else '',
+            reg.team.name if reg.team else '',
+            reg.get_type_display(),
+            reg.get_status_display(),
+            reg.submitted_at.strftime('%Y-%m-%d %H:%M:%S'),
+            reg.decided_at.strftime('%Y-%m-%d %H:%M:%S') if reg.decided_at else '',
+            reg.decided_by.email if reg.decided_by else '',
+            reg.reason
+        ])
+
+
+def _generate_fixtures_csv(response, filters):
+    """Generate fixtures CSV"""
+    from fixtures.models import Fixture
+    
+    queryset = Fixture.objects.select_related('event', 'home', 'away', 'venue')
+    
+    if filters.get('event'):
+        queryset = queryset.filter(event=filters['event'])
+    
+    writer = csv.writer(response)
+    writer.writerow([
+        'ID', 'Event', 'Round', 'Phase', 'Home Team', 'Away Team', 
+        'Venue', 'Start Time', 'Status'
+    ])
+    
+    for fixture in queryset:
+        writer.writerow([
+            fixture.id,
+            fixture.event.name,
+            fixture.round,
+            fixture.get_phase_display(),
+            fixture.home.name if fixture.home else '',
+            fixture.away.name if fixture.away else '',
+            fixture.venue.name if fixture.venue else '',
+            fixture.start_at.strftime('%Y-%m-%d %H:%M:%S'),
+            fixture.get_status_display()
+        ])
+
+
+def _generate_results_csv(response, filters):
+    """Generate results CSV"""
+    from results.models import Result
+    
+    queryset = Result.objects.select_related('fixture', 'fixture__event', 'winner')
+    
+    if filters.get('event'):
+        queryset = queryset.filter(fixture__event=filters['event'])
+    
+    writer = csv.writer(response)
+    writer.writerow([
+        'ID', 'Event', 'Fixture', 'Home Team', 'Away Team', 
+        'Home Score', 'Away Score', 'Winner', 'Finalized At'
+    ])
+    
+    for result in queryset:
+        writer.writerow([
+            result.id,
+            result.fixture.event.name,
+            f"{result.fixture.home.name if result.fixture.home else 'TBD'} vs {result.fixture.away.name if result.fixture.away else 'TBD'}",
+            result.fixture.home.name if result.fixture.home else '',
+            result.fixture.away.name if result.fixture.away else '',
+            result.home_score,
+            result.away_score,
+            result.winner.name if result.winner else 'Draw',
+            result.finalized_at.strftime('%Y-%m-%d %H:%M:%S') if result.finalized_at else ''
+        ])
+
+
+def _generate_ticket_sales_csv(response, filters):
+    """Generate ticket sales CSV"""
+    from tickets.models import TicketOrder, Ticket
+    
+    queryset = TicketOrder.objects.select_related('user', 'event', 'fixture')
+    
+    if filters.get('event'):
+        queryset = queryset.filter(event=filters['event'])
+    
+    writer = csv.writer(response)
+    writer.writerow([
+        'Order ID', 'User', 'Event', 'Fixture', 'Total Amount', 
+        'Currency', 'Status', 'Created At', 'Tickets Count'
+    ])
+    
+    for order in queryset:
+        ticket_count = order.tickets.count()
+        writer.writerow([
+            order.id,
+            order.user.email,
+            order.event.name,
+            str(order.fixture) if order.fixture else '',
+            f"{order.total_cents / 100:.2f}",
+            order.currency,
+            order.get_status_display(),
+            order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            ticket_count
+        ])

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   TrophyIcon,
-  MedalIcon,
+  TrophyIcon as MedalIcon,
   ChartBarIcon,
   UserGroupIcon,
   CalendarIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
-import { api } from '../../lib/api';
+import api from '../../lib/api';
 import useSocket from '../../hooks/useSocket';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';

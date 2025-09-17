@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from .models import Result, LeaderboardEntry
 from fixtures.models import Fixture
 from events.models import Event
-from api.models import Team
+from teams.models import Team
 
 User = get_user_model()
 

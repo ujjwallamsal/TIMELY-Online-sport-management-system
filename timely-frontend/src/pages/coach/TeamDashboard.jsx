@@ -9,10 +9,10 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
 import useSocket from '../../hooks/useSocket';
-import { api } from '../../lib/api';
+import api from '../../lib/api';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';
-import EmptyState, { EmptyTeamMembers, EmptyResults } from '../../components/ui/EmptyState';
+import EmptyState, { EmptyResults } from '../../components/ui/EmptyState';
 import AnnouncementContainer from '../../components/ui/AnnouncementBanner';
 
 const TeamDashboard = () => {
@@ -283,12 +283,12 @@ const TeamDashboard = () => {
               ))}
             </div>
           ) : (
-            <EmptyTeamMembers 
-              action={
-                <a href="/coach/roster" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                  Add Members
-                </a>
-              }
+            <EmptyState
+              icon={UserGroupIcon}
+              title="No team members yet"
+              description="Start building your team by adding members."
+              action={() => setActiveTab('roster')}
+              actionText="Add Team Members"
             />
           )}
         </div>

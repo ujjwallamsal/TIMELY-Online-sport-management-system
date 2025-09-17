@@ -7,7 +7,7 @@ import {
   EyeIcon
 } from '@heroicons/react/24/outline';
 import useSocket from '../../hooks/useSocket';
-import { api } from '../../lib/api';
+import api from '../../lib/api';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState, { EmptyEvents } from '../../components/ui/EmptyState';
@@ -43,16 +43,54 @@ const PublicGallery = () => {
   const fetchGallery = async (page = 1) => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({
-        page: page.toString(),
-        ...filters
-      });
+      // TODO: Implement gallery API endpoint in backend
+      // For now, show placeholder content
+      const mockGallery = [
+        {
+          id: 1,
+          caption: "Championship Victory",
+          image_url: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop",
+          event_title: "Basketball Championship 2024",
+          created_at: new Date().toISOString(),
+          category: "award"
+        },
+        {
+          id: 2,
+          caption: "Team Action Shot",
+          image_url: "https://images.unsplash.com/photo-1546519638-68e109450ff7?w=400&h=300&fit=crop",
+          event_title: "Soccer Tournament",
+          created_at: new Date(Date.now() - 86400000).toISOString(),
+          category: "action"
+        },
+        {
+          id: 3,
+          caption: "Group Photo",
+          image_url: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop",
+          event_title: "Track & Field Meet",
+          created_at: new Date(Date.now() - 172800000).toISOString(),
+          category: "group"
+        },
+        {
+          id: 4,
+          caption: "Event Highlights",
+          image_url: "https://images.unsplash.com/photo-1546519638-68e109450ff7?w=400&h=300&fit=crop",
+          event_title: "Swimming Competition",
+          created_at: new Date(Date.now() - 259200000).toISOString(),
+          category: "event"
+        }
+      ];
       
-      const response = await api.get(`media/gallery/?${params}`);
-      setGallery(response.data.results);
-      setPagination(response.data);
+      setGallery(mockGallery);
+      setPagination({
+        page: 1,
+        page_size: 12,
+        count: mockGallery.length,
+        previous: null,
+        next: null
+      });
     } catch (error) {
       console.error('Error fetching gallery:', error);
+      setGallery([]);
     } finally {
       setLoading(false);
     }

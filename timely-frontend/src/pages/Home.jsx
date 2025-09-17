@@ -1,444 +1,369 @@
-import React, { useState, useEffect, useRef } from 'react';
+// src/pages/Home.jsx
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { publicAPI } from '../lib/api';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
-import Skeleton from '../components/Skeleton';
-import EmptyState from '../components/EmptyState';
 import { 
-  CalendarIcon, 
-  TrophyIcon, 
-  ChartBarIcon, 
-  NewspaperIcon,
+  CalendarDaysIcon,
+  TrophyIcon,
   UserGroupIcon,
   ClockIcon,
-  MapPinIcon,
-  CurrencyDollarIcon,
+  ArrowRightIcon,
+  PlayIcon,
+  StarIcon,
   CheckCircleIcon,
-  StarIcon
+  SparklesIcon
 } from '@heroicons/react/24/outline';
+import Button from '../components/ui/Button';
+import EventCard from '../components/EventCard';
+import EmptyState from '../components/ui/EmptyState';
 
-const Home = () => {
-  const { user } = useAuth();
-  const [homeData, setHomeData] = useState(null);
+export default function Home() {
+  const { user, isAuthenticated } = useAuth();
+  const [featuredEvents, setFeaturedEvents] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [wsConnected, setWsConnected] = useState(false);
-  
-  const wsRef = useRef(null);
-  const pollingRef = useRef(null);
-
-  const loadHomeData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await publicAPI.getPublicHome();
-      setHomeData(response.data);
-    } catch (err) {
-      console.error('Failed to load home data:', err);
-      setError('Failed to load home data. Please try again later.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    loadHomeData();
-  }, []);
-
-  // WebSocket connection for real-time updates
-  useEffect(() => {
-    const connectWebSocket = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/content/public/`;
-      
-      wsRef.current = new WebSocket(wsUrl);
-      
-      wsRef.current.onopen = () => {
-        setWsConnected(true);
-        console.log('WebSocket connected for content updates');
-      };
-      
-      wsRef.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          switch (data.event) {
-            case 'content.published':
-            case 'media.approved':
-              // Refresh home data when content is published or media approved
-              loadHomeData();
-              break;
-            case 'pong':
-              // Keep connection alive
-              break;
+    // Simulate API calls for featured and upcoming events
+    const fetchEvents = async () => {
+      try {
+        // In a real app, these would be API calls
+        setFeaturedEvents([
+          {
+            id: 1,
+            title: "Championship Finals 2024",
+            date: "2024-03-15",
+            time: "14:00",
+            location: "Madison Square Garden",
+            sport: "Basketball",
+            status: "upcoming",
+            featured: true,
+            image: "/api/placeholder/400/300"
+          },
+          {
+            id: 2,
+            title: "Summer Olympics Qualifiers",
+            date: "2024-03-20",
+            time: "10:00",
+            location: "Olympic Stadium",
+            sport: "Track & Field",
+            status: "upcoming",
+            featured: true,
+            image: "/api/placeholder/400/300"
           }
-        } catch (err) {
-          console.error('Error parsing WebSocket message:', err);
-        }
-      };
-      
-      wsRef.current.onclose = () => {
-        setWsConnected(false);
-        console.log('WebSocket disconnected');
+        ]);
         
-        // Reconnect after 5 seconds
-        setTimeout(connectWebSocket, 5000);
-      };
-      
-      wsRef.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setWsConnected(false);
-      };
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+        setUpcomingEvents([
+          {
+            id: 3,
+            title: "Local Basketball Tournament",
+            date: "2024-03-10",
+            time: "18:00",
+            location: "Community Center",
+            sport: "Basketball",
+            status: "upcoming"
+          },
+          {
+            id: 4,
+            title: "Swimming Championships",
+            date: "2024-03-12",
+            time: "09:00",
+            location: "Aquatic Center",
+            sport: "Swimming",
+            status: "upcoming"
+          }
+        ]);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      } finally {
+        setLoading(false);
       }
     };
+
+    fetchEvents();
   }, []);
 
-  // Fallback polling if WebSocket is not available
-  useEffect(() => {
-    if (!wsConnected) {
-      pollingRef.current = setInterval(() => {
-        loadHomeData();
-      }, 30000); // Poll every 30 seconds
-    } else {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+  const features = [
+    {
+      icon: CalendarDaysIcon,
+      title: "Event Management",
+      description: "Create, manage, and track sporting events with ease"
+    },
+    {
+      icon: TrophyIcon,
+      title: "Live Results",
+      description: "Real-time scoring and leaderboards for all events"
+    },
+    {
+      icon: UserGroupIcon,
+      title: "Team Registration",
+      description: "Easy team registration and roster management"
+    },
+    {
+      icon: ClockIcon,
+      title: "Scheduling",
+      description: "Automated fixture generation and scheduling"
     }
+  ];
 
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
-    };
-  }, [wsConnected]);
-
-  // Send ping every 30 seconds to keep WebSocket connection alive
-  useEffect(() => {
-    if (!wsConnected || !wsRef.current) return;
-
-    const pingInterval = setInterval(() => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, 30000);
-
-    return () => clearInterval(pingInterval);
-  }, [wsConnected]);
-
-  // If user is authenticated, redirect to dashboard
-  if (user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Redirecting to your dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  const stats = [
+    { label: "Active Events", value: "24", icon: CalendarDaysIcon },
+    { label: "Registered Teams", value: "156", icon: UserGroupIcon },
+    { label: "Total Participants", value: "2,847", icon: TrophyIcon },
+    { label: "Events Completed", value: "89", icon: CheckCircleIcon }
+  ];
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        {/* Hero Section Skeleton */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <Skeleton type="text" className="h-12 w-96 mx-auto mb-4" />
-            <Skeleton type="text" className="h-6 w-64 mx-auto mb-8" />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} type="card" className="h-48" />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="animate-pulse">
+          <div className="h-96 bg-gray-200"></div>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-32 bg-gray-200 rounded-lg"></div>
               ))}
             </div>
+            <div className="h-64 bg-gray-200 rounded-lg"></div>
           </div>
         </div>
       </div>
     );
   }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <EmptyState
-          icon="⚠️"
-          title="Failed to load data"
-          description={error}
-          action={
-            <button
-              onClick={loadHomeData}
-              className="btn btn-primary"
-              aria-label="Try again"
-            >
-              Try Again
-            </button>
-          }
-        />
-      </div>
-    );
-  }
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatPrice = (cents) => {
-    return `$${(cents / 100).toFixed(2)}`;
-  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-700 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-          <div className="text-center mb-16">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6">
-              Welcome to Timely Sports
+      <section className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800">
+        <div className="absolute inset-0 bg-black opacity-20"></div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
+          <div className="text-center">
+            <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
+              Welcome to{' '}
+              <span className="bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
+                Timely Sports
+              </span>
             </h1>
-            <p className="text-xl md:text-2xl text-blue-100 max-w-3xl mx-auto mb-8">
-              The ultimate platform for sports event management, live tracking, and community engagement.
+            <p className="text-xl md:text-2xl text-blue-100 mb-8 max-w-3xl mx-auto">
+              The ultimate platform for managing sporting events, tracking results, 
+              and connecting athletes, coaches, and fans.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link
-                to="/signup"
-                className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-blue-50 transition-colors shadow-lg"
-              >
-                Get Started Free
-              </Link>
-              <Link
-                to="/login"
-                className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-white hover:text-blue-600 transition-colors"
-              >
-                Sign In
-              </Link>
-            </div>
-          </div>
-
-          {/* Featured Events */}
-          {homeData?.featuredEvents && homeData.featuredEvents.length > 0 && (
-            <div className="mb-16">
-              <h2 className="text-2xl font-semibold mb-8 text-center">Featured Events</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {homeData.featuredEvents.slice(0, 3).map((event) => (
-                  <div
-                    key={event.id}
-                    className="bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20 hover:bg-white/20 transition-all duration-300"
-                  >
-                    <h3 className="text-xl font-semibold mb-2">{event.title}</h3>
-                    <p className="text-blue-100 mb-4">{event.sport}</p>
-                    
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center">
-                        <CalendarIcon className="h-4 w-4 mr-2" />
-                        <span>{formatDate(event.start_at)}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <MapPinIcon className="h-4 w-4 mr-2" />
-                        <span>{event.venue_name}</span>
-                      </div>
-                      {event.price_cents > 0 && (
-                        <div className="flex items-center">
-                          <CurrencyDollarIcon className="h-4 w-4 mr-2" />
-                          <span>{formatPrice(event.price_cents)}</span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <Link
-                      to={`/events/${event.id}`}
-                      className="mt-4 inline-block bg-white text-blue-600 px-4 py-2 rounded-md font-medium hover:bg-blue-50 transition-colors"
-                    >
-                      View Details
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 text-center border border-white/20">
-              <div className="text-3xl font-bold text-yellow-300">{homeData?.featuredEvents?.length || 0}</div>
-              <div className="text-blue-100">Upcoming Events</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 text-center border border-white/20">
-              <div className="text-3xl font-bold text-green-300">24/7</div>
-              <div className="text-blue-100">Live Support</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 text-center border border-white/20">
-              <div className="text-3xl font-bold text-purple-300">100%</div>
-              <div className="text-blue-100">Secure Platform</div>
+              {isAuthenticated ? (
+                <>
+                  <Link to="/dashboard">
+                    <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100">
+                      Go to Dashboard
+                      <ArrowRightIcon className="w-5 h-5 ml-2" />
+                    </Button>
+                  </Link>
+                  <Link to="/events">
+                    <Button variant="outline" size="lg" className="border-white text-white hover:bg-white hover:text-blue-600">
+                      Browse Events
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link to="/signup">
+                    <Button size="lg" className="bg-yellow-400 text-gray-900 hover:bg-yellow-500">
+                      Get Started Free
+                      <ArrowRightIcon className="w-5 h-5 ml-2" />
+                    </Button>
+                  </Link>
+                  <Link to="/login">
+                    <Button variant="outline" size="lg" className="border-white text-white hover:bg-white hover:text-blue-600">
+                      Sign In
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Features Section */}
-      <div className="py-20 bg-white">
+      {/* Stats Section */}
+      <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Why Choose Timely Sports?</h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Comprehensive tools and features designed for athletes, organizers, and sports enthusiasts.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CalendarIcon className="w-8 h-8 text-blue-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Event Management</h3>
-              <p className="text-gray-600">
-                Create, manage, and track sports events with our comprehensive event management system.
-              </p>
-            </div>
-
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <TrophyIcon className="w-8 h-8 text-green-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Live Results</h3>
-              <p className="text-gray-600">
-                Track live scores, standings, and results in real-time with our advanced tracking system.
-              </p>
-            </div>
-
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <UserGroupIcon className="w-8 h-8 text-purple-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Community</h3>
-              <p className="text-gray-600">
-                Connect with athletes, coaches, and sports enthusiasts in our vibrant community.
-              </p>
-            </div>
-
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ChartBarIcon className="w-8 h-8 text-orange-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Analytics</h3>
-              <p className="text-gray-600">
-                Get detailed insights and analytics about your performance and event statistics.
-              </p>
-            </div>
-
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ClockIcon className="w-8 h-8 text-red-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Real-time Updates</h3>
-              <p className="text-gray-600">
-                Stay updated with live notifications and real-time updates for all your events.
-              </p>
-            </div>
-
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <NewspaperIcon className="w-8 h-8 text-indigo-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">News & Updates</h3>
-              <p className="text-gray-600">
-                Stay informed with the latest news, announcements, and updates from the sports world.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Latest News Section */}
-      {homeData?.news && homeData.news.length > 0 && (
-        <div className="py-20 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">Latest News</h2>
-              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                Stay updated with the latest announcements and news from our sports community.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {homeData.news.slice(0, 3).map((article) => (
-                <div
-                  key={article.id}
-                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 border border-gray-200"
-                >
-                  <div className="p-6">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-3 line-clamp-2">
-                      {article.title}
-                    </h3>
-                    <p className="text-gray-600 mb-4 line-clamp-3">
-                      {article.excerpt}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">
-                        {new Date(article.publish_at).toLocaleDateString()}
-                      </span>
-                      <Link
-                        to={`/news/${article.id}`}
-                        className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                      >
-                        Read More →
-                      </Link>
-                    </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {stats.map((stat, index) => (
+              <div key={index} className="text-center">
+                <div className="flex justify-center mb-4">
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <stat.icon className="w-6 h-6 text-blue-600" />
                   </div>
                 </div>
+                <div className="text-3xl font-bold text-gray-900 mb-2">{stat.value}</div>
+                <div className="text-sm text-gray-600">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Events */}
+      <section className="py-16 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Featured Events
+            </h2>
+            <p className="text-lg text-gray-600">
+              Don't miss these exciting upcoming sporting events
+            </p>
+          </div>
+          
+          {featuredEvents.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {featuredEvents.map((event) => (
+                <EventCard key={event.id} event={event} featured />
               ))}
             </div>
+          ) : (
+            <EmptyEvents />
+          )}
+        </div>
+      </section>
 
-            <div className="text-center mt-12">
-              <Link
-                to="/news"
-                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 transition-colors"
-              >
-                View All News
+      {/* Features Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Why Choose Timely Sports?
+            </h2>
+            <p className="text-lg text-gray-600">
+              Everything you need to manage and participate in sporting events
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {features.map((feature, index) => (
+              <div key={index} className="text-center group">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-200">
+                  <feature.icon className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {feature.title}
+                </h3>
+                <p className="text-gray-600">
+                  {feature.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Upcoming Events */}
+      <section className="py-16 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center mb-12">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                Upcoming Events
+              </h2>
+              <p className="text-lg text-gray-600">
+                Join the excitement and register for upcoming events
+              </p>
+            </div>
+            <Link to="/events">
+              <Button variant="outline">
+                View All Events
+                <ArrowRightIcon className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
+          </div>
+          
+          {upcomingEvents.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {upcomingEvents.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+          ) : (
+            <EmptyEvents />
+          )}
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      {!isAuthenticated && (
+        <section className="py-16 bg-gradient-to-r from-blue-600 to-purple-600">
+          <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
+            <h2 className="text-3xl font-bold text-white mb-4">
+              Ready to Get Started?
+            </h2>
+            <p className="text-xl text-blue-100 mb-8">
+              Join thousands of athletes, coaches, and sports enthusiasts on the platform
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link to="/signup">
+                <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100">
+                  Create Free Account
+                  <SparklesIcon className="w-5 h-5 ml-2" />
+                </Button>
+              </Link>
+              <Link to="/events">
+                <Button variant="outline" size="lg" className="border-white text-white hover:bg-white hover:text-blue-600">
+                  Explore Events
+                </Button>
               </Link>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* CTA Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-700 text-white py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
-          <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-            Join thousands of athletes and organizers who trust Timely Sports for their event management needs.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/signup"
-              className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-blue-50 transition-colors shadow-lg"
-            >
-              Create Your Account
-            </Link>
-            <Link
-              to="/events"
-              className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-white hover:text-blue-600 transition-colors"
-            >
-              Browse Events
-            </Link>
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <div className="flex items-center space-x-2 mb-4">
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                  <ClockIcon className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-xl font-bold">Timely Sports</span>
+              </div>
+              <p className="text-gray-400">
+                The ultimate platform for sporting events and competitions.
+              </p>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Events</h3>
+              <ul className="space-y-2">
+                <li><Link to="/events" className="text-gray-400 hover:text-white">Browse Events</Link></li>
+                <li><Link to="/schedule" className="text-gray-400 hover:text-white">Schedule</Link></li>
+                <li><Link to="/results" className="text-gray-400 hover:text-white">Results</Link></li>
+              </ul>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Community</h3>
+              <ul className="space-y-2">
+                <li><Link to="/news" className="text-gray-400 hover:text-white">News</Link></li>
+                <li><Link to="/gallery" className="text-gray-400 hover:text-white">Gallery</Link></li>
+                <li><Link to="/about" className="text-gray-400 hover:text-white">About</Link></li>
+              </ul>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Support</h3>
+              <ul className="space-y-2">
+                <li><Link to="/help" className="text-gray-400 hover:text-white">Help Center</Link></li>
+                <li><Link to="/contact" className="text-gray-400 hover:text-white">Contact</Link></li>
+                <li><Link to="/privacy" className="text-gray-400 hover:text-white">Privacy Policy</Link></li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+            <p>&copy; 2024 Timely Sports. All rights reserved.</p>
           </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
-};
-
-export default Home;
+}

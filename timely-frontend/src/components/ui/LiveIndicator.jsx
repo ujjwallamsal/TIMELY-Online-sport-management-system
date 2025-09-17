@@ -1,5 +1,5 @@
 import React from 'react';
-import { WifiIcon, WifiOffIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { WifiIcon, SignalSlashIcon, ClockIcon } from '@heroicons/react/24/outline';
 
 const LiveIndicator = ({ status, className = '' }) => {
   const getStatusConfig = () => {
@@ -31,7 +31,7 @@ const LiveIndicator = ({ status, className = '' }) => {
       case 'disconnected':
       default:
         return {
-          icon: WifiOffIcon,
+          icon: SignalSlashIcon,
           text: 'Offline',
           color: 'text-red-500',
           bgColor: 'bg-red-100',

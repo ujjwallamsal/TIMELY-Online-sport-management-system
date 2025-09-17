@@ -9,7 +9,7 @@ import {
   createRegPaymentIntent,
   confirmRegPayment
 } from '../lib/api';
-import DocUpload from '../components/DocUpload';
+import DocumentUpload from '../components/DocumentUpload';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -298,7 +298,7 @@ const RegistrationWizard = () => {
                 ))}
               </div>
               
-              <DocUpload
+              <DocumentUpload
                 onFileSelect={handleFileSelect}
                 onFileRemove={handleFileRemove}
                 files={documents}

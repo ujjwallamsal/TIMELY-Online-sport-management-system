@@ -78,35 +78,8 @@ urlpatterns = [
     # Test public endpoint
     path("api/test-public/", test_public_endpoint, name="test-public"),
     
-    # Public spectator portal endpoints
-    path("api/public/", include("public.urls")),
-    
-    # API v1 - Unified router
-    path("api/v1/", include("api.v1.urls")),
-    
-    # Legacy API routes - Keep for backward compatibility
-    path("api/accounts/", include("accounts.urls")),
-    path("api/admin/", include("accounts.admin_api.urls")),
-    path("api/events/", include("events.urls")),
-    path("api/venues/", include("venues.urls")),
-    path("api/registrations/", include("registrations.urls")),
-    path("api/fixtures/", include("fixtures.urls")),
-    path("api/results/", include("results.urls")),
-    path("api/tickets/", include("tickets.urls")),
-    path("api/payments/", include("payments.urls")),
-    path("api/reports/", include("reports.urls")),
-    path("api/notifications/", include("notifications.urls")),
-    path("api/content/", include("content.urls")),
-    path("api/gallery/", include("gallery.urls")),
-    path("api/media/", include("mediahub.urls")),
-    path("api/admin/", include("adminapi.urls")),
-    path("api/kyc/", include("kyc.urls")),
-    path("api/audit/", include("audit.urls")),
-    path("api/settings/", include("settingshub.urls")),
-    path("api/privacy/", include("privacy.urls")),
-    
-    # Legacy public APIs (kept for backward compatibility)
-    path("api/fixtures/public/", include("fixtures.urls")),
+    # API endpoints - Single unified entry point
+    path("api/", include("api.urls")),
     
     # OpenAPI / Docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

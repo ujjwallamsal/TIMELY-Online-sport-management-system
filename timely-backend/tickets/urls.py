@@ -2,7 +2,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from . import views
+from . import views, views_stripe, webhooks
 
 app_name = 'tickets'
 
@@ -16,6 +16,14 @@ urlpatterns = [
     path('checkout/', 
          views.checkout, 
          name='checkout'),
+    
+    # Stripe integration
+    path('stripe/checkout/', 
+         views_stripe.create_checkout_session, 
+         name='stripe-checkout'),
+    path('webhook/', 
+         webhooks.stripe_webhook, 
+         name='stripe-webhook'),
     path('orders/', 
          views.create_order, 
          name='create-order'),
@@ -39,12 +47,21 @@ urlpatterns = [
     path('mine/', 
          views.MyTicketsListView.as_view(), 
          name='my-tickets'),
+    path('me/tickets/', 
+         views_stripe.get_my_tickets, 
+         name='my-tickets-stripe'),
     path('tickets/<int:ticket_id>/', 
          views.TicketDetailView.as_view(), 
          name='ticket-detail'),
     path('tickets/<int:ticket_id>/qr/', 
          views.ticket_qr, 
          name='ticket-qr'),
+    path('tickets/<int:ticket_id>/qr/image/', 
+         views_stripe.get_ticket_qr, 
+         name='ticket-qr-image'),
+    path('tickets/<int:ticket_id>/qr/data/', 
+         views_stripe.get_ticket_qr_data, 
+         name='ticket-qr-data'),
     path('tickets/<int:ticket_id>/checkin/', 
          views.checkin_ticket, 
          name='checkin-ticket'),
@@ -72,6 +89,12 @@ urlpatterns = [
     path('tickets/<int:ticket_id>/use/', 
          views.use_ticket, 
          name='use-ticket'),
+    path('tickets/<int:ticket_id>/checkin/', 
+         views_stripe.use_ticket, 
+         name='use-ticket-stripe'),
+    path('verify/', 
+         views_stripe.verify_ticket, 
+         name='verify-ticket'),
     path('checkin/', 
          views.checkin_ticket, 
          name='checkin-ticket'),

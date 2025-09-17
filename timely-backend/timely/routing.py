@@ -1,14 +1,17 @@
 from django.urls import re_path
-from events.consumers import EventConsumer, NotificationConsumer
+from events.consumers import EventConsumer as EventsEventConsumer, NotificationConsumer
 from accounts.consumers import UserConsumer
-from realtime.consumers import AdminConsumer, OrganizerConsumer, PublicConsumer, AthleteConsumer, CoachConsumer, SpectatorConsumer
+from realtime.consumers import EventConsumer, AdminConsumer, OrganizerConsumer, PublicConsumer, AthleteConsumer, CoachConsumer, SpectatorConsumer
 
 # Import fixtures routing
 from fixtures.routing import websocket_urlpatterns as fixtures_websocket_urlpatterns
 
 websocket_urlpatterns = [
+    # Event-specific consumers (new)
+    re_path(r'ws/events/(?P<event_id>\w+)/stream/$', EventConsumer.as_asgi()),
+    
     # Existing consumers
-    re_path(r'ws/events/(?P<event_id>\w+)/$', EventConsumer.as_asgi()),
+    re_path(r'ws/events/(?P<event_id>\w+)/$', EventsEventConsumer.as_asgi()),
     re_path(r'ws/notifications/$', NotificationConsumer.as_asgi()),
     re_path(r'ws/user/$', UserConsumer.as_asgi()),
     

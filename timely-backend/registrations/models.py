@@ -36,7 +36,7 @@ class Registration(models.Model):
         blank=True
     )
     team = models.ForeignKey(
-        'api.Team',
+        'teams.Team',
         on_delete=models.CASCADE,
         related_name='registrations',
         null=True,

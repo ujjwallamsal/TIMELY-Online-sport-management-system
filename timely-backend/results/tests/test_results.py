@@ -8,7 +8,7 @@ from django.utils import timezone
 from unittest.mock import patch, MagicMock
 
 from events.models import Event
-from api.models import Team
+from teams.models import Team
 from fixtures.models import Fixture, FixtureEntry
 from ..models import Result, LeaderboardEntry, AthleteStat
 from ..services.compute import StandingsComputer, AthleteStatsComputer

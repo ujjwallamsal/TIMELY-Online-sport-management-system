@@ -40,28 +40,32 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "corsheaders",
     
-    # First-party (Timely) - remaining apps
+    # First-party (Timely) - MVP apps
     "api",
+    "sports",
+    "teams",
     "venues",
     "events",
     "registrations",
     "fixtures",
     "tickets",
-    "reports",
     "results",
     "notifications",
-    "content.apps.ContentConfig",
-    "gallery",
-    'payments',
     "public",
-    "mediahub",
-    "adminapi",
-    "kyc",
-    "audit",
-    "settingshub",
-    "privacy",
-    "scheduler",
-    "realtime",
+    
+    # Phase-2 modules disabled; will re-enable as needed.
+    "content.apps.ContentConfig",
+    # "gallery",
+    # "payments",
+    # "mediahub",
+    # "adminapi",
+    # "kyc",
+    # "audit",
+    # "settingshub",
+    # "privacy",
+    # "scheduler",
+    # "realtime.apps.RealtimeConfig",
+    # "reports",
 ]
 
 # --- Middleware ---

@@ -7,7 +7,7 @@ import {
   TrashIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import { api } from '../../lib/api';
+import api from '../../lib/api';
 import useSocket from '../../hooks/useSocket';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard } from '../../components/ui/Skeleton';

@@ -12,7 +12,7 @@ from registrations.models import Registration
 from tickets.models import TicketOrder, Ticket
 from results.models import Result
 from fixtures.models import Fixture
-from api.models import Team
+from teams.models import Team
 from accounts.models import User
 
 

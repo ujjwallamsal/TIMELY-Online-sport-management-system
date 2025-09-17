@@ -9,7 +9,7 @@ from events.models import Event
 from fixtures.models import Fixture
 from results.models import Result
 from content.models import Announcement
-from api.models import Team
+from teams.models import Team
 from venues.models import Venue
 from accounts.models import User
 

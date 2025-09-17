@@ -155,7 +155,7 @@ class AnnouncementView(APIView):
                 return User.objects.none()
         
         elif scope == 'team':
-            from api.models import Team
+            from teams.models import Team
             try:
                 team = Team.objects.get(id=scope_id)
                 # Check if user is organizer for this team

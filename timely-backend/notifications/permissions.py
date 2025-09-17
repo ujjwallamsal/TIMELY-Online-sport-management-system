@@ -5,7 +5,7 @@ Implements RBAC as specified in SRS.
 from rest_framework import permissions
 from django.contrib.auth import get_user_model
 from events.models import Event
-from api.models import Team
+from teams.models import Team
 from registrations.models import Registration
 
 User = get_user_model()

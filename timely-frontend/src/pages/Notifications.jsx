@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { notifyAPI } from '../lib/api';
 import useSocket from '../hooks/useSocket';
-import Toast from '../components/Toast';
+import Toast from '../components/ui/Toast';
 
 /**
  * Notifications page with filtering, mark-read actions, and realtime updates

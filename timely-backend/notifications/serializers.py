@@ -60,7 +60,7 @@ class AnnouncementSerializer(serializers.Serializer):
                 raise serializers.ValidationError("Event not found")
         
         elif scope == 'team':
-            from api.models import Team
+            from teams.models import Team
             try:
                 Team.objects.get(id=value)
             except Team.DoesNotExist:

@@ -11,9 +11,9 @@ import {
 } from '../../lib/api';
 import useSocket from '../../hooks/useSocket';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import Skeleton from '../../components/Skeleton';
-import EmptyState from '../../components/EmptyState';
-import Pagination from '../../components/Pagination';
+import Skeleton from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
+import Pagination from '../../components/ui/Pagination';
 import { 
   PlusIcon, 
   PencilIcon, 

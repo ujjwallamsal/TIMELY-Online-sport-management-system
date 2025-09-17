@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from fixtures.models import Fixture
 from events.models import Event
-from api.models import Team
+from teams.models import Team
 
 User = get_user_model()
 
@@ -23,7 +23,7 @@ class Result(models.Model):
     
     # Winner and stats
     winner = models.ForeignKey(
-        'api.Team', 
+        'teams.Team', 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True,
@@ -125,7 +125,7 @@ class LeaderboardEntry(models.Model):
     """Leaderboard entry for teams in an event"""
     
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="leaderboard_entries")
-    team = models.ForeignKey('api.Team', on_delete=models.CASCADE, related_name="leaderboard_entries")
+    team = models.ForeignKey('teams.Team', on_delete=models.CASCADE, related_name="leaderboard_entries")
     
     # Points and standings
     pts = models.PositiveIntegerField(default=0, help_text="Total points (3 for win, 1 for draw)")

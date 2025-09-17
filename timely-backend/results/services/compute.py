@@ -5,7 +5,7 @@ from django.db.models import Q, F, Sum, Count
 from django.utils import timezone
 
 from events.models import Event
-from api.models import Team
+from teams.models import Team
 from fixtures.models import Fixture
 from ..models import Result, LeaderboardEntry
 

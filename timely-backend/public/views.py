@@ -19,7 +19,7 @@ from fixtures.models import Fixture
 from results.models import Result
 from content.models import Announcement, News, Banner
 from tickets.models import TicketOrder
-from api.models import Team
+from teams.models import Team
 from accounts.models import User
 from venues.models import Venue
 

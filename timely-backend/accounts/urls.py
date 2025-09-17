@@ -23,6 +23,9 @@ urlpatterns = [
     ])),
     
     # User management endpoints
+    path('', include([
+        path('', views.UserViewSet.as_view({'get': 'me', 'patch': 'me'}), name='user-me-direct'),
+    ])),
     path('users/', include([
         path('me/', views.UserViewSet.as_view({'get': 'me', 'patch': 'me'}), name='user-me'),
         path('<int:pk>/change-password/', views.UserViewSet.as_view({'post': 'change_password'}), name='user-change-password'),

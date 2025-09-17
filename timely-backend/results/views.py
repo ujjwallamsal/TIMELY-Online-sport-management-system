@@ -19,7 +19,7 @@ from .services.compute import (
 )
 from fixtures.models import Fixture
 from events.models import Event
-from api.models import Team
+from teams.models import Team
 from accounts.permissions import IsOrganizer, CanManageResults
 
 
@@ -178,6 +178,13 @@ class FixtureResultView(APIView):
             # Recompute standings
             recompute_event_standings(fixture.event.id)
             
+            # Broadcast real-time update
+            broadcast_result_update(
+                fixture.event.id, 
+                result, 
+                f"New result recorded: {fixture.home.name} {result.home_score}-{result.away_score} {fixture.away.name}"
+            )
+            
             response_serializer = ResultSerializer(result)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         
@@ -322,6 +329,9 @@ class RecomputeStandingsView(APIView):
         
         # Recompute standings
         leaderboard = recompute_event_standings(event_id)
+        
+        # Broadcast leaderboard update
+        broadcast_leaderboard_update(event_id, "Standings recomputed successfully")
         
         serializer = LeaderboardEntrySerializer(leaderboard, many=True)
         return Response({

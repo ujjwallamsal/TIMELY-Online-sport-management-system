@@ -8,7 +8,7 @@ import {
   FunnelIcon
 } from '@heroicons/react/24/outline';
 import useSocket from '../../hooks/useSocket';
-import { api } from '../../lib/api';
+import api from '../../lib/api';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState, { EmptyEvents } from '../../components/ui/EmptyState';

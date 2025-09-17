@@ -7,6 +7,81 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 
+class EventConsumer(AsyncWebsocketConsumer):
+    """WebSocket consumer for event-specific real-time updates"""
+    
+    async def connect(self):
+        """Connect to event-specific WebSocket groups"""
+        self.event_id = self.scope['url_route']['kwargs']['event_id']
+        self.user = self.scope["user"]
+        
+        # Join event-specific groups
+        self.results_group = f"event_{self.event_id}_results"
+        self.schedule_group = f"event_{self.event_id}_schedule"
+        self.announcements_group = f"event_{self.event_id}_announcements"
+        
+        await self.channel_layer.group_add(self.results_group, self.channel_name)
+        await self.channel_layer.group_add(self.schedule_group, self.channel_name)
+        await self.channel_layer.group_add(self.announcements_group, self.channel_name)
+        
+        await self.accept()
+        
+        # Send connection confirmation
+        await self.send(text_data=json.dumps({
+            'type': 'connection_established',
+            'message': f'Connected to event {self.event_id} updates',
+            'event_id': self.event_id,
+            'topics': ['results', 'schedule', 'announcements']
+        }))
+    
+    async def disconnect(self, close_code):
+        """Leave all groups on disconnect"""
+        await self.channel_layer.group_discard(self.results_group, self.channel_name)
+        await self.channel_layer.group_discard(self.schedule_group, self.channel_name)
+        await self.channel_layer.group_discard(self.announcements_group, self.channel_name)
+    
+    async def receive(self, text_data):
+        """Handle incoming messages"""
+        try:
+            data = json.loads(text_data)
+            message_type = data.get('type')
+            
+            if message_type == 'ping':
+                await self.send(text_data=json.dumps({
+                    'type': 'pong',
+                    'timestamp': data.get('timestamp')
+                }))
+            elif message_type == 'subscribe_topic':
+                # Subscribe to specific topic
+                topic = data.get('topic')
+                if topic in ['results', 'schedule', 'announcements']:
+                    group_name = f"event_{self.event_id}_{topic}"
+                    await self.channel_layer.group_add(group_name, self.channel_name)
+        except json.JSONDecodeError:
+            pass
+    
+    async def results_update(self, event):
+        """Handle results updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'results_update',
+            'data': event['data']
+        }))
+    
+    async def schedule_update(self, event):
+        """Handle schedule updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'schedule_update',
+            'data': event['data']
+        }))
+    
+    async def announcements_update(self, event):
+        """Handle announcements updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'announcements_update',
+            'data': event['data']
+        }))
+
+
 class AdminConsumer(AsyncWebsocketConsumer):
     """WebSocket consumer for admin real-time updates"""
     

@@ -1,0 +1,4 @@
+# Additional requirements for Stripe integration
+stripe>=7.0.0
+qrcode[pil]>=7.4.2
+Pillow>=10.0.0

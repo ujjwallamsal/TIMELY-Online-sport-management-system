@@ -6,7 +6,7 @@ import {
   FunnelIcon
 } from '@heroicons/react/24/outline';
 import useSocket from '../../hooks/useSocket';
-import { api } from '../../lib/api';
+import api from '../../lib/api';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState, { EmptyEvents } from '../../components/ui/EmptyState';
@@ -40,16 +40,46 @@ const PublicNews = () => {
   const fetchNews = async (page = 1) => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({
-        page: page.toString(),
-        ...filters
-      });
+      // TODO: Implement news API endpoint in backend
+      // For now, show placeholder content
+      const mockNews = [
+        {
+          id: 1,
+          title: "Welcome to Timely Sports Management",
+          excerpt: "We're excited to announce the launch of our comprehensive sports management platform. Stay tuned for updates and new features!",
+          category: "announcement",
+          publish_at: new Date().toISOString(),
+          featured_image: null
+        },
+        {
+          id: 2,
+          title: "Upcoming Events This Season",
+          excerpt: "Check out our exciting lineup of sports events scheduled for this season. Registration is now open!",
+          category: "event",
+          publish_at: new Date(Date.now() - 86400000).toISOString(),
+          featured_image: null
+        },
+        {
+          id: 3,
+          title: "Championship Results",
+          excerpt: "Congratulations to all participants in our recent championship events. View the complete results and highlights.",
+          category: "result",
+          publish_at: new Date(Date.now() - 172800000).toISOString(),
+          featured_image: null
+        }
+      ];
       
-      const response = await api.get(`cms/news/?${params}`);
-      setNews(response.data.results);
-      setPagination(response.data);
+      setNews(mockNews);
+      setPagination({
+        page: 1,
+        page_size: 10,
+        count: mockNews.length,
+        previous: null,
+        next: null
+      });
     } catch (error) {
       console.error('Error fetching news:', error);
+      setNews([]);
     } finally {
       setLoading(false);
     }
