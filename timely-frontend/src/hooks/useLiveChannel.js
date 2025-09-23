@@ -60,7 +60,7 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
           ws.send(JSON.stringify({
             type: 'auth',
             user_id: user.id,
-            token: localStorage.getItem('access_token')
+            token: localStorage.getItem('auth_token')
           }));
         }
       };

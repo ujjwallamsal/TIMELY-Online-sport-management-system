@@ -140,7 +140,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
       {/* Left side - Login Form */}
-      <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24">
+      <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24 relative z-10">
         <div className="mx-auto w-full max-w-sm lg:w-96">
           {/* Header */}
           <div className="text-center mb-8">
@@ -274,8 +274,8 @@ export default function Login() {
       {/* Right side - Features */}
       <div className="hidden lg:flex lg:flex-1 lg:flex-col lg:justify-center lg:px-8 xl:px-12 bg-gradient-to-br from-blue-600 to-purple-700 relative overflow-hidden">
         {/* Background pattern */}
-        <div className="absolute inset-0 bg-black opacity-10"></div>
-        <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-black opacity-20"></div>
+        <div className="absolute inset-0 bg-black opacity-10 pointer-events-none"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-black opacity-20 pointer-events-none"></div>
         
         <div className="relative z-10 text-white">
           <div className="max-w-md">
@@ -309,9 +309,9 @@ export default function Login() {
         </div>
 
         {/* Decorative elements */}
-        <div className="absolute top-20 right-20 w-32 h-32 bg-white bg-opacity-10 rounded-full"></div>
-        <div className="absolute bottom-20 left-20 w-24 h-24 bg-white bg-opacity-10 rounded-full"></div>
-        <div className="absolute top-1/2 right-10 w-16 h-16 bg-white bg-opacity-10 rounded-full"></div>
+        <div className="absolute top-20 right-20 w-32 h-32 bg-white bg-opacity-10 rounded-full pointer-events-none"></div>
+        <div className="absolute bottom-20 left-20 w-24 h-24 bg-white bg-opacity-10 rounded-full pointer-events-none"></div>
+        <div className="absolute top-1/2 right-10 w-16 h-16 bg-white bg-opacity-10 rounded-full pointer-events-none"></div>
       </div>
     </div>
   );

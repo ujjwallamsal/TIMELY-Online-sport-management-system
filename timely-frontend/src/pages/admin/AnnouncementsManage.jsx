@@ -8,10 +8,12 @@ import {
   AlertCircle,
   CheckCircle
 } from 'lucide-react';
+import api from '../../services/api';
 
 const AnnouncementsManage = () => {
   const [announcements, setAnnouncements] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     event: '',
     audience: 'ALL',
@@ -26,32 +28,22 @@ const AnnouncementsManage = () => {
 
   const fetchAnnouncements = async () => {
     try {
-      const response = await fetch('/api/announcements/', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAnnouncements(data.map(ann => ({
-          id: ann.id,
-          event: ann.event?.name || 'Unknown Event',
-          subject: ann.title,
-          audience: ann.is_public ? 'ALL' : 'PARTICIPANTS',
-          sentAt: new Date(ann.created_at).toLocaleString(),
-          count: ann.target_teams?.length || 0
-        })));
-      } else {
-        console.error('Error fetching announcements:', response.statusText);
-        // Fallback to empty array
-        setAnnouncements([]);
-      }
+      setLoading(true);
+      const data = await api.get('/announcements/');
+      setAnnouncements(data.map(ann => ({
+        id: ann.id,
+        event: ann.event?.name || 'Unknown Event',
+        subject: ann.title,
+        audience: ann.is_public ? 'ALL' : 'PARTICIPANTS',
+        sentAt: new Date(ann.created_at).toLocaleString(),
+        count: ann.target_teams?.length || 0
+      })));
     } catch (error) {
       console.error('Error fetching announcements:', error);
       // Fallback to empty array
       setAnnouncements([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -67,40 +59,26 @@ const AnnouncementsManage = () => {
         return;
       }
 
-      const response = await fetch(`/api/events/${formData.event}/announce/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          title: formData.subject,
-          message: formData.body,
-          audience: formData.audience
-        })
+      const result = await api.post(`/events/${formData.event}/announce/`, {
+        title: formData.subject,
+        message: formData.body,
+        audience: formData.audience
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Announcement sent successfully:', result);
-        setShowForm(false);
-        setFormData({
-          event: '',
-          audience: 'ALL',
-          subject: '',
-          body: '',
-          sendTest: false
-        });
-        fetchAnnouncements(); // Refresh the list
-        alert('Announcement sent successfully!');
-      } else {
-        const error = await response.json();
-        console.error('Error sending announcement:', error);
-        alert(`Error: ${error.error || 'Failed to send announcement'}`);
-      }
+      console.log('Announcement sent successfully:', result);
+      setShowForm(false);
+      setFormData({
+        event: '',
+        audience: 'ALL',
+        subject: '',
+        body: '',
+        sendTest: false
+      });
+      fetchAnnouncements(); // Refresh the list
+      alert('Announcement sent successfully!');
     } catch (error) {
       console.error('Error sending announcement:', error);
-      alert('Error sending announcement. Please try again.');
+      alert(`Error: ${error.message || 'Failed to send announcement'}`);
     }
   };
 
@@ -271,30 +249,51 @@ const AnnouncementsManage = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {announcements.map((announcement) => (
-                <tr key={announcement.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {announcement.event}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {announcement.subject}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getAudienceBadge(announcement.audience)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {announcement.sentAt}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {announcement.count}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-blue-600 hover:text-blue-900">
-                      <Eye className="h-4 w-4" />
-                    </button>
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <span className="ml-2">Loading announcements...</span>
+                    </div>
                   </td>
                 </tr>
-              ))}
+              ) : announcements.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                    <div className="flex flex-col items-center">
+                      <Send className="h-12 w-12 text-gray-300 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No announcements yet</h3>
+                      <p className="text-gray-500">Get started by creating your first announcement.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                announcements.map((announcement) => (
+                  <tr key={announcement.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {announcement.event}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {announcement.subject}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getAudienceBadge(announcement.audience)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {announcement.sentAt}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {announcement.count}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button className="text-blue-600 hover:text-blue-900">
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

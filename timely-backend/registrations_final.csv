@@ -1,0 +1,11 @@
+ID,Event,Applicant,Team,Type,Status,Submitted At,Decided At,Decided By,Reason
+18,Acceptance Test Tournament,,,Athlete,Approved,2025-09-23 04:26:28,,,
+17,Sydney Basketball Championship 2025,,,Athlete,Approved,2025-09-23 03:46:02,2025-09-23 03:46:02,admin@gmail.com,
+16,Open Registration Test Event,,,Team,Approved,2025-09-23 03:45:51,2025-09-23 03:45:51,admin@gmail.com,
+15,Open Registration Test Event,,,Team,Pending,2025-09-23 03:45:33,,,
+14,Open Registration Test Event,,,Athlete,Pending,2025-09-23 03:45:33,,,
+11,Comprehensive Test Event,uniqueuser@example.com,Team Gamma,Team,Approved,2025-09-23 03:05:12,,,
+10,Comprehensive Test Event,test3@example.com,Team Beta,Team,Approved,2025-09-23 03:05:12,,,
+8,Comprehensive Test Event,demo@example.com,Team Alpha,Team,Approved,2025-09-23 03:05:02,,,
+5,Open Registration Test Event,athlete@test.com,,Athlete,Approved,2025-09-23 03:01:14,2025-09-23 03:06:30,,
+3,Test Basketball Championship 2,test_athlete@example.com,,Athlete,Approved,2025-09-23 02:52:24,2025-09-23 02:52:50,admin@gmail.com,Approved for testing purposes

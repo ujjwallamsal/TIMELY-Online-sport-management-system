@@ -13,11 +13,11 @@ import Login from '../pages/Login.jsx';
 import Signup from '../pages/Signup.jsx';
 import PasswordReset from '../pages/PasswordReset.jsx';
 import EventDetail from '../pages/public/EventDetail.jsx';
-import Events from '../pages/public/Events.jsx';
-import Schedule from '../pages/SpectatorSchedule.jsx';
-import News from '../pages/public/News.jsx';
-import Gallery from '../pages/public/Gallery.jsx';
-import Results from '../pages/Results.jsx';
+import EventsPage from '../pages/EventsPage.jsx';
+import SchedulePage from '../pages/SchedulePage.jsx';
+import NewsPage from '../pages/NewsPage.jsx';
+import GalleryPage from '../pages/GalleryPage.jsx';
+import ResultsPage from '../pages/ResultsPage.jsx';
 import NotFound from '../pages/NotFound.jsx';
 import Error500 from '../pages/Error500.jsx';
 
@@ -111,14 +111,14 @@ export default function AppRoutes() {
             
             {/* Spectator Routes */}
             <Route path="/" element={<Home />} />
-            <Route path="/events" element={<Events />} />
+            <Route path="/events" element={<EventsPage />} />
             <Route path="/events/:id" element={<EventDetail />} />
-            <Route path="/schedule" element={<Schedule />} />
-            <Route path="/matches" element={<Schedule />} />
-            <Route path="/news" element={<News />} />
-            <Route path="/results" element={<Results />} />
-            <Route path="/gallery" element={<Gallery />} />
-            <Route path="/media" element={<Gallery />} />
+            <Route path="/schedule" element={<SchedulePage />} />
+            <Route path="/matches" element={<SchedulePage />} />
+            <Route path="/news" element={<NewsPage />} />
+            <Route path="/results" element={<ResultsPage />} />
+            <Route path="/gallery" element={<GalleryPage />} />
+            <Route path="/media" element={<GalleryPage />} />
             <Route path="/tickets" element={<SpectatorTickets />} />
             
             {/* Authentication */}

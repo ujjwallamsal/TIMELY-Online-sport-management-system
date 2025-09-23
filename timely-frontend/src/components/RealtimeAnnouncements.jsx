@@ -49,7 +49,7 @@ const RealtimeAnnouncements = ({
         
         const response = await fetch(url, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
             'Content-Type': 'application/json'
           }
         });

@@ -12,6 +12,9 @@ const useSocket = (url, options = {}) => {
   const maxReconnectAttempts = useRef(10);
   const baseReconnectInterval = useRef(5000);
 
+  // Add fallback for WebSocket URL
+  const wsUrl = url || 'ws://127.0.0.1:8000/ws/spectator/';
+
   const {
     onMessage,
     onOpen,
@@ -31,16 +34,16 @@ const useSocket = (url, options = {}) => {
     }
 
     setConnectionStatus('connecting');
-    console.log(`WebSocket connecting to ${url} (attempt ${reconnectAttempts + 1})`);
+    console.log(`WebSocket connecting to ${wsUrl} (attempt ${reconnectAttempts + 1})`);
 
     try {
-      wsRef.current = new WebSocket(url);
+      wsRef.current = new WebSocket(wsUrl);
       
       wsRef.current.onopen = (event) => {
         setIsConnected(true);
         setConnectionStatus('connected');
         setReconnectAttempts(0);
-        console.log('WebSocket connected:', url);
+        console.log('WebSocket connected:', wsUrl);
         onOpen?.(event);
         
         // Clear polling when connected
@@ -75,7 +78,7 @@ const useSocket = (url, options = {}) => {
       wsRef.current.onclose = (event) => {
         setIsConnected(false);
         setConnectionStatus('disconnected');
-        console.log('WebSocket disconnected:', url, 'Code:', event.code);
+        console.log('WebSocket disconnected:', wsUrl, 'Code:', event.code);
         onClose?.(event);
         
         // Clear ping interval
@@ -165,14 +168,14 @@ const useSocket = (url, options = {}) => {
   }, [disconnect, connect]);
 
   useEffect(() => {
-    if (url) {
+    if (wsUrl) {
       connect();
     }
 
     return () => {
       disconnect();
     };
-  }, [url, connect, disconnect]);
+  }, [wsUrl, connect, disconnect]);
 
   return {
     isConnected,

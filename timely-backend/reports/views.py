@@ -343,7 +343,7 @@ def _generate_fixtures_csv(response, filters):
     """Generate fixtures CSV"""
     from fixtures.models import Fixture
     
-    queryset = Fixture.objects.select_related('event', 'home_team', 'away_team', 'venue')
+    queryset = Fixture.objects.select_related('event', 'home', 'away', 'venue')
     
     if filters.get('event'):
         queryset = queryset.filter(event=filters['event'])
@@ -360,8 +360,8 @@ def _generate_fixtures_csv(response, filters):
             fixture.event.name,
             fixture.round,
             fixture.get_phase_display(),
-            fixture.home_team.name if fixture.home_team else '',
-            fixture.away_team.name if fixture.away_team else '',
+            fixture.home.name if fixture.home else '',
+            fixture.away.name if fixture.away else '',
             fixture.venue.name if fixture.venue else '',
             fixture.start_at.strftime('%Y-%m-%d %H:%M:%S'),
             fixture.get_status_display()
@@ -372,7 +372,7 @@ def _generate_results_csv(response, filters):
     """Generate results CSV"""
     from results.models import Result
     
-    queryset = Result.objects.select_related('fixture', 'fixture__event', 'fixture__home_team', 'fixture__away_team', 'winner')
+    queryset = Result.objects.select_related('fixture', 'fixture__event', 'fixture__home', 'fixture__away', 'winner')
     
     if filters.get('event'):
         queryset = queryset.filter(fixture__event=filters['event'])
@@ -387,9 +387,9 @@ def _generate_results_csv(response, filters):
         writer.writerow([
             result.id,
             result.fixture.event.name,
-            f"{result.fixture.home_team.name if result.fixture.home_team else 'TBD'} vs {result.fixture.away_team.name if result.fixture.away_team else 'TBD'}",
-            result.fixture.home_team.name if result.fixture.home_team else '',
-            result.fixture.away_team.name if result.fixture.away_team else '',
+            f"{result.fixture.home.name if result.fixture.home else 'TBD'} vs {result.fixture.away.name if result.fixture.away else 'TBD'}",
+            result.fixture.home.name if result.fixture.home else '',
+            result.fixture.away.name if result.fixture.away else '',
             result.score_home,
             result.score_away,
             result.winner.name if result.winner else 'Draw',

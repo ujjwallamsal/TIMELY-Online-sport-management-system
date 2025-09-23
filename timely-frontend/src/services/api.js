@@ -17,13 +17,8 @@ export class API {
    * Checks environment variables and falls back to default
    */
   getBaseURL() {
-    // Check for environment variable first
-    if (import.meta.env.VITE_API_URL) {
-      return import.meta.env.VITE_API_URL;
-    }
-    
-    // Fallback to default development URL
-    return 'http://127.0.0.1:8000/api';
+    // Single API surface enforced: always use "/api" so Vite proxy handles host
+    return '/api';
   }
 
   /**
@@ -62,7 +57,16 @@ export class API {
    * Make HTTP request with error handling
    */
   async request(url, options = {}) {
-    const fullUrl = url.startsWith('http') ? url : `${this.baseURL}${url}`;
+    // Ensure proper URL joining
+    let fullUrl;
+    if (url.startsWith('http')) {
+      fullUrl = url;
+    } else {
+      // Remove trailing slash from baseURL and add leading slash to url if missing
+      const baseUrl = this.baseURL.replace(/\/$/, '');
+      const path = url.startsWith('/') ? url : `/${url}`;
+      fullUrl = `${baseUrl}${path}`;
+    }
     
     const config = {
       headers: this.getHeaders(options.headers),
