@@ -1,64 +1,10 @@
 // src/routes/index.jsx
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-
-// Layouts
+import { Routes, Route } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout.jsx';
-import AdminLayout from '../components/admin/AdminLayout.jsx';
-
-// Public Pages
 import Home from '../pages/public/Home.jsx';
 import Login from '../pages/Login.jsx';
-import Signup from '../pages/Signup.jsx';
-import PasswordReset from '../pages/PasswordReset.jsx';
-import EventDetail from '../pages/public/EventDetail.jsx';
-import EventsPage from '../pages/EventsPage.jsx';
-import SchedulePage from '../pages/SchedulePage.jsx';
-import NewsPage from '../pages/NewsPage.jsx';
-import GalleryPage from '../pages/GalleryPage.jsx';
-import ResultsPage from '../pages/ResultsPage.jsx';
 import NotFound from '../pages/NotFound.jsx';
-import Error500 from '../pages/Error500.jsx';
-
-// Admin Pages
-import AdminDashboard from '../pages/admin/Dashboard.jsx';
-import EventsManage from '../pages/admin/EventsManage.jsx';
-import EventForm from '../pages/admin/EventForm.jsx';
-import EventDetailAdmin from '../pages/admin/EventDetail.jsx';
-import RegistrationsManage from '../pages/admin/RegistrationsManage.jsx';
-import FixturesManage from '../pages/admin/FixturesManage.jsx';
-import ResultsManage from '../pages/admin/ResultsManage.jsx';
-import Venues from '../pages/admin/Venues.jsx';
-import VenueForm from '../pages/admin/VenueForm.jsx';
-import Users from '../pages/admin/Users.jsx';
-import AnnouncementsManage from '../pages/admin/AnnouncementsManage.jsx';
-import ReportsManage from '../pages/admin/ReportsManage.jsx';
-import SettingsManage from '../pages/admin/SettingsManage.jsx';
-
-// Coach Pages
-import CoachDashboard from '../pages/coach/Dashboard.jsx';
-import CoachTeamDashboard from '../pages/coach/TeamDashboard.jsx';
-import CoachTeamFixtures from '../pages/coach/TeamFixtures.jsx';
-
-// Athlete Pages
-import AthleteDashboard from '../pages/athlete/Dashboard.jsx';
-import AthleteMyTickets from '../pages/athlete/MyTickets.jsx';
-import AthleteMyRegistrations from '../pages/athlete/MyRegistrations.jsx';
-import AthleteNotifications from '../pages/athlete/Notifications.jsx';
-import AthleteRegistrationWizard from '../pages/athlete/RegistrationWizard.jsx';
-
-// Spectator Pages (Public)
-import SpectatorDashboard from '../pages/spectator/Dashboard.jsx';
-import SpectatorEvents from '../pages/public/Home.jsx'; // Same as home
-import SpectatorTickets from '../pages/athlete/MyTickets.jsx'; // Reuse athlete tickets
-
-// Components
-import RequireRole from '../components/RequireRole.jsx';
-import ErrorBoundary from '../components/ErrorBoundary.jsx';
-import AppToaster from '../components/AppToaster.jsx';
-import TestUIComponents from '../components/TestUIComponents.jsx';
-import FormTest from '../components/FormTest.jsx';
 
 /**
  * SkipLink component for accessibility
@@ -102,104 +48,13 @@ const AdminAccessDenied = () => (
  */
 export default function AppRoutes() {
   return (
-    <ErrorBoundary>
-      <AppToaster>
-        <AppLayout>
-          <SkipLink />
-          <Routes>
-            {/* ==================== PUBLIC ROUTES ==================== */}
-            
-            {/* Spectator Routes */}
-            <Route path="/" element={<Home />} />
-            <Route path="/events" element={<EventsPage />} />
-            <Route path="/events/:id" element={<EventDetail />} />
-            <Route path="/schedule" element={<SchedulePage />} />
-            <Route path="/matches" element={<SchedulePage />} />
-            <Route path="/news" element={<NewsPage />} />
-            <Route path="/results" element={<ResultsPage />} />
-            <Route path="/gallery" element={<GalleryPage />} />
-            <Route path="/media" element={<GalleryPage />} />
-            <Route path="/tickets" element={<SpectatorTickets />} />
-            
-            {/* Authentication */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/password-reset" element={<PasswordReset />} />
-            
-            {/* UI Components Demo */}
-            <Route path="/ui-demo" element={<TestUIComponents />} />
-            <Route path="/form-test" element={<FormTest />} />
-            
-            {/* ==================== ROLE-BASED ROUTES ==================== */}
-            
-            {/* Admin & Organizer Routes */}
-            <Route path="/admin/*" element={
-              <RequireRole roles={['ADMIN', 'ORGANIZER']} fallback={<AdminAccessDenied />}>
-                <AdminLayout>
-                  <Routes>
-                    <Route path="/" element={<AdminDashboard />} />
-                    <Route path="/events" element={<EventsManage />} />
-                    <Route path="/events/new" element={<EventForm />} />
-                    <Route path="/events/:id/edit" element={<EventForm />} />
-                    <Route path="/events/:id" element={<EventDetailAdmin />} />
-                    <Route path="/registrations" element={<RegistrationsManage />} />
-                    <Route path="/fixtures" element={<FixturesManage />} />
-                    <Route path="/results" element={<ResultsManage />} />
-                    <Route path="/venues" element={<Venues />} />
-                    <Route path="/venues/new" element={<VenueForm />} />
-                    <Route path="/venues/:id/edit" element={<VenueForm />} />
-                    <Route path="/users" element={<Users />} />
-                    <Route path="/announcements" element={<AnnouncementsManage />} />
-                    <Route path="/reports" element={<ReportsManage />} />
-                    <Route path="/settings" element={<SettingsManage />} />
-                    <Route path="*" element={<Navigate to="/admin" replace />} />
-                  </Routes>
-                </AdminLayout>
-              </RequireRole>
-            } />
-            
-            {/* Coach Routes */}
-            <Route path="/coach/*" element={
-              <RequireRole roles={['COACH', 'ADMIN']}>
-                <Routes>
-                  <Route path="/" element={<CoachDashboard />} />
-                  <Route path="/teams/:id" element={<CoachTeamDashboard />} />
-                  <Route path="/events/:eventId" element={<CoachTeamFixtures />} />
-                  <Route path="*" element={<Navigate to="/coach" replace />} />
-                </Routes>
-              </RequireRole>
-            } />
-            
-            {/* Athlete Routes */}
-            <Route path="/athlete/*" element={
-              <RequireRole roles={['ATHLETE', 'ADMIN']}>
-                <Routes>
-                  <Route path="/" element={<AthleteDashboard />} />
-                  <Route path="/tickets" element={<AthleteMyTickets />} />
-                  <Route path="/teams/:id" element={<AthleteMyRegistrations />} />
-                  <Route path="*" element={<Navigate to="/athlete" replace />} />
-                </Routes>
-              </RequireRole>
-            } />
-            
-            {/* Spectator Routes */}
-            <Route path="/spectator/*" element={
-              <RequireRole roles={['SPECTATOR', 'ADMIN']}>
-                <Routes>
-                  <Route path="/" element={<SpectatorDashboard />} />
-                  <Route path="/events" element={<SpectatorEvents />} />
-                  <Route path="/tickets" element={<SpectatorTickets />} />
-                  <Route path="*" element={<Navigate to="/spectator" replace />} />
-                </Routes>
-              </RequireRole>
-            } />
-            
-            {/* ==================== ERROR ROUTES ==================== */}
-            <Route path="/500" element={<Error500 />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AppLayout>
-      </AppToaster>
-    </ErrorBoundary>
+    <AppLayout>
+      <SkipLink />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </AppLayout>
   );
 }
