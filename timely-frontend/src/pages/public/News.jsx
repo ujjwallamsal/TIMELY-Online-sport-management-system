@@ -6,7 +6,7 @@ import {
   FunnelIcon
 } from '@heroicons/react/24/outline';
 import useSocket from '../../hooks/useSocket';
-import api from '../../services/api';
+import api from '../../services/api.js';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState, { EmptyEvents } from '../../components/ui/EmptyState';
@@ -40,42 +40,27 @@ const PublicNews = () => {
   const fetchNews = async (page = 1) => {
     try {
       setLoading(true);
-      // TODO: Implement news API endpoint in backend
-      // For now, show placeholder content
-      const mockNews = [
-        {
-          id: 1,
-          title: "Welcome to Timely Sports Management",
-          excerpt: "We're excited to announce the launch of our comprehensive sports management platform. Stay tuned for updates and new features!",
-          category: "announcement",
-          publish_at: new Date().toISOString(),
-          featured_image: null
-        },
-        {
-          id: 2,
-          title: "Upcoming Events This Season",
-          excerpt: "Check out our exciting lineup of sports events scheduled for this season. Registration is now open!",
-          category: "event",
-          publish_at: new Date(Date.now() - 86400000).toISOString(),
-          featured_image: null
-        },
-        {
-          id: 3,
-          title: "Championship Results",
-          excerpt: "Congratulations to all participants in our recent championship events. View the complete results and highlights.",
-          category: "result",
-          publish_at: new Date(Date.now() - 172800000).toISOString(),
-          featured_image: null
-        }
-      ];
       
-      setNews(mockNews);
+      // Get news from backend API
+      const response = await api.get('/api/content/public/news/', {
+        params: {
+          page,
+          page_size: 10,
+          ...(filters.search && { search: filters.search }),
+          ...(filters.category && { category: filters.category }),
+          ...(filters.date_from && { publish_at__gte: filters.date_from }),
+          ...(filters.date_to && { publish_at__lte: filters.date_to })
+        }
+      });
+      
+      const newsData = response.data;
+      setNews(newsData.results || []);
       setPagination({
-        page: 1,
-        page_size: 10,
-        count: mockNews.length,
-        previous: null,
-        next: null
+        page: newsData.page || 1,
+        page_size: newsData.page_size || 10,
+        count: newsData.count || 0,
+        previous: newsData.previous,
+        next: newsData.next
       });
     } catch (error) {
       console.error('Error fetching news:', error);
@@ -337,6 +322,7 @@ const PublicNews = () => {
           </>
         ) : (
           <EmptyEvents 
+            showCreateButton={false}
             title="No News Available"
             description="There are no news articles available at the moment."
             action={

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { publicAPI } from '../services/api';
+import { publicAPI } from '../../services/api.js';
 import EventCard from '../components/EventCard';
 import EventFilters from '../components/EventFilters';
 import Pagination from '../components/ui/Pagination';
@@ -44,7 +44,7 @@ const SpectatorEvents = () => {
         }
       });
       
-      const response = await publicAPI.listPublicEvents(params);
+      const response = await publicAPI.getEvents(params);
       
       setEvents(response.data.results || []);
       setPagination(prev => ({
@@ -65,7 +65,7 @@ const SpectatorEvents = () => {
   // Load available sports for filter dropdown
   const loadSports = useCallback(async () => {
     try {
-      const response = await publicAPI.listPublicEvents({ page_size: 1000 });
+      const response = await publicAPI.getEvents({ page_size: 1000 });
       const uniqueSports = [...new Set(response.data.results.map(event => event.sport))];
       setSports(uniqueSports.sort());
     } catch (err) {

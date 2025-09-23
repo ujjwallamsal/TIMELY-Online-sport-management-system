@@ -26,7 +26,5 @@ class HealthView(APIView):
             db_status = "error"
         
         return JsonResponse({
-            "status": "ok",
-            "time": timezone.now().isoformat(),
-            "db": db_status
+            "ok": True
         })

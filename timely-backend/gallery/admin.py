@@ -3,12 +3,12 @@ from .models import Album, MediaAsset, Media
 
 @admin.action(description="Approve selected media")
 def approve_media(modeladmin, request, queryset):
-	updated = queryset.update(status=Media.Status.APPROVED)
+	updated = queryset.update(is_approved=True)
 	modeladmin.message_user(request, f"Approved {updated} media items")
 
 @admin.action(description="Reject selected media")
 def reject_media(modeladmin, request, queryset):
-	updated = queryset.update(status=Media.Status.REJECTED)
+	updated = queryset.update(is_approved=False)
 	modeladmin.message_user(request, f"Rejected {updated} media items")
 
 @admin.register(Album)
@@ -27,8 +27,8 @@ class MediaAssetAdmin(admin.ModelAdmin):
 
 @admin.register(Media)
 class MediaAdmin(admin.ModelAdmin):
-	list_display = ["event", "type", "title", "status", "uploaded_by", "created_at"]
-	list_filter = ["type", "status", "created_at"]
-	search_fields = ["event__name", "title", "description", "uploaded_by__email"]
+	list_display = ["event", "media_type", "caption", "is_approved", "uploaded_by", "created_at"]
+	list_filter = ["media_type", "is_approved", "created_at"]
+	search_fields = ["event__name", "caption", "uploaded_by__email"]
 	ordering = ["-created_at"]
 	actions = [approve_media, reject_media]

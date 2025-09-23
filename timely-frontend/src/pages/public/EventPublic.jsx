@@ -9,7 +9,7 @@ import {
   PhotoIcon
 } from '@heroicons/react/24/outline';
 import useSocket from '../../hooks/useSocket';
-import api from '../../services/api';
+import api from '../../services/api.js';
 import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState, { EmptyEvents } from '../../components/ui/EmptyState';
@@ -168,6 +168,7 @@ const EventPublic = ({ eventId }) => {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <EmptyEvents 
+          showCreateButton={false}
           title="Event Not Found"
           description="The event you're looking for doesn't exist or has been removed."
           action={

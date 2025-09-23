@@ -15,6 +15,8 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import RealtimeAnnouncements from '../../components/RealtimeAnnouncements';
+import { coachDashboardAPI, dashboardUtils } from '../../services/dashboardAPI';
 
 export default function CoachDashboard() {
   const [teams, setTeams] = useState([]);
@@ -47,63 +49,16 @@ export default function CoachDashboard() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Mock data - replace with actual API calls
-        setTeams([
-          {
-            id: 1,
-            name: "Thunder Hawks",
-            sport: "Basketball",
-            memberCount: 12,
-            nextMatch: "2024-03-15",
-            status: "active"
-          },
-          {
-            id: 2,
-            name: "Lightning Bolts",
-            sport: "Soccer",
-            memberCount: 18,
-            nextMatch: "2024-03-18",
-            status: "active"
-          }
+        // Fetch real data from API
+        const [teamsData, fixturesData, announcementsData] = await Promise.all([
+          coachDashboardAPI.getMyTeams(),
+          coachDashboardAPI.getUpcomingFixtures(),
+          coachDashboardAPI.getAnnouncements()
         ]);
 
-        setUpcomingFixtures([
-          {
-            id: 1,
-            team: "Thunder Hawks",
-            opponent: "Storm Riders",
-            date: "2024-03-15",
-            time: "14:00",
-            venue: "Main Arena",
-            status: "scheduled"
-          },
-          {
-            id: 2,
-            team: "Lightning Bolts",
-            opponent: "Fire Dragons",
-            date: "2024-03-18",
-            time: "16:30",
-            venue: "Field A",
-            status: "scheduled"
-          }
-        ]);
-
-        setAnnouncements([
-          {
-            id: 1,
-            title: "Practice Schedule Update",
-            message: "Practice moved to 6 PM this week",
-            date: "2024-03-10",
-            priority: "high"
-          },
-          {
-            id: 2,
-            title: "Equipment Check",
-            message: "Please bring your gear for inspection",
-            date: "2024-03-08",
-            priority: "medium"
-          }
-        ]);
+        setTeams(teamsData);
+        setUpcomingFixtures(fixturesData);
+        setAnnouncements(announcementsData);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -134,7 +89,7 @@ export default function CoachDashboard() {
     );
   }
 
-  const totalRosterCount = teams.reduce((sum, team) => sum + team.memberCount, 0);
+  const totalRosterCount = teams.reduce((sum, team) => sum + (team.member_count || 0), 0);
 
   return (
     <div className="p-6">
@@ -197,6 +152,15 @@ export default function CoachDashboard() {
         </Card>
       </div>
 
+      {/* Live Announcements */}
+      <div className="mb-8">
+        <RealtimeAnnouncements 
+          showInDashboard={true}
+          maxAnnouncements={3}
+          autoHide={false}
+        />
+      </div>
+
       {/* Quick Actions */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
@@ -229,11 +193,11 @@ export default function CoachDashboard() {
                 <div key={team.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
                     <h3 className="font-medium text-gray-900">{team.name}</h3>
-                    <p className="text-sm text-gray-600">{team.sport}</p>
-                    <p className="text-xs text-gray-500">{team.memberCount} members</p>
+                    <p className="text-sm text-gray-600">{team.sport?.name || 'Unknown Sport'}</p>
+                    <p className="text-xs text-gray-500">{team.member_count || 0} members</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-gray-600">Next: {team.nextMatch}</p>
+                    <p className="text-sm text-gray-600">Next: {team.next_match ? dashboardUtils.formatDate(team.next_match) : 'TBD'}</p>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       team.status === 'active' 
                         ? 'bg-green-100 text-green-800'
@@ -268,9 +232,9 @@ export default function CoachDashboard() {
               {upcomingFixtures.map((fixture) => (
                 <div key={fixture.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <h3 className="font-medium text-gray-900">{fixture.team} vs {fixture.opponent}</h3>
-                    <p className="text-sm text-gray-600">{fixture.venue}</p>
-                    <p className="text-xs text-gray-500">{fixture.date} at {fixture.time}</p>
+                    <h3 className="font-medium text-gray-900">{fixture.home_team?.name} vs {fixture.away_team?.name}</h3>
+                    <p className="text-sm text-gray-600">{fixture.venue?.name || 'TBD'}</p>
+                    <p className="text-xs text-gray-500">{dashboardUtils.formatDate(fixture.start_date)} at {dashboardUtils.formatTime(fixture.start_time)}</p>
                   </div>
                   <div className="text-right">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

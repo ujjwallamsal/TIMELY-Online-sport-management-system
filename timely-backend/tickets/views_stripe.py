@@ -154,7 +154,7 @@ def get_my_tickets(request):
             order__user=request.user,
             order__status=TicketOrder.Status.PAID
         ).select_related(
-            'ticket_type', 'order', 'order__event', 'order__fixture'
+            'ticket_type', 'order'
         ).order_by('-issued_at')
         
         # Apply filters

@@ -39,8 +39,8 @@ export default function AppLayout({ children }) {
   return (
     <SidebarContext.Provider value={sidebarContextValue}>
       <div className="min-h-screen bg-gray-50">
-        {/* Navigation - show for all pages except auth pages */}
-        {!isAuthPage && <Navigation />}
+        {/* Navigation - show for all pages including auth pages */}
+        <Navigation />
         
         {/* Sidebar - show for authenticated users on non-auth pages, but not home page or admin pages */}
         {user && !isAuthPage && !isHomePage && !isAdminPage && (

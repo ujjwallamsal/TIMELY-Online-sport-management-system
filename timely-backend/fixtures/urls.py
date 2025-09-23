@@ -3,6 +3,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from .views import FixtureViewSet, EventFixtureViewSet
+from .public_views import PublicMatchViewSet
 
 # Create router for fixtures
 router = DefaultRouter()
@@ -20,7 +21,7 @@ urlpatterns = [
     }), name='event-fixtures'),
     
     # Public fixture URLs (read-only)
-    path('public/events/<int:event_id>/fixtures/', EventFixtureViewSet.as_view({
+    path('public/events/<int:event_id>/fixtures/', PublicMatchViewSet.as_view({
         'get': 'list'
     }), name='public-event-fixtures'),
 ]

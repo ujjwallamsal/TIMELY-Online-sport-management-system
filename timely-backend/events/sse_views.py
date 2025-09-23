@@ -4,6 +4,7 @@ Server-Sent Events (SSE) fallback endpoints for real-time updates.
 Provides HTTP-based real-time updates when WebSockets are not available.
 """
 import json
+import time
 import asyncio
 from django.http import StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -60,7 +61,7 @@ class SSEEventStreamView(View):
                     # This is a simplified version - in production you'd want to use
                     # a proper message queue or Redis pub/sub
                     yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': timezone.now().isoformat()})}\n\n"
-                    asyncio.sleep(30)  # Send heartbeat every 30 seconds
+                    time.sleep(30)  # Send heartbeat every 30 seconds
                 except Exception as e:
                     yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
                     break
@@ -120,17 +121,18 @@ def event_results_sse(request, event_id):
                     
                     # Send individual result updates
                     for result in recent_results:
-                        yield f"data: {json.dumps({'type': 'result_update', 'data': {
+                        result_data = {
                             'fixture_id': result.fixture.id,
                             'home_score': result.home_score,
                             'away_score': result.away_score,
                             'winner': result.winner.id if result.winner else None,
                             'finalized_at': result.finalized_at.isoformat() if result.finalized_at else None
-                        }})}\n\n"
+                        }
+                        yield f"data: {json.dumps({'type': 'result_update', 'data': result_data})}\n\n"
                     
                     last_update = timezone.now()
                 
-                asyncio.sleep(5)  # Check every 5 seconds
+                time.sleep(5)  # Check every 5 seconds
                 
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -204,7 +206,7 @@ def event_schedule_sse(request, event_id):
                     yield f"data: {json.dumps({'type': 'schedule_update', 'data': schedule_data})}\n\n"
                     last_update = timezone.now()
                 
-                asyncio.sleep(10)  # Check every 10 seconds
+                time.sleep(10)  # Check every 10 seconds
                 
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -249,7 +251,7 @@ def team_updates_sse(request, team_id):
                 
                 if recent_fixtures.exists():
                     for fixture in recent_fixtures:
-                        yield f"data: {json.dumps({'type': 'fixture_update', 'data': {
+                        fixture_data = {
                             'fixture_id': fixture.id,
                             'home_team': fixture.home.name if fixture.home else None,
                             'away_team': fixture.away.name if fixture.away else None,
@@ -257,11 +259,12 @@ def team_updates_sse(request, team_id):
                             'venue': fixture.venue.name if fixture.venue else None,
                             'status': fixture.status,
                             'event_id': fixture.event.id
-                        }})}\n\n"
+                        }
+                        yield f"data: {json.dumps({'type': 'fixture_update', 'data': fixture_data})}\n\n"
                     
                     last_update = timezone.now()
                 
-                asyncio.sleep(10)  # Check every 10 seconds
+                time.sleep(10)  # Check every 10 seconds
                 
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

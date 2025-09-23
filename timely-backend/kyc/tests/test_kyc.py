@@ -7,7 +7,8 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from kyc.models import KycProfile, KycDocument
-from accounts.models import RoleRequest, AuditLog
+from accounts.models import RoleRequest
+from common.models import AuditLog
 
 User = get_user_model()
 

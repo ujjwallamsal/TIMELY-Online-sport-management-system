@@ -3,7 +3,7 @@
  * Provides tabs for different statuses and bulk moderation actions.
  */
 import React, { useState, useEffect } from 'react';
-import { mediaAPI } from '../services/api';
+import { mediaAPI } from '../../services/api.js';
 import MediaCard from '../components/MediaCard';
 import MediaFilters from '../components/MediaFilters';
 

@@ -1,6 +1,6 @@
 // TicketTypeCard.jsx - Component for displaying ticket types
 import React, { useState } from 'react';
-import { utils } from '../services/api';
+import { utils } from '../services/api.js';
 
 const TicketTypeCard = ({ ticketType, onAddToCart, maxQuantity = 10 }) => {
   const [quantity, setQuantity] = useState(1);

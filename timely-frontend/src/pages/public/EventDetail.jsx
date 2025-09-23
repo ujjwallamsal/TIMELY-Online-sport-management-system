@@ -9,9 +9,11 @@ import {
   PhotoIcon,
   NewspaperIcon,
   TicketIcon,
-  ArrowLeftIcon
+  ArrowLeftIcon,
+  BellIcon
 } from '@heroicons/react/24/outline';
-import { getPublicEvent, getPublicEventFixtures, getPublicEventResults, getPublicEventLeaderboard } from '../services/api';
+import { getPublicEvent, getPublicEventFixtures, getPublicEventResults, getPublicEventLeaderboard } from '../../services/api.js';
+import RealtimeAnnouncements from '../../components/RealtimeAnnouncements';
 
 const EventDetail = () => {
   const { id } = useParams();
@@ -72,6 +74,7 @@ const EventDetail = () => {
     { id: 'schedule', name: 'Schedule', icon: ClockIcon },
     { id: 'results', name: 'Results', icon: TrophyIcon },
     { id: 'leaderboard', name: 'Leaderboard', icon: UserGroupIcon },
+    { id: 'announcements', name: 'Announcements', icon: BellIcon },
     { id: 'media', name: 'Media', icon: PhotoIcon },
     { id: 'news', name: 'News', icon: NewspaperIcon },
     { id: 'tickets', name: 'Tickets', icon: TicketIcon },
@@ -321,6 +324,20 @@ const EventDetail = () => {
     </div>
   );
 
+  const renderAnnouncements = () => (
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Live Announcements</h3>
+        <RealtimeAnnouncements 
+          eventId={id}
+          showInDashboard={false}
+          maxAnnouncements={10}
+          autoHide={false}
+        />
+      </div>
+    </div>
+  );
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'overview':
@@ -331,6 +348,8 @@ const EventDetail = () => {
         return renderResults();
       case 'leaderboard':
         return renderLeaderboard();
+      case 'announcements':
+        return renderAnnouncements();
       case 'media':
         return renderMedia();
       case 'news':

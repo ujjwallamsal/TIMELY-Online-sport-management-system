@@ -13,13 +13,14 @@ from .serializers import (
     VenueAvailabilitySerializer, VenueConflictCheckSerializer
 )
 from .permissions import CanManageVenues, CanViewVenues, IsAdminOrOwner
+from accounts.audit_mixin import AuditLogMixin
 from .services.availability import (
     find_conflicts, check_availability, create_availability_slots,
     validate_slot_data
 )
 
 
-class VenueViewSet(viewsets.ModelViewSet):
+class VenueViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """
     ViewSet for venue CRUD operations.
     """
@@ -36,6 +37,12 @@ class VenueViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return VenueListSerializer
         return VenueSerializer
+
+    def get_serializer_context(self):
+        """Add request to serializer context"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
     def get_permissions(self):
         """Return appropriate permissions based on action"""
@@ -160,6 +167,39 @@ class VenueViewSet(viewsets.ModelViewSet):
             return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
         
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='availability')
+    def general_availability(self, request):
+        """Get venue availability including fixture bookings for a date range"""
+        from_date = request.query_params.get('from')
+        to_date = request.query_params.get('to')
+        
+        if not from_date or not to_date:
+            return Response(
+                {'error': 'from and to date parameters are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            from_date = timezone.datetime.fromisoformat(from_date.replace('Z', '+00:00'))
+            to_date = timezone.datetime.fromisoformat(to_date.replace('Z', '+00:00'))
+        except ValueError:
+            return Response(
+                {'error': 'Invalid date format. Use ISO format.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate date range
+        if to_date <= from_date:
+            return Response(
+                {'error': 'End date must be after start date'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get all venue bookings in the date range
+        bookings_data = get_venue_bookings(from_date, to_date)
+        
+        return Response(bookings_data)
 
     @action(detail=False, methods=['post'], url_path='check-conflicts')
     def check_conflicts(self, request):

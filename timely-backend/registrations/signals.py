@@ -57,7 +57,7 @@ def registration_saved(sender, instance, created, **kwargs):
             {
                 'status': instance.status,
                 'event_name': instance.event.name,
-                'user_email': instance.user.email
+                'user_email': instance.user.email if instance.user else None
             }
         )
     else:

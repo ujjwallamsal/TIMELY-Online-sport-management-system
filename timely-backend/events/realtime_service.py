@@ -9,7 +9,7 @@ from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.utils import timezone
 
-from results.services import compute_event_leaderboard
+from results.services import compute_event_leaderboard, recompute_event_standings
 from results.models import LeaderboardEntry
 from fixtures.models import Fixture
 from teams.models import Team
@@ -24,8 +24,23 @@ class RealtimeBroadcastService:
     def broadcast_event_leaderboard(self, event_id):
         """Broadcast updated leaderboard for an event"""
         try:
-            # Compute fresh leaderboard
-            leaderboard = compute_event_leaderboard(event_id)
+            # Recompute and update leaderboard entries
+            leaderboard_entries = recompute_event_standings(event_id)
+            
+            # Convert to the format expected by the broadcasting
+            leaderboard = []
+            for entry in leaderboard_entries:
+                leaderboard.append({
+                    'team_id': entry.team.id,
+                    'points': entry.pts,
+                    'played': entry.matches_played,
+                    'won': entry.w,
+                    'drawn': entry.d,
+                    'lost': entry.l,
+                    'gf': entry.gf,
+                    'ga': entry.ga,
+                    'gd': entry.gd
+                })
             
             # Prepare compact leaderboard data
             compact_leaderboard = []

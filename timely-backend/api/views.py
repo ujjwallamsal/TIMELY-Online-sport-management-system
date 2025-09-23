@@ -4,14 +4,16 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from datetime import timedelta
 
-from common.views import HealthView
 from common.pagination import TimelyPageNumberPagination
 from .permissions import (
     IsAdmin, IsOrganizer, IsCoach, IsAthlete, IsSpectator,
@@ -45,6 +47,14 @@ from gallery.serializers import MediaUploadSerializer, MediaModerationSerializer
 
 
 # ===== AUTHENTICATION VIEWSETS =====
+
+class HealthView(APIView):
+    """Lightweight health check returning a simple ok flag"""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        return Response({"ok": True})
 
 class AuthViewSet(viewsets.ViewSet):
     """Authentication endpoints - delegates to accounts app"""
@@ -88,6 +98,14 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.request.user.is_superuser or self.request.user.role == User.Role.ADMIN:
             return User.objects.all()
         return User.objects.filter(id=self.request.user.id)
+    
+    def get_permissions(self):
+        """Restrict write operations on users to admins only."""
+        if self.action in ['update', 'partial_update', 'destroy']:
+            permission_classes = [IsAuthenticated, IsAdmin]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
     
     @action(detail=False, methods=['get', 'patch'])
     def me(self, request):
@@ -194,12 +212,12 @@ class VenueViewSet(viewsets.ModelViewSet):
 
 class EventViewSet(viewsets.ModelViewSet):
     """Event management endpoints"""
-    queryset = Event.objects.select_related('sport', 'venue', 'created_by').all()
+    queryset = Event.objects.select_related('venue', 'created_by').all()
     serializer_class = EventSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = EventFilter
-    search_fields = ['name', 'description', 'sport__name']
+    search_fields = ['name', 'description', 'sport']
     ordering_fields = ['start_datetime', 'created_at', 'name']
     ordering = ['-start_datetime']
     
@@ -379,18 +397,18 @@ class FixtureViewSet(viewsets.ModelViewSet):
         result, created = Result.objects.get_or_create(
             fixture=fixture,
             defaults={
-                'home_score': home_score,
-                'away_score': away_score,
-                'entered_by': request.user,
-                'entered_at': timezone.now()
+                'score_home': home_score,
+                'score_away': away_score,
+                'verified_by': request.user,
+                'verified_at': timezone.now()
             }
         )
         
         if not created:
-            result.home_score = home_score
-            result.away_score = away_score
-            result.entered_by = request.user
-            result.entered_at = timezone.now()
+            result.score_home = home_score
+            result.score_away = away_score
+            result.verified_by = request.user
+            result.verified_at = timezone.now()
             result.save()
         
         # Update fixture status
@@ -401,17 +419,75 @@ class FixtureViewSet(viewsets.ModelViewSet):
             'message': 'Result recorded successfully',
             'result_id': result.id
         })
+    
+    def partial_update(self, request, pk=None):
+        """Reschedule a fixture (PATCH /api/fixtures/:fixtureId)"""
+        fixture = self.get_object()
+        
+        # Check permissions
+        if not (request.user.is_staff or request.user.role == 'ADMIN' or 
+                (request.user.role == 'ORGANIZER' and fixture.event.created_by == request.user)):
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get update data
+        start_at = request.data.get('start_at')
+        venue_id = request.data.get('venue_id')
+        
+        if start_at:
+            try:
+                from django.utils.dateparse import parse_datetime
+                start_at = parse_datetime(start_at)
+                if not start_at:
+                    return Response(
+                        {'error': 'Invalid start_at format. Use ISO format.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            except:
+                return Response(
+                    {'error': 'Invalid start_at format. Use ISO format.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Update fixture
+        if start_at:
+            fixture.start_at = start_at
+        if venue_id:
+            fixture.venue_id = venue_id
+        
+        # Check for conflicts
+        from fixtures.services import check_fixture_conflicts
+        conflicts = check_fixture_conflicts(fixture)
+        
+        if conflicts:
+            return Response({
+                'error': 'Conflicts detected',
+                'conflicts': conflicts
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        fixture.save()
+        
+        # Broadcast schedule update
+        from events.realtime_service import realtime_service
+        realtime_service.broadcast_fixture_schedule(fixture.event.id, fixture.id)
+        
+        return Response({
+            'message': 'Fixture rescheduled successfully',
+            'fixture': FixtureSerializer(fixture).data
+        })
 
 
 class ResultViewSet(viewsets.ModelViewSet):
     """Result management endpoints"""
-    queryset = Result.objects.select_related('fixture', 'winner', 'entered_by').all()
+    queryset = Result.objects.select_related('fixture', 'winner', 'verified_by').all()
     serializer_class = ResultSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ResultFilter
-    ordering_fields = ['entered_at', 'finalized_at']
-    ordering = ['-entered_at']
+    ordering_fields = ['verified_at', 'finalized_at']
+    ordering = ['-verified_at']
     
     def get_permissions(self):
         """Override permissions for different actions"""
@@ -428,14 +504,14 @@ class ResultViewSet(viewsets.ModelViewSet):
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
     """Announcement management endpoints"""
-    queryset = Announcement.objects.select_related('event', 'sent_by').all()
+    queryset = Announcement.objects.select_related('event', 'created_by').all()
     serializer_class = AnnouncementSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    search_fields = ['subject', 'body']
-    filterset_fields = ['event', 'audience', 'sent_by']
-    ordering_fields = ['sent_at']
-    ordering = ['-sent_at']
+    search_fields = ['title', 'message']
+    filterset_fields = ['event', 'type', 'priority', 'created_by']
+    ordering_fields = ['created_at', 'priority']
+    ordering = ['-created_at']
     
     def get_permissions(self):
         """Override permissions for different actions"""
@@ -446,6 +522,10 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
+    
+    def perform_create(self, serializer):
+        """Set the created_by field to the current user"""
+        serializer.save(created_by=self.request.user)
 
 
 # ===== NOTIFICATIONS =====
@@ -484,11 +564,11 @@ class ReportViewSet(viewsets.ViewSet):
         writer = csv.writer(response)
         writer.writerow(['Name', 'Sport', 'Status', 'Start Date', 'End Date', 'Venue', 'Created By'])
         
-        events = Event.objects.select_related('sport', 'venue', 'created_by').all()
+        events = Event.objects.select_related('venue', 'created_by').all()
         for event in events:
             writer.writerow([
                 event.name,
-                event.sport.name,
+                event.sport,
                 event.status,
                 event.start_datetime,
                 event.end_datetime,
@@ -502,7 +582,7 @@ class ReportViewSet(viewsets.ViewSet):
 # ===== ADDITIONAL ENDPOINTS =====
 
 class EventRegistrationsView(APIView):
-    """Get registrations for a specific event"""
+    """Get and create registrations for a specific event"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request, event_id):
@@ -510,6 +590,27 @@ class EventRegistrationsView(APIView):
         registrations = Registration.objects.filter(event=event).select_related('applicant', 'team')
         serializer = RegistrationSerializer(registrations, many=True)
         return Response(serializer.data)
+    
+    def post(self, request, event_id):
+        """Create a new registration for an event"""
+        event = get_object_or_404(Event, id=event_id)
+        
+        # Add event to the request data
+        data = request.data.copy()
+        data['event'] = event_id
+        
+        # Use the registration create serializer
+        from registrations.serializers import RegistrationCreateSerializer
+        serializer = RegistrationCreateSerializer(data=data, context={'request': request})
+        
+        if serializer.is_valid():
+            registration = serializer.save()
+            return Response(
+                RegistrationSerializer(registration).data, 
+                status=status.HTTP_201_CREATED
+            )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EventFixturesView(APIView):
@@ -518,9 +619,53 @@ class EventFixturesView(APIView):
     
     def get(self, request, event_id):
         event = get_object_or_404(Event, id=event_id)
+        
+        # Apply role-based filtering
         fixtures = Fixture.objects.filter(event=event).select_related('home', 'away', 'venue')
+        
+        # Filter based on user role
+        if not request.user.is_authenticated:
+            # Public users can only see published fixtures
+            fixtures = fixtures.filter(status=Fixture.Status.SCHEDULED)  # Assuming SCHEDULED means published
+        elif request.user.is_staff or request.user.role == 'ADMIN':
+            # Admin sees all fixtures
+            pass
+        elif request.user.role == 'ORGANIZER':
+            # Organizer sees fixtures for their events + published fixtures
+            if event.created_by != request.user:
+                fixtures = fixtures.filter(status=Fixture.Status.SCHEDULED)
+        elif request.user.role == 'COACH':
+            # Coach sees fixtures for teams they coach + published fixtures
+            from teams.models import Team
+            team_ids = Team.objects.filter(coach=request.user, event=event).values_list('id', flat=True)
+            fixtures = fixtures.filter(
+                Q(home_id__in=team_ids) |
+                Q(away_id__in=team_ids) |
+                Q(status=Fixture.Status.SCHEDULED)
+            ).distinct()
+        elif request.user.role == 'ATHLETE':
+            # Athlete sees fixtures for teams they're in + published fixtures
+            from teams.models import TeamMember
+            team_ids = TeamMember.objects.filter(athlete=request.user, team__event=event).values_list('team_id', flat=True)
+            fixtures = fixtures.filter(
+                Q(home_id__in=team_ids) |
+                Q(away_id__in=team_ids) |
+                Q(status=Fixture.Status.SCHEDULED)
+            ).distinct()
+        else:
+            # Spectator sees only published fixtures
+            fixtures = fixtures.filter(status=Fixture.Status.SCHEDULED)
+        
+        # Order by start time
+        fixtures = fixtures.order_by('start_at', 'round')
+        
         serializer = FixtureSerializer(fixtures, many=True)
-        return Response(serializer.data)
+        return Response({
+            'event_id': event_id,
+            'event_name': event.name,
+            'fixtures_count': fixtures.count(),
+            'fixtures': serializer.data
+        })
 
 
 class GenerateFixturesView(APIView):
@@ -529,6 +674,14 @@ class GenerateFixturesView(APIView):
     
     def post(self, request, event_id):
         event = get_object_or_404(Event, id=event_id)
+        
+        # Get mode parameter (rr for round robin, ko for knockout)
+        mode = request.query_params.get('mode', 'rr')
+        if mode not in ['rr', 'ko']:
+            return Response(
+                {'error': 'Mode must be either "rr" (round robin) or "ko" (knockout)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Get approved teams for the event
         teams = Team.objects.filter(
@@ -542,10 +695,79 @@ class GenerateFixturesView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # TODO: Implement fixture generation logic
-        # This would use the fixture generation service
+        # Get team IDs
+        team_ids = list(teams.values_list('id', flat=True))
         
-        return Response({'message': 'Fixtures generated successfully'})
+        # Get start date from request or use event start date
+        start_date = request.data.get('start_date')
+        if start_date:
+            try:
+                from django.utils.dateparse import parse_datetime
+                start_date = parse_datetime(start_date)
+            except:
+                return Response(
+                    {'error': 'Invalid start_date format. Use ISO format.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            start_date = event.start_datetime or timezone.now() + timedelta(days=1)
+        
+        # Get venues from request
+        venues = request.data.get('venues', [])
+        
+        try:
+            # Generate fixtures based on mode
+            from fixtures.services import generate_round_robin, generate_knockout
+            
+            if mode == 'rr':
+                fixtures_data = generate_round_robin(team_ids, event_id, start_date, venues)
+            else:  # ko
+                fixtures_data = generate_knockout(team_ids, event_id, start_date, venues)
+            
+            # Create fixtures in database
+            created_fixtures = []
+            for fixture_data in fixtures_data:
+                # Convert string dates to datetime
+                start_at = fixture_data['start_at']
+                if isinstance(start_at, str):
+                    from django.utils.dateparse import parse_datetime
+                    start_at = parse_datetime(start_at)
+                
+                fixture = Fixture.objects.create(
+                    event=event,
+                    round=fixture_data['round'],
+                    phase=fixture_data['phase'],
+                    home_id=fixture_data.get('home_team_id'),
+                    away_id=fixture_data.get('away_team_id'),
+                    venue_id=fixture_data.get('venue_id'),
+                    start_at=start_at,
+                    status=Fixture.Status.SCHEDULED
+                )
+                
+                created_fixtures.append({
+                    'id': fixture.id,
+                    'round': fixture.round,
+                    'phase': fixture.phase,
+                    'home_team': fixture.home.name if fixture.home else 'TBD',
+                    'away_team': fixture.away.name if fixture.away else 'TBD',
+                    'venue': fixture.venue.name if fixture.venue else 'TBD',
+                    'start_at': fixture.start_at.isoformat(),
+                    'status': fixture.status
+                })
+            
+            return Response({
+                'message': f'Fixtures generated successfully using {mode} mode',
+                'mode': mode,
+                'teams_count': teams.count(),
+                'fixtures_count': len(created_fixtures),
+                'fixtures': created_fixtures
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to generate fixtures: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class EventLeaderboardView(APIView):
@@ -558,10 +780,33 @@ class EventLeaderboardView(APIView):
         # Get leaderboard entries for the event
         leaderboard = LeaderboardEntry.objects.filter(
             event=event
-        ).select_related('team').order_by('-pts', '-gd', '-gf')
+        ).select_related('team').order_by('-points', '-goal_difference', '-goals_for')
         
-        serializer = ResultSerializer(leaderboard, many=True)
-        return Response({'leaderboard': serializer.data})
+        # Convert to proper format
+        leaderboard_data = []
+        for i, entry in enumerate(leaderboard):
+            leaderboard_data.append({
+                'position': i + 1,
+                'team_id': entry.team.id,
+                'team_name': entry.team.name,
+                'points': entry.points,
+                'played': entry.matches_played,
+                'won': entry.wins,
+                'drawn': entry.draws,
+                'lost': entry.losses,
+                'goals_for': entry.goals_for,
+                'goals_against': entry.goals_against,
+                'goal_difference': entry.goal_difference,
+                'win_percentage': entry.wins / entry.matches_played * 100 if entry.matches_played > 0 else 0,
+                'points_per_match': entry.points / entry.matches_played if entry.matches_played > 0 else 0
+            })
+        
+        return Response({
+            'event_id': event_id,
+            'event_name': event.name,
+            'leaderboard': leaderboard_data,
+            'last_updated': timezone.now().isoformat()
+        })
 
 
 class EventAnnounceView(APIView):
@@ -570,27 +815,54 @@ class EventAnnounceView(APIView):
     
     def post(self, request, event_id):
         event = get_object_or_404(Event, id=event_id)
-        subject = request.data.get('subject')
-        body = request.data.get('body')
+        title = request.data.get('title') or request.data.get('subject')
+        message = request.data.get('message') or request.data.get('body')
         audience = request.data.get('audience', 'ALL')
         
-        if not subject or not body:
+        if not title or not message:
             return Response(
-                {'error': 'subject and body are required'},
+                {'error': 'title and message are required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validate audience parameter
+        valid_audiences = ['ALL', 'PARTICIPANTS', 'OFFICIALS']
+        if audience not in valid_audiences:
+            return Response(
+                {'error': f'audience must be one of: {", ".join(valid_audiences)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Map audience to model fields
+        is_public = audience in ['ALL', 'PARTICIPANTS']
+        target_teams = None
+        if audience == 'PARTICIPANTS':
+            # Get all teams registered for this event
+            target_teams = event.teams.all()
+        elif audience == 'OFFICIALS':
+            # For officials, we might want to target specific teams or make it non-public
+            is_public = False
+        
         announcement = Announcement.objects.create(
             event=event,
-            subject=subject,
-            body=body,
-            audience=audience,
-            sent_by=request.user
+            title=title,
+            message=message,
+            is_public=is_public,
+            created_by=request.user
         )
+        
+        # Set target teams if specified
+        if target_teams:
+            announcement.target_teams.set(target_teams)
+        
+        # Broadcast the announcement in real-time
+        if announcement.is_active:
+            announcement.broadcast()
         
         return Response({
             'message': 'Announcement sent successfully',
-            'announcement_id': announcement.id
+            'announcement_id': announcement.id,
+            'audience': audience
         })
 
 
@@ -600,7 +872,7 @@ class EventAnnouncementsView(APIView):
     
     def get(self, request, event_id):
         event = get_object_or_404(Event, id=event_id)
-        announcements = Announcement.objects.filter(event=event).select_related('sent_by')
+        announcements = Announcement.objects.filter(event=event).select_related('created_by')
         serializer = AnnouncementSerializer(announcements, many=True)
         return Response(serializer.data)
 
@@ -629,25 +901,64 @@ class FixtureResultView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        result, created = Result.objects.get_or_create(
+        # Validate scores
+        try:
+            home_score = int(home_score)
+            away_score = int(away_score)
+            if home_score < 0 or away_score < 0:
+                return Response(
+                    {'error': 'Scores must be non-negative integers'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Scores must be valid integers'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if result already exists
+        if hasattr(fixture, 'result'):
+            return Response(
+                {'error': 'Result already exists for this fixture'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create result
+        result = Result.objects.create(
             fixture=fixture,
-            defaults={
-                'home_score': home_score,
-                'away_score': away_score,
-                'entered_by': request.user,
-                'entered_at': timezone.now()
-            }
+            home_score=home_score,
+            away_score=away_score,
+            verified_by=request.user,
+            finalized_at=timezone.now()  # Auto-finalize for now
         )
         
-        if not created:
-            result.home_score = home_score
-            result.away_score = away_score
-            result.entered_by = request.user
-            result.entered_at = timezone.now()
-            result.save()
+        # Update fixture status
+        fixture.status = Fixture.Status.FINAL
+        fixture.save()
+        
+        # Recompute leaderboard
+        from results.services import recompute_event_leaderboard
+        recompute_event_leaderboard(fixture.event.id)
+        
+        # Broadcast result update
+        from events.realtime_service import realtime_service
+        result_data = {
+            'fixture_id': fixture.id,
+            'home_team_id': fixture.home.id if fixture.home else None,
+            'away_team_id': fixture.away.id if fixture.away else None,
+            'home_score': result.home_score,
+            'away_score': result.away_score,
+            'winner_id': result.winner.id if result.winner else None,
+            'is_draw': result.is_draw
+        }
+        realtime_service.broadcast_result_update(fixture.event.id, result_data)
+        realtime_service.broadcast_event_leaderboard(fixture.event.id)
         
         serializer = ResultSerializer(result)
-        return Response(serializer.data)
+        return Response({
+            'message': 'Result recorded successfully',
+            'result': serializer.data
+        }, status=status.HTTP_201_CREATED)
 
 
 class LockResultView(APIView):
@@ -724,13 +1035,13 @@ class PublicEventListView(APIView):
     def get(self, request):
         events = Event.objects.filter(
             visibility='PUBLIC',
-            status__in=[Event.Status.UPCOMING, Event.Status.ONGOING]
-        ).select_related('sport', 'venue').order_by('start_datetime')
+            status='published'  # Only show published events publicly
+        ).select_related('venue').order_by('start_datetime')
         
         # Apply filters
         sport = request.query_params.get('sport')
         if sport:
-            events = events.filter(sport__name__icontains=sport)
+            events = events.filter(sport__icontains=sport)
         
         venue = request.query_params.get('venue')
         if venue:
@@ -800,6 +1111,159 @@ class PublicEventLeaderboardView(APIView):
         
         serializer = ResultSerializer(leaderboard, many=True)
         return Response({'leaderboard': serializer.data})
+
+
+class PublicStatsView(APIView):
+    """Public statistics"""
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+        from teams.models import Team
+        from venues.models import Venue
+        from django.utils import timezone
+        
+        User = get_user_model()
+        now = timezone.now()
+        
+        # Count published events
+        events_count = Event.objects.filter(
+            status='published'
+        ).count()
+        
+        # Count total participants (users with athlete role)
+        participants_count = User.objects.filter(
+            role='ATHLETE',
+            is_active=True
+        ).count()
+        
+        # Count active teams
+        teams_count = Team.objects.filter(
+            is_active=True
+        ).count()
+        
+        # Count all venues
+        venues_count = Venue.objects.count()
+        
+        stats = {
+            'events': events_count,
+            'participants': participants_count,
+            'teams': teams_count,
+            'venues': venues_count,
+            'last_updated': now.isoformat()
+        }
+        
+        return Response(stats)
+
+
+# ===== AUTHENTICATION VIEWS =====
+
+class LoginView(APIView):
+    """JWT Login endpoint that accepts email/username and password"""
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """Login with email/username and password"""
+        email_or_username = request.data.get('email') or request.data.get('username')
+        password = request.data.get('password')
+        
+        if not email_or_username or not password:
+            return Response(
+                {'detail': 'Email/username and password are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Try to authenticate with email first, then username
+        user = None
+        try:
+            # Try email authentication
+            user = User.objects.get(email=email_or_username)
+            if not user.check_password(password):
+                user = None
+        except User.DoesNotExist:
+            try:
+                # Try username authentication
+                user = User.objects.get(username=email_or_username)
+                if not user.check_password(password):
+                    user = None
+            except User.DoesNotExist:
+                pass
+        
+        if user is None or not user.is_active:
+            return Response(
+                {'detail': 'Invalid email or password'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Generate JWT tokens
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+        
+        return Response({
+            'access': access_token,
+            'refresh': refresh_token,
+            'user': UserSerializer(user).data
+        })
+
+
+class RegisterView(APIView):
+    """JWT Registration endpoint"""
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """Register new user"""
+        from accounts.serializers import UserRegistrationSerializer
+        
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            
+            # Generate JWT tokens for immediate login
+            from rest_framework_simplejwt.tokens import RefreshToken
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+            
+            return Response({
+                'access': access_token,
+                'refresh': refresh_token,
+                'user': UserSerializer(user).data
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MeView(APIView):
+    """Get current user profile - JWT required"""
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    
+    def get(self, request):
+        """Get current user profile"""
+        if not request.user.is_authenticated:
+            return Response(
+                {'detail': 'Authentication credentials were not provided.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        try:
+            serializer = UserSerializer(request.user)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {'detail': 'Authentication failed'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+    
+    def patch(self, request):
+        """Update current user profile (partial update)."""
+        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # Media API Views

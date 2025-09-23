@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { publicAPI } from '../services/api';
+import { publicAPI } from '../../services/api.js';
 import ResultsTable from '../components/ResultsTable';
 import LeaderboardTable from '../components/LeaderboardTable';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -26,7 +26,7 @@ const SpectatorResults = () => {
       setError(null);
       
       // Get all events first
-      const eventsResponse = await publicAPI.listPublicEvents({ page_size: 1000 });
+      const eventsResponse = await publicAPI.getEvents({ page_size: 1000 });
       const allEvents = eventsResponse.data.results || [];
       
       // Filter events based on current filters
@@ -40,7 +40,7 @@ const SpectatorResults = () => {
       
       // Get results for filtered events
       const resultPromises = filteredEvents.map(event => 
-        publicAPI.listPublicResults(event.id)
+        publicAPI.getResults(event.id)
       );
       
       const resultResponses = await Promise.all(resultPromises);
@@ -96,7 +96,7 @@ const SpectatorResults = () => {
   // Load available sports and events for filters
   const loadFilterData = useCallback(async () => {
     try {
-      const response = await publicAPI.listPublicEvents({ page_size: 1000 });
+      const response = await publicAPI.getEvents({ page_size: 1000 });
       const allEvents = response.data.results || [];
       
       setEvents(allEvents);

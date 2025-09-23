@@ -1,0 +1,13 @@
+ID,Event,Round,Phase,Home Team,Away Team,Venue,Start Time,Status
+11,Comprehensive Test Event,1,Round Robin,Team Beta,Team Gamma,Court 2,2025-09-07 14:00:00,Final
+12,Comprehensive Test Event,2,Round Robin,Team Beta,Team Gamma,Court 2,2025-09-08 12:00:00,Scheduled
+13,Comprehensive Test Event,3,Round Robin,Team Beta,Team Gamma,Court 2,2025-09-09 12:00:00,Scheduled
+2,Comprehensive Test Event,1,Round Robin,Team Beta,Team Gamma,Court 2,2025-09-24 05:00:00,Scheduled
+3,Comprehensive Test Event,2,Round Robin,Team Beta,Team Gamma,Court 2,2025-09-25 02:00:00,Scheduled
+4,Comprehensive Test Event,3,Round Robin,Team Beta,Team Gamma,Court 2,2025-09-26 02:00:00,Scheduled
+5,Sydney Basketball Championship 2025,1,Round Robin,,,Olympic Sports Complex,2025-09-30 04:45:06,Scheduled
+6,Sydney Basketball Championship 2025,1,Round Robin,,,Olympic Sports Complex,2025-09-30 06:45:06,Scheduled
+7,Sydney Basketball Championship 2025,1,Round Robin,,,Olympic Sports Complex,2025-09-30 08:45:06,Scheduled
+8,Sydney Basketball Championship 2025,1,Round Robin,,,Olympic Sports Complex,2025-09-30 10:45:06,Scheduled
+9,Sydney Basketball Championship 2025,1,Round Robin,,,Olympic Sports Complex,2025-09-30 12:45:06,Scheduled
+10,Sydney Basketball Championship 2025,1,Round Robin,,,Olympic Sports Complex,2025-09-30 14:45:06,Scheduled

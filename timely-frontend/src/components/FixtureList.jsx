@@ -66,11 +66,11 @@ const FixtureList = ({ fixtures, loading = false }) => {
           <div className="flex justify-between items-start mb-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Round {fixture.round_no}
+                Round {fixture.round}
               </h3>
               <div className="flex items-center text-sm text-gray-600 mt-1">
                 <ClockIcon className="h-4 w-4 mr-2" />
-                <span>{formatDateTime(fixture.starts_at)}</span>
+                <span>{formatDateTime(fixture.start_at)}</span>
               </div>
             </div>
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(fixture.status)}`}>
@@ -83,28 +83,28 @@ const FixtureList = ({ fixtures, loading = false }) => {
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-sm text-gray-600 mb-1">Home Team</div>
               <div className="font-semibold text-gray-900">
-                {fixture.home_team ? fixture.home_team.name : 'TBD'}
+                {fixture.home_team_name || 'TBD'}
               </div>
             </div>
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-sm text-gray-600 mb-1">Away Team</div>
               <div className="font-semibold text-gray-900">
-                {fixture.away_team ? fixture.away_team.name : 'TBD'}
+                {fixture.away_team_name || 'TBD'}
               </div>
             </div>
           </div>
 
           {/* Venue */}
-          {fixture.venue && (
+          {fixture.venue_name && (
             <div className="flex items-center text-sm text-gray-600">
               <MapPinIcon className="h-4 w-4 mr-2" />
-              <span>{fixture.venue.name}</span>
+              <span>{fixture.venue_name}</span>
             </div>
           )}
 
-          {/* Duration */}
+          {/* Phase */}
           <div className="mt-2 text-sm text-gray-500">
-            Duration: {Math.round((new Date(fixture.ends_at) - new Date(fixture.starts_at)) / (1000 * 60 * 60) * 10) / 10} hours
+            Phase: {fixture.phase}
           </div>
         </div>
       ))}

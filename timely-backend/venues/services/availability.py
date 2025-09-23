@@ -194,6 +194,123 @@ def create_availability_slots(
     return created_slots
 
 
+def get_venue_bookings(
+    from_date: timezone.datetime,
+    to_date: timezone.datetime
+) -> Dict[str, Any]:
+    """
+    Get all venue bookings (fixtures and venue slots) in a date range.
+    
+    Args:
+        from_date: Start of the date range
+        to_date: End of the date range
+    
+    Returns:
+        Dictionary with booking information
+    """
+    from fixtures.models import Fixture
+    
+    # Get fixture bookings
+    fixtures = Fixture.objects.filter(
+        venue__isnull=False,
+        start_at__lt=to_date,
+        start_at__gte=from_date
+    ).select_related('venue', 'home', 'away', 'event').order_by('start_at')
+    
+    # Get venue slot bookings
+    venue_slots = VenueSlot.objects.filter(
+        starts_at__lt=to_date,
+        ends_at__gt=from_date
+    ).select_related('venue').order_by('starts_at')
+    
+    # Format fixture bookings
+    fixture_bookings = []
+    for fixture in fixtures:
+        fixture_bookings.append({
+            'type': 'fixture',
+            'id': fixture.id,
+            'venue_id': fixture.venue.id,
+            'venue_name': fixture.venue.name,
+            'starts_at': fixture.start_at,
+            'ends_at': fixture.start_at + timezone.timedelta(hours=2),  # Assume 2-hour duration
+            'home_team': fixture.home.name if fixture.home else 'TBD',
+            'away_team': fixture.away.name if fixture.away else 'TBD',
+            'event_name': fixture.event.name,
+            'status': fixture.status,
+            'round': fixture.round,
+            'phase': fixture.phase
+        })
+    
+    # Format venue slot bookings
+    slot_bookings = []
+    for slot in venue_slots:
+        slot_bookings.append({
+            'type': 'venue_slot',
+            'id': slot.id,
+            'venue_id': slot.venue.id,
+            'venue_name': slot.venue.name,
+            'starts_at': slot.starts_at,
+            'ends_at': slot.ends_at,
+            'status': slot.status,
+            'reason': slot.reason
+        })
+    
+    # Combine and sort all bookings
+    all_bookings = fixture_bookings + slot_bookings
+    all_bookings.sort(key=lambda x: x['starts_at'])
+    
+    return {
+        'from_date': from_date,
+        'to_date': to_date,
+        'bookings': all_bookings,
+        'fixture_count': len(fixture_bookings),
+        'slot_count': len(slot_bookings),
+        'total_count': len(all_bookings)
+    }
+
+
+def get_venue_bookings(
+    venue_id: int,
+    from_date: timezone.datetime,
+    to_date: timezone.datetime
+) -> List[Dict[str, Any]]:
+    """
+    Get venue bookings for a date range.
+    
+    Args:
+        venue_id: ID of the venue to check
+        from_date: Start of the date range
+        to_date: End of the date range
+    
+    Returns:
+        List of booking dictionaries
+    """
+    try:
+        venue = Venue.objects.get(id=venue_id)
+    except Venue.DoesNotExist:
+        return []
+    
+    # Get all slots in the date range
+    slots = VenueSlot.objects.filter(
+        venue=venue,
+        starts_at__lt=to_date,
+        ends_at__gt=from_date
+    ).order_by('starts_at')
+    
+    bookings = []
+    for slot in slots:
+        bookings.append({
+            'id': slot.id,
+            'starts_at': slot.starts_at,
+            'ends_at': slot.ends_at,
+            'status': slot.status,
+            'reason': slot.reason,
+            'duration_minutes': slot.duration_minutes,
+        })
+    
+    return bookings
+
+
 def validate_slot_data(slot_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validate slot data before creation/update.

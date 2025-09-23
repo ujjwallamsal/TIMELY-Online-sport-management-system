@@ -38,9 +38,10 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       // Support both event-specific and general topics
+      const backendHost = '127.0.0.1:8000';
       const wsUrl = topic.startsWith('event_') 
-        ? `${protocol}//${window.location.host}/ws/events/${topic.replace('event_', '')}/`
-        : `${protocol}//${window.location.host}/ws/notifications/`;
+        ? `${protocol}//${backendHost}/ws/events/${topic.replace('event_', '')}/`
+        : `${protocol}//${backendHost}/ws/notifications/`;
       
       log('Connecting to WebSocket:', wsUrl);
       
@@ -101,7 +102,10 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
       };
 
       ws.onerror = (error) => {
-        log('WebSocket error:', error);
+        // Only log WebSocket errors in debug mode to reduce console spam
+        if (process.env.NODE_ENV === 'development' && window.DEBUG_WEBSOCKETS) {
+          log('WebSocket error:', error);
+        }
         setError('WebSocket connection error');
         scheduleReconnect();
       };

@@ -53,10 +53,10 @@ class MediaUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Media
         fields = [
-            "id", "file", "type", "event", "fixture", "title", "description",
-            "status", "uploaded_by", "created_at", "file_url"
+            "id", "file", "media_type", "event", "caption", "is_approved",
+            "uploaded_by", "created_at", "file_url"
         ]
-        read_only_fields = ["id", "status", "uploaded_by", "created_at", "file_url"]
+        read_only_fields = ["id", "is_approved", "uploaded_by", "created_at", "file_url"]
 
     def get_file_url(self, obj):
         """Get the URL for the media file"""
@@ -75,18 +75,17 @@ class MediaModerationSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     uploaded_by_email = serializers.SerializerMethodField()
     event_name = serializers.SerializerMethodField()
-    fixture_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Media
         fields = [
-            "id", "file", "type", "event", "fixture", "title", "description",
-            "status", "uploaded_by", "uploaded_by_email", "event_name", "fixture_name",
-            "created_at", "updated_at", "approved_at", "file_url"
+            "id", "file", "media_type", "event", "caption", "is_approved",
+            "uploaded_by", "uploaded_by_email", "event_name",
+            "created_at", "file_url"
         ]
-        read_only_fields = ["id", "file", "type", "event", "fixture", "title", "description",
+        read_only_fields = ["id", "file", "media_type", "event", "caption",
                            "uploaded_by", "created_at", "file_url", "uploaded_by_email", 
-                           "event_name", "fixture_name"]
+                           "event_name"]
 
     def get_file_url(self, obj):
         return obj.file_url
@@ -97,21 +96,16 @@ class MediaModerationSerializer(serializers.ModelSerializer):
     def get_event_name(self, obj):
         return obj.event.name if obj.event else None
 
-    def get_fixture_name(self, obj):
-        return str(obj.fixture) if obj.fixture else None
-
-
 class PublicMediaSerializer(serializers.ModelSerializer):
     """Serializer for public media display (only approved media)"""
     file_url = serializers.SerializerMethodField()
     event_name = serializers.SerializerMethodField()
-    fixture_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Media
         fields = [
-            "id", "type", "event", "fixture", "title", "description",
-            "created_at", "approved_at", "file_url", "event_name", "fixture_name"
+            "id", "media_type", "event", "caption",
+            "created_at", "file_url", "event_name"
         ]
 
     def get_file_url(self, obj):
@@ -120,8 +114,6 @@ class PublicMediaSerializer(serializers.ModelSerializer):
     def get_event_name(self, obj):
         return obj.event.name if obj.event else None
 
-    def get_fixture_name(self, obj):
-        return str(obj.fixture) if obj.fixture else None
 
 
 class MediaSerializer(serializers.ModelSerializer):

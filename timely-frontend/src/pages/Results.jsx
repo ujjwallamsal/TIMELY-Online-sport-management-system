@@ -4,10 +4,13 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import Input from '../components/ui/Input';
+import useSocket from '../hooks/useSocket';
+import LiveIndicator from '../components/ui/LiveIndicator';
 import { 
   getPublicResults, 
   getPublicEvents 
-} from '../services/api';
+} from '../services/api.js';
+import api from '../services/api.js';
 import { 
   TrophyIcon, 
   CalendarIcon, 
@@ -39,6 +42,35 @@ export default function Results() {
     averageScore: 0
   });
 
+  // WebSocket connection for real-time updates
+  const { connectionStatus, lastMessage } = useSocket(
+    `${import.meta.env.VITE_WS_URL}/ws/spectator/`,
+    {
+      onMessage: (message) => {
+        console.log('Received message:', message);
+        handleRealtimeUpdate(message);
+      },
+      onPolling: () => {
+        loadData();
+      }
+    }
+  );
+
+  const handleRealtimeUpdate = (message) => {
+    switch (message.type) {
+      case 'results_update':
+        // Refresh results when results are updated
+        loadData();
+        break;
+      case 'schedule_update':
+        // Refresh results when schedule is updated
+        loadData();
+        break;
+      default:
+        break;
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, [currentPage, eventFilter, sportFilter, dateFilter]);
@@ -48,43 +80,47 @@ export default function Results() {
       setLoading(true);
       setError('');
 
-      const resultsData = await getPublicResults(currentPage, {
-        event: eventFilter,
-        sport: sportFilter,
-        date: dateFilter,
-        search: searchTerm
+      // Get results from backend API
+      const response = await api.get('/api/results/public/results/', {
+        params: {
+          page: currentPage,
+          page_size: 20,
+          ...(eventFilter && { fixture__event__id: eventFilter }),
+          ...(sportFilter && { fixture__event__sport: sportFilter }),
+          ...(dateFilter && { fixture__scheduled_at__date: dateFilter })
+        }
       });
       
+      const resultsData = response.data;
       setResults(resultsData.results || []);
       setTotalPages(Math.ceil((resultsData.count || 0) / 20));
 
       // Load events for filter dropdown
       if (events.length === 0) {
-        const eventsData = await getPublicEvents(1, '', '', '', {});
-        setEvents(eventsData.results || []);
+        try {
+          const eventsResponse = await api.get('/api/public/events/', {
+            params: { page_size: 100 }
+          });
+          setEvents(eventsResponse.data.results || []);
+        } catch (eventsErr) {
+          console.warn('Failed to load events for filter:', eventsErr);
+          setEvents([]);
+        }
       }
 
-      // Calculate stats
-      if (resultsData.results) {
-        const totalParticipants = resultsData.results.reduce((sum, result) => {
-          return sum + (result.participants?.length || 0);
-        }, 0);
-        
-        const totalScores = resultsData.results.reduce((sum, result) => {
-          return sum + (result.total_score || 0);
-        }, 0);
-        
-        setStats({
-          totalResults: resultsData.count || 0,
-          totalEvents: new Set(resultsData.results.map(r => r.match?.fixture?.event?.id)).size,
-          totalParticipants,
-          averageScore: resultsData.results.length > 0 ? Math.round(totalScores / resultsData.results.length) : 0
-        });
-      }
+      // Simplified stats calculation
+      setStats({
+        totalResults: Array.isArray(resultsData) ? resultsData.length : (resultsData.count || 0),
+        totalEvents: 0,
+        totalParticipants: 0,
+        averageScore: 0
+      });
 
     } catch (err) {
       console.error('Error loading results:', err);
       setError('Failed to load results. Please try again.');
+      setResults([]);
+      setStats({ totalResults: 0, totalEvents: 0, totalParticipants: 0, averageScore: 0 });
     } finally {
       setLoading(false);
     }
@@ -154,28 +190,37 @@ export default function Results() {
   const getResultBadge = (result) => {
     if (!result) return null;
     
-    const { winner, participants, scores } = result;
+    const { winner, home_score, away_score } = result;
     
     if (winner) {
       return (
         <Badge variant="success" className="flex items-center gap-1">
           <TrophyIcon className="w-4 h-4" />
-          Winner: {winner.name || winner}
+          Winner: {winner.name}
         </Badge>
       );
     }
     
-    if (scores && scores.length > 0) {
-      const maxScore = Math.max(...scores.map(s => s.score || 0));
-      const winners = participants?.filter(p => 
-        scores.find(s => s.participant_id === p.id && s.score === maxScore)
-      ) || [];
-      
-      if (winners.length > 0) {
+    if (home_score !== null && away_score !== null) {
+      if (home_score > away_score) {
         return (
-          <Badge variant="success" className="flex items-center gap-1">
-            <TrophyIcon className="w-4 h-4" />
-            Winner: {winners[0].name}
+          <Badge variant="info" className="flex items-center gap-1">
+            <ChartBarIcon className="w-4 h-4" />
+            Home Team Wins ({home_score}-{away_score})
+          </Badge>
+        );
+      } else if (away_score > home_score) {
+        return (
+          <Badge variant="info" className="flex items-center gap-1">
+            <ChartBarIcon className="w-4 h-4" />
+            Away Team Wins ({away_score}-{home_score})
+          </Badge>
+        );
+      } else {
+        return (
+          <Badge variant="warning" className="flex items-center gap-1">
+            <ChartBarIcon className="w-4 h-4" />
+            Draw ({home_score}-{away_score})
           </Badge>
         );
       }
@@ -190,56 +235,44 @@ export default function Results() {
   };
 
   const renderResultCard = (result) => {
-    const event = result.match?.fixture?.event;
-    const fixture = result.match?.fixture;
-    const match = result.match;
-
-  return (
-      <Card key={result.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+    // Simplified result card with safe property access
+    const event = result?.fixture?.event || {};
+    const fixture = result?.fixture || {};
+    
+    return (
+      <Card key={result?.id || 'unknown'} className="border-0 shadow-sm hover:shadow-md transition-shadow">
         <div className="p-6">
           <div className="flex flex-col lg:flex-row lg:items-start justify-between">
             <div className="flex-1">
               {/* Event Header */}
               <div className="flex items-center space-x-3 mb-4">
-                <div className="text-3xl">{getSportEmoji(event?.sport_type)}</div>
+                <div className="text-3xl">⚽</div>
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900">
                     {event?.name || 'Event Name'}
                   </h3>
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <span>{event?.sport_type}</span>
-                    {fixture?.division && (
-                      <>
-                        <span>•</span>
-                        <span>{fixture.division.name}</span>
-                      </>
-                    )}
-                    {match?.match_type && (
-                      <>
-                        <span>•</span>
-                        <span>{match.match_type}</span>
-                      </>
-                    )}
+                    <span>{event?.sport || 'Sport'}</span>
                   </div>
                 </div>
-        </div>
+              </div>
 
               {/* Match Details */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div className="flex items-center text-sm text-gray-600">
                   <CalendarIcon className="w-4 h-4 mr-2 text-blue-500" />
-                  {formatDate(match?.scheduled_date)}
+                  {formatDate(fixture?.scheduled_date)}
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <ClockIcon className="w-4 h-4 mr-2 text-green-500" />
-                  {formatDateTime(match?.scheduled_time)}
-            </div>
-                {match?.venue && (
+                  {formatDateTime(fixture?.scheduled_time)}
+                </div>
+                {fixture?.venue && (
                   <div className="flex items-center text-sm text-gray-600">
                     <MapPinIcon className="w-4 h-4 mr-2 text-purple-500" />
-                    {match.venue.name}
-          </div>
-        )}
+                    {fixture.venue.name}
+                  </div>
+                )}
               </div>
               
               {/* Results Summary */}
@@ -247,68 +280,53 @@ export default function Results() {
                 {getResultBadge(result)}
               </div>
               
-              {/* Participants and Scores */}
-              {result.participants && result.participants.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <h4 className="font-medium text-gray-900 mb-3">Participants & Scores</h4>
-                  <div className="space-y-2">
-                    {result.participants.map((participant, index) => {
-                      const score = result.scores?.find(s => s.participant_id === participant.id);
-                      const isWinner = score && result.scores && 
-                        score.score === Math.max(...result.scores.map(s => s.score || 0));
-                      
-                      return (
-                        <div key={participant.id} className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            {isWinner ? (
-                              <TrophyIcon className="w-5 h-5 text-yellow-500" />
-                            ) : (
-                              <span className="text-gray-400 font-mono text-sm">
-                                {String(index + 1).padStart(2, '0')}
-                              </span>
-                            )}
-                            <span className="font-medium text-gray-900">
-                              {participant.name || participant.team_name || `Participant ${index + 1}`}
-                            </span>
-                            {isWinner && (
-                              <Badge variant="warning" size="sm">🥇</Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {score && (
-                              <span className="text-lg font-bold text-blue-600">
-                                {score.score}
-                              </span>
-                            )}
-                            {score?.unit && (
-                              <span className="text-sm text-gray-500">{score.unit}</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-            </div>
-          </div>
-              )}
-              
-              {/* Additional Result Details */}
-              {result.notes && (
-                <div className="bg-blue-50 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-blue-800">{result.notes}</p>
+              {/* Teams and Scores */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <h4 className="font-medium text-gray-900 mb-3">Match Result</h4>
+                <div className="space-y-3">
+                  {/* Home Team */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium text-gray-900">
+                        {fixture?.home?.name || 'Home Team'}
+                      </span>
+                      {result?.winner?.id === fixture?.home?.id && (
+                        <Badge variant="warning" size="sm">🥇</Badge>
+                      )}
+                    </div>
+                    <span className="text-lg font-bold text-blue-600">
+                      {result?.home_score || 0}
+                    </span>
+                  </div>
+                  
+                  {/* Away Team */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium text-gray-900">
+                        {fixture?.away?.name || 'Away Team'}
+                      </span>
+                      {result?.winner?.id === fixture?.away?.id && (
+                        <Badge variant="warning" size="sm">🥇</Badge>
+                      )}
+                    </div>
+                    <span className="text-lg font-bold text-blue-600">
+                      {result?.away_score || 0}
+                    </span>
+                  </div>
+                </div>
               </div>
-              )}
               
               {/* Result Metadata */}
               <div className="flex items-center justify-between text-sm text-gray-500">
-                <span>Result ID: {result.id}</span>
-                <span>Published: {formatDateTime(result.created_at)}</span>
+                <span>Result ID: {result?.id || 'N/A'}</span>
+                <span>Finalized: {formatDateTime(result?.finalized_at)}</span>
+              </div>
             </div>
-          </div>
 
             <div className="mt-4 lg:mt-0 lg:ml-6">
               <Button
                 as={Link}
-                to={`/results/${result.id}`}
+                to={`/results/${result?.id || ''}`}
                 variant="outline"
                 size="sm"
                 className="flex items-center"
@@ -390,11 +408,14 @@ export default function Results() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="max-w-7xl mx-auto px-6 py-12">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">Results & Outcomes</h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            View all published results, scores, and outcomes from completed matches and events across all sports.
-          </p>
+        <div className="flex items-center justify-between mb-12">
+          <div className="text-center flex-1">
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">Results & Outcomes</h1>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              View all published results, scores, and outcomes from completed matches and events across all sports.
+            </p>
+          </div>
+          <LiveIndicator status={connectionStatus} />
         </div>
 
         {/* Stats Overview */}

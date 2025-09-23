@@ -17,7 +17,8 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.db import models, transaction
 
-from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, AuditLog, RoleRequest
+from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, RoleRequest
+from common.models import AuditLog
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from accounts.auth import set_jwt_cookies, clear_jwt_cookies, CookieJWTAuthentication

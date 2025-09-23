@@ -8,7 +8,7 @@ import {
   TrophyIcon,
   FireIcon
 } from '@heroicons/react/24/outline';
-import { getPublicEvents } from '../services/api';
+import { getPublicEvents } from '../../services/api.js';
 
 const Home = () => {
   const [events, setEvents] = useState([]);
@@ -22,10 +22,19 @@ const Home = () => {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const response = await getPublicEvents(1, '', '', '', { status: filter });
-      setEvents(response.data.results || []);
+      const response = await getPublicEvents({ status: filter });
+      // Handle both array response and paginated response
+      const eventsData = response.data;
+      if (Array.isArray(eventsData)) {
+        setEvents(eventsData);
+      } else if (eventsData && eventsData.results) {
+        setEvents(eventsData.results);
+      } else {
+        setEvents([]);
+      }
     } catch (error) {
       console.error('Error fetching events:', error);
+      setEvents([]);
     } finally {
       setLoading(false);
     }

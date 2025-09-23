@@ -11,7 +11,7 @@ from .serializers import (
     KycProfileSerializer, KycProfileCreateSerializer, 
     KycDocumentSerializer, KycProfileReviewSerializer
 )
-from accounts.models import AuditLog
+from common.models import AuditLog
 from accounts.permissions import IsAdmin
 from notifications.services import NotificationService
 from channels.layers import get_channel_layer

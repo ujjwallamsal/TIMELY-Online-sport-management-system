@@ -35,7 +35,18 @@ class NewsSerializer(serializers.ModelSerializer):
             "seo_title", "seo_description", "author", "author_name",
             "created_at", "updated_at"
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "author_name"]
+        read_only_fields = ["id", "created_at", "updated_at", "author_name", "author"]
+    
+    def create(self, validated_data):
+        """Override create to set author from authenticated user"""
+        # Ensure request context is available
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError("Authentication required to create news articles.")
+        
+        # Set author to current user
+        validated_data['author'] = request.user
+        return super().create(validated_data)
 
     def validate_publish_at(self, value):
         """Validate that publish_at is not in the past when published=True."""

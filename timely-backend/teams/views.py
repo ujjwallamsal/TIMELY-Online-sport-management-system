@@ -9,6 +9,7 @@ from django.db import models
 from .models import Team, TeamMember
 from .serializers import TeamSerializer, TeamMemberSerializer
 from accounts.permissions import IsCoachOfTeam, IsAthleteSelf, IsAdmin, IsOrganizerOfEvent
+from accounts.audit_mixin import AuditLogMixin
 
 User = get_user_model()
 

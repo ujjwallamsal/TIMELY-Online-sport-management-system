@@ -2,7 +2,7 @@
 from rest_framework import serializers
 from results.models import Result, LeaderboardEntry
 from fixtures.models import Fixture
-from api.models import Announcement
+from events.models import Announcement
 
 
 class MinimalResultSerializer(serializers.ModelSerializer):

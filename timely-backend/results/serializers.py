@@ -22,25 +22,29 @@ class ResultSerializer(serializers.ModelSerializer):
     event_id = serializers.IntegerField(source='fixture.event.id', read_only=True)
     
     # Verification data
-    entered_by_name = serializers.CharField(source='entered_by.get_full_name', read_only=True)
-    entered_by_email = serializers.CharField(source='entered_by.email', read_only=True)
+    verified_by_name = serializers.CharField(source='verified_by.get_full_name', read_only=True)
+    verified_by_email = serializers.CharField(source='verified_by.email', read_only=True)
     
     # Computed fields
     is_draw = serializers.BooleanField(read_only=True)
     is_finalized = serializers.BooleanField(read_only=True)
     winner_name = serializers.CharField(source='winner.name', read_only=True)
     
+    # Frontend compatibility fields
+    home_score = serializers.IntegerField(source='score_home', read_only=True)
+    away_score = serializers.IntegerField(source='score_away', read_only=True)
+    
     class Meta:
         model = Result
         fields = [
             'id', 'fixture_id', 'fixture_name', 'home_team', 'away_team',
-            'event_name', 'event_id', 'home_score', 'away_score',
-            'winner', 'winner_name', 'stats',
-            'entered_by', 'entered_by_name', 'entered_by_email',
-            'finalized_at', 'is_draw', 'is_finalized',
+            'event_name', 'event_id', 'score_home', 'score_away', 'home_score', 'away_score',
+            'winner', 'winner_name',
+            'verified_by', 'verified_by_name', 'verified_by_email', 'verified_at',
+            'is_draw', 'is_finalized',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'finalized_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate(self, data):
         """Validate result data"""
@@ -64,16 +68,16 @@ class ResultCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Result
-        fields = ['home_score', 'away_score', 'stats']
+        fields = ['score_home', 'score_away']
     
     def create(self, validated_data):
         """Create result and automatically set winner"""
         result = super().create(validated_data)
         
         # Auto-set winner based on scores
-        if result.home_score > result.away_score:
+        if result.score_home > result.score_away:
             result.winner = result.fixture.home
-        elif result.away_score > result.home_score:
+        elif result.score_away > result.score_home:
             result.winner = result.fixture.away
         # For draws, winner remains None
         

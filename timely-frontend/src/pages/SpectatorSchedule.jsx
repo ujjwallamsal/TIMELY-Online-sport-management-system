@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { publicAPI } from '../services/api';
+import { publicAPI } from '../services/api.js';
 import FixtureList from '../components/FixtureList';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
@@ -24,7 +24,7 @@ const SpectatorSchedule = () => {
       setError(null);
       
       // Get all events first to build fixture list
-      const eventsResponse = await publicAPI.listPublicEvents({ page_size: 1000 });
+      const eventsResponse = await publicAPI.getEvents({ page_size: 1000 });
       const allEvents = eventsResponse.data.results || [];
       
       // Filter events based on current filters
@@ -38,7 +38,7 @@ const SpectatorSchedule = () => {
       
       // Get fixtures for filtered events
       const fixturePromises = filteredEvents.map(event => 
-        publicAPI.listPublicFixtures(event.id, { page_size: 1000 })
+        publicAPI.getEventFixtures(event.id)
       );
       
       const fixtureResponses = await Promise.all(fixturePromises);
@@ -56,17 +56,17 @@ const SpectatorSchedule = () => {
       // Apply date filters
       if (filters.date_from) {
         allFixtures = allFixtures.filter(fixture => 
-          new Date(fixture.starts_at) >= new Date(filters.date_from)
+          new Date(fixture.start_at) >= new Date(filters.date_from)
         );
       }
       if (filters.date_to) {
         allFixtures = allFixtures.filter(fixture => 
-          new Date(fixture.starts_at) <= new Date(filters.date_to)
+          new Date(fixture.start_at) <= new Date(filters.date_to)
         );
       }
       
       // Sort by start time
-      allFixtures.sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+      allFixtures.sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
       
       setFixtures(allFixtures);
       
@@ -81,7 +81,7 @@ const SpectatorSchedule = () => {
   // Load available sports and events for filters
   const loadFilterData = useCallback(async () => {
     try {
-      const response = await publicAPI.listPublicEvents({ page_size: 1000 });
+      const response = await publicAPI.getEvents({ page_size: 1000 });
       const allEvents = response.data.results || [];
       
       const uniqueSports = [...new Set(allEvents.map(event => event.sport))];
@@ -121,7 +121,7 @@ const SpectatorSchedule = () => {
 
   // Group fixtures by date
   const groupedFixtures = fixtures.reduce((groups, fixture) => {
-    const date = new Date(fixture.starts_at).toDateString();
+    const date = new Date(fixture.start_at).toDateString();
     if (!groups[date]) {
       groups[date] = [];
     }

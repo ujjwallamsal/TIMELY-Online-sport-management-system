@@ -10,7 +10,7 @@ import {
   publishEvent, 
   unpublishEvent,
   deleteEvent 
-} from '../services/api';
+} from '../../services/api.js';
 import { 
   CalendarIcon, 
   MapPinIcon, 

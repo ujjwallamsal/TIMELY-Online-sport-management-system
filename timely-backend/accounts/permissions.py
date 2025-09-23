@@ -3,6 +3,26 @@ from rest_framework import permissions
 from .models import UserRole
 from teams.models import Team, TeamMember
 from events.models import Event
+from fixtures.models import Fixture
+from results.models import Result
+
+# Import the new comprehensive RBAC permissions
+from .rbac_permissions import (
+    OrganizerPermissions,
+    CoachPermissions, 
+    AthletePermissions,
+    SpectatorPermissions,
+    MultiRolePermissions,
+    PublicReadOnlyPermission,
+    AdminSensitiveActionPermission,
+    OrganizerOrAdminPermission,
+    CoachOrAdminPermission,
+    AthleteOrAdminPermission,
+    SpectatorOrAdminPermission,
+    PublicOrAuthenticatedPermission,
+    MultiRoleWithOrganizerPermission,
+    MultiRoleWithCoachPermission
+)
 
 
 class IsAdmin(permissions.BasePermission):
@@ -10,8 +30,16 @@ class IsAdmin(permissions.BasePermission):
     Custom permission to only allow users with 'ADMIN' role or superusers to access.
     """
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and \
-               (request.user.is_superuser or request.user.role == 'ADMIN')
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return (request.user.is_superuser or 
+                request.user.is_staff or 
+                request.user.role == 'ADMIN' or
+                UserRole.objects.filter(
+                    user=request.user,
+                    is_active=True,
+                    role_type=UserRole.RoleType.ADMIN
+                ).exists())
 
 
 class IsOrganizerOrAdmin(permissions.BasePermission):
@@ -23,8 +51,14 @@ class IsOrganizerOrAdmin(permissions.BasePermission):
             return False
         
         return (request.user.is_superuser or 
+                request.user.is_staff or
                 request.user.role == 'ADMIN' or 
-                request.user.role == 'ORGANIZER')
+                request.user.role == 'ORGANIZER' or
+                UserRole.objects.filter(
+                    user=request.user,
+                    is_active=True,
+                    role_type__in=[UserRole.RoleType.ADMIN, UserRole.RoleType.ORGANIZER]
+                ).exists())
 
 
 class IsUserManager(permissions.BasePermission):
@@ -558,3 +592,228 @@ class IsOrganizerOrReadOnly(permissions.BasePermission):
                     is_active=True,
                     role_type=UserRole.RoleType.ORGANIZER
                 ).exists())
+
+
+class IsOrganizerOwner(permissions.BasePermission):
+    """
+    Organizer can CRUD only their own events/venues and related objects.
+    Admin/staff bypass.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        if not request.user.is_authenticated:
+            return False
+        # Organizer role check (legacy or RBAC)
+        return (
+            request.user.role == 'ORGANIZER' or
+            UserRole.objects.filter(
+                user=request.user,
+                is_active=True,
+                role_type=UserRole.RoleType.ORGANIZER
+            ).exists()
+        )
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        # Read is allowed; ownership enforced for writes
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Direct ownership
+        if hasattr(obj, 'created_by'):
+            return obj.created_by == request.user
+        # Related to Event
+        if hasattr(obj, 'event') and hasattr(obj.event, 'created_by'):
+            return obj.event.created_by == request.user
+        # Related to Venue
+        if hasattr(obj, 'venue') and hasattr(obj.venue, 'created_by'):
+            return obj.venue.created_by == request.user
+        return False
+
+
+class IsCoachRWTeamOrRoster(permissions.BasePermission):
+    """
+    Coach: Read/Write on their own team and roster (Team, TeamMember).
+    Admin/staff bypass.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        if not request.user.is_authenticated:
+            return False
+        return (
+            request.user.role == 'COACH' or
+            UserRole.objects.filter(
+                user=request.user,
+                is_active=True,
+                role_type=UserRole.RoleType.COACH
+            ).exists()
+        )
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        # Applies to Team and TeamMember objects
+        if isinstance(obj, Team):
+            return obj.coach == request.user
+        if isinstance(obj, TeamMember):
+            return obj.team.coach == request.user
+        # For other objects that reference a team
+        if hasattr(obj, 'team') and isinstance(obj.team, Team):
+            return obj.team.coach == request.user
+        return False
+
+
+class CoachCanViewFixturesResults(permissions.BasePermission):
+    """
+    Coach can READ fixtures/results for events where they coach a team.
+    Admin/staff bypass.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        if not request.user.is_authenticated:
+            return False
+        # Only read access through this permission
+        if request.method not in permissions.SAFE_METHODS:
+            return False
+        return (
+            request.user.role == 'COACH' or
+            UserRole.objects.filter(
+                user=request.user,
+                is_active=True,
+                role_type=UserRole.RoleType.COACH
+            ).exists()
+        )
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        if request.method not in permissions.SAFE_METHODS:
+            return False
+        # Fixture
+        if isinstance(obj, Fixture):
+            event = obj.event
+        # Result -> Fixture -> Event
+        elif isinstance(obj, Result):
+            event = obj.fixture.event
+        else:
+            # Try to derive event
+            event = getattr(obj, 'event', None)
+        if not event:
+            return False
+        return Team.objects.filter(event=event, coach=request.user).exists()
+
+
+class IsAthleteSelfRW(permissions.BasePermission):
+    """
+    Athlete can read/write their own profile and self-owned resources.
+    Admin/staff bypass.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        if not request.user.is_authenticated:
+            return False
+        return (
+            request.user.role == 'ATHLETE' or
+            UserRole.objects.filter(
+                user=request.user,
+                is_active=True,
+                role_type=UserRole.RoleType.ATHLETE
+            ).exists()
+        )
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        # Own user profile or objects with user/athlete ownership
+        if hasattr(obj, 'id') and getattr(request.user, 'id', None) == getattr(obj, 'id', None):
+            return True
+        if hasattr(obj, 'user'):
+            return obj.user == request.user
+        if hasattr(obj, 'athlete'):
+            return obj.athlete == request.user
+        return False
+
+
+class AthleteCanViewOwnFixturesResults(permissions.BasePermission):
+    """
+    Athlete can READ fixtures/results where they are on a participating team.
+    Admin/staff bypass.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        if not request.user.is_authenticated:
+            return False
+        if request.method not in permissions.SAFE_METHODS:
+            return False
+        return (
+            request.user.role == 'ATHLETE' or
+            UserRole.objects.filter(
+                user=request.user,
+                is_active=True,
+                role_type=UserRole.RoleType.ATHLETE
+            ).exists()
+        )
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        if request.method not in permissions.SAFE_METHODS:
+            return False
+        # Resolve teams in the fixture
+        if isinstance(obj, Fixture):
+            teams = [obj.home, obj.away]
+        elif isinstance(obj, Result):
+            teams = [obj.fixture.home, obj.fixture.away]
+        else:
+            # Try to infer from related fixture
+            fixture = getattr(obj, 'fixture', None)
+            if fixture and isinstance(fixture, Fixture):
+                teams = [fixture.home, fixture.away]
+            else:
+                teams = []
+        team_ids = [t.id for t in teams if t]
+        if not team_ids:
+            return False
+        return TeamMember.objects.filter(team_id__in=team_ids, athlete=request.user).exists()
+
+
+class SpectatorOwnPurchasesRW(permissions.BasePermission):
+    """
+    Spectator: Read on public data is usually handled at the view level.
+    This permission ensures spectators can read/write only their own purchases/orders.
+    Admin/staff bypass.
+    """
+    
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        if not request.user.is_authenticated:
+            return False
+        # Spectators can access purchase endpoints; object-level will enforce ownership
+        return (
+            request.user.role == 'SPECTATOR' or
+            UserRole.objects.filter(
+                user=request.user,
+                is_active=True,
+                role_type=UserRole.RoleType.SPECTATOR
+            ).exists()
+        )
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        # Ownership via `user` or nested `purchase.user` or order `user`
+        owner = getattr(obj, 'user', None)
+        if owner is None and hasattr(obj, 'purchase'):
+            owner = getattr(obj.purchase, 'user', None)
+        return owner == request.user

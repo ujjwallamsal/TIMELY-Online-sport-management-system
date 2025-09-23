@@ -28,6 +28,26 @@ class Registration(models.Model):
     
     # Basic Information
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='registrations')
+    
+    # Applicant fields - exactly one must be non-null
+    applicant_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='user_registrations',
+        null=True,
+        blank=True,
+        help_text="User applicant for athlete registrations"
+    )
+    applicant_team = models.ForeignKey(
+        'teams.Team',
+        on_delete=models.CASCADE,
+        related_name='team_registrations',
+        null=True,
+        blank=True,
+        help_text="Team applicant for team registrations"
+    )
+    
+    # Legacy fields for backward compatibility during migration
     applicant = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -75,6 +95,20 @@ class Registration(models.Model):
     )
     reason = models.TextField(blank=True, help_text="Reason for rejection or other notes")
     
+    # Payment fields
+    fee_cents = models.PositiveIntegerField(default=0, help_text="Registration fee in cents")
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('PENDING', 'Pending'),
+            ('PAID', 'Paid'),
+            ('FAILED', 'Failed'),
+            ('REFUNDED', 'Refunded'),
+        ],
+        default='PENDING',
+        help_text="Payment status"
+    )
+    
     class Meta:
         ordering = ['-submitted_at']
         indexes = [
@@ -83,22 +117,48 @@ class Registration(models.Model):
             models.Index(fields=['event', 'status']),
             models.Index(fields=['applicant']),
             models.Index(fields=['team']),
+            models.Index(fields=['applicant_user']),
+            models.Index(fields=['applicant_team']),
             models.Index(fields=['type']),
             models.Index(fields=['submitted_at']),
             models.Index(fields=['status', 'submitted_at']),  # Required index
         ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (models.Q(applicant_user__isnull=False) & models.Q(applicant_team__isnull=True)) |
+                    (models.Q(applicant_user__isnull=True) & models.Q(applicant_team__isnull=False))
+                ),
+                name='exactly_one_applicant'
+            )
+        ]
     
     def __str__(self):
-        if self.type == self.Type.TEAM and self.team:
+        if self.type == self.Type.TEAM and self.applicant_team:
+            return f"{self.applicant_team.name} - {self.event.name}"
+        elif self.applicant_user:
+            return f"{self.applicant_user.email} - {self.event.name}"
+        # Fallback to legacy fields during migration
+        elif self.type == self.Type.TEAM and self.team:
             return f"{self.team.name} - {self.event.name}"
         elif self.applicant:
             return f"{self.applicant.email} - {self.event.name}"
         return f"Registration - {self.event.name}"
     
     @property
+    def user(self):
+        """Compatibility property for applicant - prefers new field"""
+        return self.applicant_user or self.applicant
+    
+    @property
     def applicant_name(self):
-        """Get applicant name"""
-        if self.type == self.Type.TEAM and self.team:
+        """Get applicant name - prefers new fields"""
+        if self.type == self.Type.TEAM and self.applicant_team:
+            return self.applicant_team.name
+        elif self.applicant_user:
+            return self.applicant_user.full_name
+        # Fallback to legacy fields during migration
+        elif self.type == self.Type.TEAM and self.team:
             return self.team.name
         elif self.applicant:
             return self.applicant.full_name

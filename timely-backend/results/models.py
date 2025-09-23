@@ -18,10 +18,10 @@ class Result(models.Model):
     fixture = models.OneToOneField(Fixture, on_delete=models.CASCADE, related_name="result")
     
     # Scores
-    home_score = models.PositiveIntegerField(default=0, help_text="Home team score")
-    away_score = models.PositiveIntegerField(default=0, help_text="Away team score")
+    score_home = models.PositiveIntegerField(default=0, help_text="Home team score")
+    score_away = models.PositiveIntegerField(default=0, help_text="Away team score")
     
-    # Winner and stats
+    # Winner
     winner = models.ForeignKey(
         'teams.Team', 
         on_delete=models.SET_NULL, 
@@ -30,26 +30,35 @@ class Result(models.Model):
         related_name="won_results",
         help_text="Winning team (null for draws)"
     )
-    stats = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Additional statistics (JSON)"
-    )
     
     # Verification
-    entered_by = models.ForeignKey(
+    verified_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="entered_results",
-        help_text="User who entered this result"
+        related_name="verified_results",
+        help_text="User who verified this result"
     )
-    finalized_at = models.DateTimeField(
+    verified_at = models.DateTimeField(
         null=True,
         blank=True,
-        help_text="When result was finalized"
+        help_text="When result was verified"
     )
+    
+    # Status and publication
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('PENDING', 'Pending'),
+            ('VERIFIED', 'Verified'),
+            ('FINALIZED', 'Finalized'),
+        ],
+        default='PENDING',
+        help_text="Result status"
+    )
+    published = models.BooleanField(default=False, help_text="Whether result is published")
+    notes = models.TextField(blank=True, help_text="Additional notes")
     
     # Audit
     created_at = models.DateTimeField(auto_now_add=True)
@@ -58,8 +67,8 @@ class Result(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["finalized_at"]),
-            models.Index(fields=["entered_by"]),
+            models.Index(fields=["verified_at"]),
+            models.Index(fields=["verified_by"]),
             models.Index(fields=["fixture"]),
             models.Index(fields=["winner"]),
         ]
@@ -67,7 +76,7 @@ class Result(models.Model):
     def __str__(self):
         home_team = self.fixture.home_team.name if self.fixture.home_team else "TBD"
         away_team = self.fixture.away_team.name if self.fixture.away_team else "TBD"
-        return f"{home_team} {self.home_score}–{self.away_score} {away_team}"
+        return f"{home_team} {self.score_home}–{self.score_away} {away_team}"
 
     def clean(self):
         """Validate result data"""
@@ -89,9 +98,9 @@ class Result(models.Model):
         
         # Auto-set winner based on scores
         if self.fixture and not self.is_draw:
-            if self.home_score > self.away_score:
+            if self.score_home > self.score_away:
                 self.winner = self.fixture.home_team
-            elif self.away_score > self.home_score:
+            elif self.score_away > self.score_home:
                 self.winner = self.fixture.away_team
         elif self.is_draw:
             self.winner = None
@@ -101,23 +110,25 @@ class Result(models.Model):
     @property
     def is_draw(self):
         """Check if result is a draw"""
-        return self.home_score == self.away_score
+        return self.score_home == self.score_away
 
     @property
     def is_finalized(self):
         """Check if result is finalized"""
-        return self.finalized_at is not None
+        return self.status == 'FINALIZED'
 
     def finalize(self, user=None):
         """Finalize the result"""
-        self.entered_by = user
-        self.finalized_at = timezone.now()
+        self.verified_by = user
+        self.verified_at = timezone.now()
+        self.status = 'FINALIZED'
         self.save()
 
     def lock(self):
         """Lock the result (make it uneditable)"""
-        if not self.finalized_at:
-            self.finalized_at = timezone.now()
+        if not self.verified_at:
+            self.verified_at = timezone.now()
+            self.status = 'FINALIZED'
             self.save()
 
 
@@ -128,62 +139,36 @@ class LeaderboardEntry(models.Model):
     team = models.ForeignKey('teams.Team', on_delete=models.CASCADE, related_name="leaderboard_entries")
     
     # Points and standings
-    pts = models.PositiveIntegerField(default=0, help_text="Total points (3 for win, 1 for draw)")
-    w = models.PositiveIntegerField(default=0, help_text="Number of wins")
-    d = models.PositiveIntegerField(default=0, help_text="Number of draws")
-    l = models.PositiveIntegerField(default=0, help_text="Number of losses")
+    points = models.PositiveIntegerField(default=0, help_text="Total points (3 for win, 1 for draw)")
+    matches_played = models.PositiveIntegerField(default=0, help_text="Number of matches played")
+    wins = models.PositiveIntegerField(default=0, help_text="Number of wins")
+    draws = models.PositiveIntegerField(default=0, help_text="Number of draws")
+    losses = models.PositiveIntegerField(default=0, help_text="Number of losses")
     
     # Goals
-    gf = models.PositiveIntegerField(default=0, help_text="Goals scored")
-    ga = models.PositiveIntegerField(default=0, help_text="Goals conceded")
+    goals_for = models.PositiveIntegerField(default=0, help_text="Goals scored")
+    goals_against = models.PositiveIntegerField(default=0, help_text="Goals conceded")
     
     # Calculated fields
-    gd = models.IntegerField(default=0, help_text="Goal difference (GF - GA)")
+    goal_difference = models.IntegerField(default=0, help_text="Goal difference (GF - GA)")
+    position = models.PositiveIntegerField(default=0, help_text="Current position in leaderboard")
     
     # Audit
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["event", "-pts", "-gd", "-gf"]
+        ordering = ["event", "-points", "-goal_difference", "-goals_for"]
         indexes = [
-            models.Index(fields=["event", "pts"]),
-            models.Index(fields=["team", "event"]),
-            models.Index(fields=["event"]),
+            models.Index(fields=["event", "-points"]),
             models.Index(fields=["team"]),
         ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=['event', 'team'],
-                name='unique_event_team_leaderboard'
-            ),
-        ]
+        unique_together = [["event", "team"]]
 
     def __str__(self):
-        return f"{self.event.name} - {self.team.name} ({self.pts} pts)"
+        return f"{self.team.name} - {self.points} pts"
 
     def save(self, *args, **kwargs):
-        # Calculate goal difference
-        self.gd = self.gf - self.ga
+        # Auto-calculate goal difference
+        self.goal_difference = self.goals_for - self.goals_against
         super().save(*args, **kwargs)
-
-    @property
-    def matches_played(self):
-        """Calculate total matches played"""
-        return self.w + self.d + self.l
-
-    @property
-    def win_percentage(self):
-        """Calculate win percentage"""
-        if self.matches_played == 0:
-            return 0.0
-        return (self.w / self.matches_played) * 100
-
-    @property
-    def points_per_match(self):
-        """Calculate points per match"""
-        if self.matches_played == 0:
-            return 0.0
-        return self.pts / self.matches_played
-
-

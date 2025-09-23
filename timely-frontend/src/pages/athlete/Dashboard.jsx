@@ -15,6 +15,8 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import RealtimeAnnouncements from '../../components/RealtimeAnnouncements';
+import { athleteDashboardAPI, dashboardUtils } from '../../services/dashboardAPI';
 
 export default function AthleteDashboard() {
   const [nextMatch, setNextMatch] = useState(null);
@@ -46,73 +48,18 @@ export default function AthleteDashboard() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Mock data - replace with actual API calls
-        setNextMatch({
-          id: 1,
-          event: "Championship Finals 2024",
-          opponent: "Storm Riders",
-          date: "2024-03-15",
-          time: "14:00",
-          venue: "Main Arena",
-          status: "upcoming"
-        });
-
-        setMyResults([
-          {
-            id: 1,
-            event: "Spring Qualifiers",
-            opponent: "Thunder Hawks",
-            date: "2024-03-10",
-            score: "3-1",
-            result: "win",
-            position: 1
-          },
-          {
-            id: 2,
-            event: "Regional Championship",
-            opponent: "Fire Dragons",
-            date: "2024-03-05",
-            score: "2-2",
-            result: "draw",
-            position: 2
-          }
+        // Fetch real data from API
+        const [nextMatchData, resultsData, ticketsData, announcementsData] = await Promise.all([
+          athleteDashboardAPI.getNextMatch(),
+          athleteDashboardAPI.getMyResults(),
+          athleteDashboardAPI.getMyTickets(),
+          athleteDashboardAPI.getAnnouncements()
         ]);
 
-        setMyTickets([
-          {
-            id: 1,
-            event: "Championship Finals 2024",
-            date: "2024-03-15",
-            venue: "Main Arena",
-            qrCode: "QR123456",
-            status: "confirmed"
-          },
-          {
-            id: 2,
-            event: "Summer Olympics Qualifiers",
-            date: "2024-03-20",
-            venue: "Field A",
-            qrCode: "QR789012",
-            status: "confirmed"
-          }
-        ]);
-
-        setAnnouncements([
-          {
-            id: 1,
-            title: "Match Schedule Update",
-            message: "Your next match has been moved to 3 PM",
-            date: "2024-03-12",
-            priority: "high"
-          },
-          {
-            id: 2,
-            title: "Equipment Reminder",
-            message: "Don't forget to bring your gear",
-            date: "2024-03-10",
-            priority: "medium"
-          }
-        ]);
+        setNextMatch(nextMatchData);
+        setMyResults(resultsData);
+        setMyTickets(ticketsData);
+        setAnnouncements(announcementsData);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -206,6 +153,15 @@ export default function AthleteDashboard() {
         </Card>
       </div>
 
+      {/* Live Announcements */}
+      <div className="mb-8">
+        <RealtimeAnnouncements 
+          showInDashboard={true}
+          maxAnnouncements={3}
+          autoHide={false}
+        />
+      </div>
+
       {/* Quick Actions */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
@@ -232,21 +188,21 @@ export default function AthleteDashboard() {
           
           {nextMatch ? (
             <div className="p-4 bg-blue-50 rounded-lg">
-              <h3 className="font-medium text-gray-900">{nextMatch.event}</h3>
-              <p className="text-sm text-gray-600 mt-1">vs {nextMatch.opponent}</p>
+              <h3 className="font-medium text-gray-900">{nextMatch.event?.title || 'Match'}</h3>
+              <p className="text-sm text-gray-600 mt-1">vs {nextMatch.away_team?.name || 'TBD'}</p>
               <div className="mt-3 space-y-2">
                 <div className="flex items-center text-sm text-gray-600">
                   <CalendarDaysIcon className="w-4 h-4 mr-2" />
-                  {nextMatch.date} at {nextMatch.time}
+                  {dashboardUtils.formatDate(nextMatch.start_date)} at {dashboardUtils.formatTime(nextMatch.start_time)}
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <span className="w-4 h-4 mr-2">📍</span>
-                  {nextMatch.venue}
+                  {nextMatch.venue?.name || 'TBD'}
                 </div>
               </div>
               <div className="mt-4">
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  nextMatch.status === 'upcoming' 
+                  nextMatch.status === 'scheduled' 
                     ? 'bg-blue-100 text-blue-800'
                     : 'bg-gray-100 text-gray-800'
                 }`}>
@@ -277,12 +233,12 @@ export default function AthleteDashboard() {
               {myResults.slice(0, 3).map((result) => (
                 <div key={result.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <h3 className="font-medium text-gray-900">{result.event}</h3>
-                    <p className="text-sm text-gray-600">vs {result.opponent}</p>
-                    <p className="text-xs text-gray-500">{result.date}</p>
+                    <h3 className="font-medium text-gray-900">{result.event?.title || 'Match'}</h3>
+                    <p className="text-sm text-gray-600">vs {result.opponent_team?.name || 'TBD'}</p>
+                    <p className="text-xs text-gray-500">{dashboardUtils.formatDate(result.created_at)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">{result.score}</p>
+                    <p className="text-sm font-medium text-gray-900">{result.home_score}-{result.away_score}</p>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       result.result === 'win' 
                         ? 'bg-green-100 text-green-800'
@@ -322,15 +278,15 @@ export default function AthleteDashboard() {
               {myTickets.slice(0, 3).map((ticket) => (
                 <div key={ticket.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <h3 className="font-medium text-gray-900">{ticket.event}</h3>
-                    <p className="text-sm text-gray-600">{ticket.venue}</p>
-                    <p className="text-xs text-gray-500">{ticket.date}</p>
+                    <h3 className="font-medium text-gray-900">{ticket.event?.title || 'Event'}</h3>
+                    <p className="text-sm text-gray-600">{ticket.venue?.name || 'TBD'}</p>
+                    <p className="text-xs text-gray-500">{dashboardUtils.formatDate(ticket.event?.start_date)}</p>
                   </div>
                   <div className="text-right">
                     <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center">
                       <QrCodeIcon className="w-8 h-8 text-gray-400" />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">{ticket.qrCode}</p>
+                    <p className="text-xs text-gray-500 mt-1">{ticket.qr_code || 'N/A'}</p>
                   </div>
                 </div>
               ))}

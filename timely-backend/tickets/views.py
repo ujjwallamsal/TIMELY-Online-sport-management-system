@@ -19,6 +19,7 @@ from .permissions import (
     IsOrderOwnerOrAdmin, CanViewTicketTypes, CanPurchaseTickets,
     IsEventOrganizerForOrder, CanCancelOrder, PublicReadOrAuthenticatedWrite
 )
+from accounts.audit_mixin import AuditLogMixin
 from .services.pricing import calculate_order_total, validate_inventory
 from .services.qr import generate_qr_payload
 
@@ -49,7 +50,7 @@ class TicketTypeListView(generics.ListAPIView):
         queryset = TicketType.objects.filter(
             event_id=event_id,
             on_sale=True
-        ).select_related('event', 'fixture')
+        )
         
         if fixture_id:
             queryset = queryset.filter(fixture_id=fixture_id)
@@ -68,7 +69,7 @@ class MyTicketsListView(generics.ListAPIView):
     def get_queryset(self):
         return Ticket.objects.filter(
             order__user=self.request.user
-        ).select_related('ticket_type', 'order', 'order__event', 'order__fixture')
+        ).select_related('ticket_type', 'order')
 
 
 class TicketDetailView(generics.RetrieveAPIView):
@@ -273,7 +274,7 @@ class TicketTypeUpdateView(generics.UpdateAPIView):
     permission_classes = [IsEventOrganizerOrAdmin]
     
     def get_queryset(self):
-        return TicketType.objects.select_related('event', 'fixture')
+        return TicketType.objects.all()
 
 
 class TicketTypeDeleteView(generics.DestroyAPIView):
@@ -283,7 +284,7 @@ class TicketTypeDeleteView(generics.DestroyAPIView):
     permission_classes = [IsEventOrganizerOrAdmin]
     
     def get_queryset(self):
-        return TicketType.objects.select_related('event', 'fixture')
+        return TicketType.objects.all()
 
 
 class EventOrdersListView(generics.ListAPIView):
@@ -300,7 +301,7 @@ class EventOrdersListView(generics.ListAPIView):
         
         queryset = TicketOrder.objects.filter(
             event_id=event_id
-        ).select_related('user', 'event', 'fixture').prefetch_related('tickets')
+        ).select_related('user').prefetch_related('tickets')
         
         if status_filter:
             queryset = queryset.filter(status=status_filter)

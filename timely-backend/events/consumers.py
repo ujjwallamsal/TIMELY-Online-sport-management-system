@@ -66,37 +66,58 @@ class EventConsumer(AsyncWebsocketConsumer):
             message_type = data.get('type')
             
             if message_type == 'subscribe_results':
-                # Subscribe to results updates
-                await self.channel_layer.group_add(
-                    self.results_group_name,
-                    self.channel_name
-                )
-                await self.send(text_data=json.dumps({
-                    'type': 'subscribed',
-                    'stream': 'results'
-                }))
+                # Check permissions and subscribe to results updates
+                event = await self.get_event(self.event_id)
+                if event and await self.can_subscribe_to_topic(self.user, event, 'results'):
+                    await self.channel_layer.group_add(
+                        self.results_group_name,
+                        self.channel_name
+                    )
+                    await self.send(text_data=json.dumps({
+                        'type': 'subscribed',
+                        'stream': 'results'
+                    }))
+                else:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Permission denied for results stream'
+                    }))
                 
             elif message_type == 'subscribe_schedule':
-                # Subscribe to schedule updates
-                await self.channel_layer.group_add(
-                    self.schedule_group_name,
-                    self.channel_name
-                )
-                await self.send(text_data=json.dumps({
-                    'type': 'subscribed',
-                    'stream': 'schedule'
-                }))
+                # Check permissions and subscribe to schedule updates
+                event = await self.get_event(self.event_id)
+                if event and await self.can_subscribe_to_topic(self.user, event, 'schedule'):
+                    await self.channel_layer.group_add(
+                        self.schedule_group_name,
+                        self.channel_name
+                    )
+                    await self.send(text_data=json.dumps({
+                        'type': 'subscribed',
+                        'stream': 'schedule'
+                    }))
+                else:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Permission denied for schedule stream'
+                    }))
                 
             elif message_type == 'subscribe_announcements':
-                # Subscribe to announcements
-                await self.channel_layer.group_add(
-                    self.announcements_group_name,
-                    self.channel_name
-                )
-                await self.send(text_data=json.dumps({
-                    'type': 'subscribed',
-                    'stream': 'announcements'
-                }))
+                # Check permissions and subscribe to announcements
+                event = await self.get_event(self.event_id)
+                if event and await self.can_subscribe_to_topic(self.user, event, 'announcements'):
+                    await self.channel_layer.group_add(
+                        self.announcements_group_name,
+                        self.channel_name
+                    )
+                    await self.send(text_data=json.dumps({
+                        'type': 'subscribed',
+                        'stream': 'announcements'
+                    }))
+                else:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Permission denied for announcements stream'
+                    }))
                 
             elif message_type == 'ping':
                 # Handle ping/pong for connection health
@@ -140,6 +161,27 @@ class EventConsumer(AsyncWebsocketConsumer):
             'data': event['data']
         }))
     
+    async def leaderboard_update(self, event):
+        """Handle leaderboard updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'leaderboard_update',
+            'data': event['data']
+        }))
+    
+    async def result_update(self, event):
+        """Handle individual result updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'result_update',
+            'data': event['data']
+        }))
+    
+    async def fixture_update(self, event):
+        """Handle individual fixture updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'fixture_update',
+            'data': event['data']
+        }))
+    
     @database_sync_to_async
     def get_event(self, event_id):
         """Get event by ID"""
@@ -163,6 +205,10 @@ class EventConsumer(AsyncWebsocketConsumer):
         if event.created_by == user:
             return True
         
+        # Admin and staff can view all events
+        if user.is_staff or (hasattr(user, 'role') and user.role in ['ADMIN', 'ORGANIZER']):
+            return True
+        
         # Check if user is registered for the event
         from registrations.models import Registration
         return Registration.objects.filter(
@@ -170,6 +216,22 @@ class EventConsumer(AsyncWebsocketConsumer):
             applicant=user,
             status='APPROVED'
         ).exists()
+    
+    @database_sync_to_async
+    def can_subscribe_to_topic(self, user, event, topic):
+        """Check if user can subscribe to specific topic"""
+        if not self.can_view_event(user, event):
+            return False
+        
+        # Results and schedule are viewable by all event participants
+        if topic in ['results', 'schedule']:
+            return True
+        
+        # Announcements might have different permissions
+        if topic == 'announcements':
+            return True
+        
+        return False
 
 
 class NotificationConsumer(AsyncWebsocketConsumer):

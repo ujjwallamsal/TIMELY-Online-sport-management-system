@@ -22,7 +22,7 @@ export const ENDPOINTS = {
   // User distribution by role (for pie)
   userDistribution: [
     '/api/reports/users/by-role/',
-    '/api/accounts/stats/roles/',
+    '/api/stats/roles/',
   ],
 
   // Recent events
@@ -40,7 +40,7 @@ export const ENDPOINTS = {
   // Unread notifications count
   notifications: [
     '/api/notifications/unread-count/',
-    '/api/accounts/notifications/unread/',
+    '/api/notifications/unread/',
   ],
 
   // Health check

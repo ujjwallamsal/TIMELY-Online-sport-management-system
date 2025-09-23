@@ -7,7 +7,7 @@ import Input from '../components/ui/Input';
 import { 
   updateProfile, 
   changePassword 
-} from '../services/api';
+} from '../../services/api.js';
 import { 
   UserIcon,
   LockClosedIcon,

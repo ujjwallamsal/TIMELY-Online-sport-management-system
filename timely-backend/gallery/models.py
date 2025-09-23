@@ -77,66 +77,45 @@ class Media(models.Model):
     def media_upload_path(instance, filename):
         """Generate upload path for media files"""
         event_id = instance.event_id if instance.event_id else "misc"
-        fixture_id = instance.fixture_id if instance.fixture_id else "general"
-        return f"media/events/{event_id}/fixtures/{fixture_id}/{filename}"
+        return f"media/events/{event_id}/{filename}"
 
     # Core fields
     file = models.FileField(upload_to=media_upload_path, help_text="Media file")
-    type = models.CharField(max_length=20, choices=MediaType.choices, help_text="Type of media")
+    media_type = models.CharField(max_length=20, choices=MediaType.choices, help_text="Type of media")
     
     # Relationships
     event = models.ForeignKey('events.Event', on_delete=models.CASCADE, related_name="media", help_text="Associated event")
-    fixture = models.ForeignKey('fixtures.Fixture', on_delete=models.SET_NULL, null=True, blank=True, 
-                               related_name="media", help_text="Associated fixture (optional)")
     
     # Moderation
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, 
-                             help_text="Moderation status")
+    is_approved = models.BooleanField(default=False, help_text="Whether media is approved")
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, 
                                    null=True, blank=True, related_name="uploaded_media_files",
                                    help_text="User who uploaded the media")
     
     # Metadata
-    title = models.CharField(max_length=255, blank=True, help_text="Media title")
-    description = models.TextField(blank=True, help_text="Media description")
-    file_size = models.PositiveIntegerField(null=True, blank=True, help_text="File size in bytes")
+    caption = models.CharField(max_length=255, blank=True, help_text="Media caption")
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    approved_at = models.DateTimeField(null=True, blank=True, help_text="When media was approved")
 
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['event', 'status']),
-            models.Index(fields=['fixture', 'status']),
-            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['event', 'is_approved']),
+            models.Index(fields=['is_approved', 'created_at']),
             models.Index(fields=['uploaded_by', 'created_at']),
         ]
 
     def __str__(self):
-        return f"{self.type} - {self.title or self.file.name} ({self.status})"
+        return f"{self.media_type} - {self.caption or self.file.name} ({'Approved' if self.is_approved else 'Pending'})"
 
     def save(self, *args, **kwargs):
-        # Set file size if not already set
-        if self.file and not self.file_size:
-            try:
-                self.file_size = self.file.size
-            except (OSError, ValueError):
-                pass
-        
-        # Set approved_at when status changes to APPROVED
-        if self.status == self.Status.APPROVED and not self.approved_at:
-            from django.utils import timezone
-            self.approved_at = timezone.now()
-        
         super().save(*args, **kwargs)
 
     @property
     def is_public(self):
         """Check if media is approved and can be shown publicly"""
-        return self.status == self.Status.APPROVED
+        return self.is_approved
 
     @property
     def file_url(self):

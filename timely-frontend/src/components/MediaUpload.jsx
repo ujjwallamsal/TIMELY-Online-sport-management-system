@@ -3,7 +3,7 @@
  * Supports drag & drop, file validation, and progress tracking.
  */
 import React, { useState, useRef } from 'react';
-import { mediaAPI } from '../services/api';
+import { mediaAPI } from '../services/api.js';
 
 const MediaUpload = ({ 
   onUploadSuccess, 

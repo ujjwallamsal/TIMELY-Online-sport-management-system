@@ -58,7 +58,7 @@ def news_published_signal(sender, instance, created, **kwargs):
             {
                 'id': instance.id,
                 'title': instance.title,
-                'author': instance.author.get_full_name() if instance.author else None,
+                'author': instance.author.full_name if instance.author else None,
                 'created_at': instance.created_at.isoformat(),
                 'updated_at': instance.updated_at.isoformat()
             }
@@ -71,7 +71,7 @@ def news_published_signal(sender, instance, created, **kwargs):
             {
                 'id': instance.id,
                 'title': instance.title,
-                'excerpt': instance.excerpt or (instance.body[:150] + '...' if len(instance.body) > 150 else instance.body),
+                'excerpt': instance.body[:150] + '...' if len(instance.body) > 150 else instance.body,
                 'publish_at': instance.publish_at.isoformat() if instance.publish_at else instance.created_at.isoformat()
             }
         )

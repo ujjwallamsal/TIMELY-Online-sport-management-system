@@ -3,7 +3,7 @@
 Audit logging helper functions for KYC and role changes
 """
 from django.contrib.auth import get_user_model
-from accounts.models import AuditLog
+from common.models import AuditLog
 
 User = get_user_model()
 

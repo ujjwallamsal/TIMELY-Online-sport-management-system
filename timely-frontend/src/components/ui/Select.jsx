@@ -1,8 +1,9 @@
 // src/components/ui/Select.jsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef } from 'react';
 import { ChevronDownIcon, CheckIcon } from '@heroicons/react/24/outline';
 
-const Select = ({
+const Select = forwardRef(({
+  name,
   options = [],
   value,
   onChange,
@@ -13,8 +14,11 @@ const Select = ({
   size = "md",
   searchable = false,
   multiple = false,
+  label,
+  required = false,
+  helperText,
   ...props
-}) => {
+}, ref) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -37,9 +41,9 @@ const Select = ({
       const newValues = currentValues.includes(option.value)
         ? currentValues.filter(v => v !== option.value)
         : [...currentValues, option.value];
-      onChange(newValues);
+      onChange?.(newValues);
     } else {
-      onChange(option.value);
+      onChange?.(option.value);
       setIsOpen(false);
       setSearchTerm('');
     }
@@ -124,20 +128,30 @@ const Select = ({
   }, [searchTerm]);
 
   return (
-    <div className={`relative ${className}`} ref={selectRef}>
-      <button
-        type="button"
-        className={`
-          w-full ${sizes[size]} text-left border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-          ${error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'}
-          ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white hover:border-gray-400'}
-          ${isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}
-        `}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        {...props}
-      >
+    <div className={className}>
+      {label && (
+        <label 
+          htmlFor={name}
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+      )}
+      <div className={`relative`} ref={selectRef}>
+        <button
+          type="button"
+          className={`
+            w-full ${sizes[size]} text-left border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            ${error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'}
+            ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white hover:border-gray-400'}
+            ${isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}
+          `}
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          {...props}
+        >
         <span className={`block truncate ${value ? 'text-gray-900' : 'text-gray-500'}`}>
           {getDisplayValue()}
         </span>
@@ -194,8 +208,19 @@ const Select = ({
           </div>
         </div>
       )}
+      </div>
+      {error && (
+        <p className="mt-1 text-sm text-red-600">
+          {error}
+        </p>
+      )}
+      {helperText && !error && (
+        <p className="mt-1 text-sm text-gray-500">{helperText}</p>
+      )}
     </div>
   );
-};
+});
+
+Select.displayName = 'Select';
 
 export default Select;

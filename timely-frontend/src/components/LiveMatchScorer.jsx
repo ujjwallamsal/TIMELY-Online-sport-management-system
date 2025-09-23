@@ -53,8 +53,8 @@ export default function LiveMatchScorer({
     if (!match?.id) return;
 
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const host = '127.0.0.1';
-    const ws = new WebSocket(`${proto}://${host}:8000/ws/matches/${match.id}/`);
+    const host = '127.0.0.1:8000';
+    const ws = new WebSocket(`${proto}://${host}/ws/matches/${match.id}/`);
     
     ws.onopen = () => {
       console.log('Connected to match WebSocket');
@@ -66,12 +66,11 @@ export default function LiveMatchScorer({
     };
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      addNotification({
-        type: 'error',
-        title: 'Connection Error',
-        message: 'Failed to connect to live match updates'
-      });
+      // Only log once to reduce console spam
+      if (!ws._errorLogged) {
+        console.warn('WebSocket connection failed - backend may not support WebSockets yet');
+        ws._errorLogged = true;
+      }
     };
 
     wsRef.current = ws;

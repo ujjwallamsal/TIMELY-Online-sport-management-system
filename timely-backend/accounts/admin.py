@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
-from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, AuditLog
+from .models import User, UserRole, EmailVerificationToken, PasswordResetToken
 
 
 @admin.register(User)
@@ -254,73 +254,7 @@ class PasswordResetTokenAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related('user')
 
 
-@admin.register(AuditLog)
-class AuditLogAdmin(admin.ModelAdmin):
-    """Admin configuration for AuditLog model"""
-    list_display = [
-        'action', 'user_email', 'resource_info', 'ip_address',
-        'created_at', 'details_preview'
-    ]
-    list_filter = [
-        'action', 'resource_type', 'created_at'
-    ]
-    search_fields = ['user__email', 'resource_type', 'resource_id']
-    ordering = ['-created_at']
-    readonly_fields = ['created_at', 'user', 'action', 'resource_type', 'resource_id', 'details', 'ip_address', 'user_agent']
-    
-    fieldsets = (
-        (None, {
-            'fields': ('user', 'action', 'resource_type', 'resource_id')
-        }),
-        ('Details', {
-            'fields': ('details', 'ip_address', 'user_agent'),
-            'classes': ('collapse',)
-        }),
-        ('Timing', {
-            'fields': ('created_at',)
-        }),
-    )
-    
-    def user_email(self, obj):
-        """Display user email with link"""
-        if obj.user:
-            url = reverse('admin:accounts_user_change', args=[obj.user.id])
-            return format_html('<a href="{}">{}</a>', url, obj.user.email)
-        return 'Anonymous'
-    user_email.short_description = 'User'
-    
-    def resource_info(self, obj):
-        """Display resource information"""
-        if obj.resource_id:
-            return f"{obj.resource_type}: {obj.resource_id}"
-        return obj.resource_type
-    resource_info.short_description = 'Resource'
-    
-    def details_preview(self, obj):
-        """Display details preview"""
-        if obj.details:
-            details_str = str(obj.details)
-            if len(details_str) > 50:
-                return f"{details_str[:50]}..."
-            return details_str
-        return 'No details'
-    details_preview.short_description = 'Details'
-    
-    def has_add_permission(self, request):
-        """Audit logs cannot be manually created"""
-        return False
-    
-    def has_change_permission(self, request, obj=None):
-        """Audit logs cannot be modified"""
-        return False
-    
-    def has_delete_permission(self, request, obj=None):
-        """Audit logs cannot be deleted"""
-        return False
-    
-    def get_queryset(self, request):
-        """Optimize queryset with related data"""
-        return super().get_queryset(request).select_related('user')
+# AuditLog admin is handled in common/admin.py
 
 
 # Customize admin site

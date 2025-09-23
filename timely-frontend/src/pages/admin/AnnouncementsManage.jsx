@@ -26,45 +26,81 @@ const AnnouncementsManage = () => {
 
   const fetchAnnouncements = async () => {
     try {
-      // Mock data - replace with actual API call
-      setAnnouncements([
-        {
-          id: 1,
-          event: 'Basketball Championship',
-          subject: 'Match Schedule Update',
-          audience: 'ALL',
-          sentAt: '2024-01-20 10:00',
-          count: 150
-        },
-        {
-          id: 2,
-          event: 'Soccer League',
-          subject: 'Registration Deadline Reminder',
-          audience: 'PARTICIPANTS',
-          sentAt: '2024-01-19 14:30',
-          count: 45
+      const response = await fetch('/api/announcements/', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
         }
-      ]);
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAnnouncements(data.map(ann => ({
+          id: ann.id,
+          event: ann.event?.name || 'Unknown Event',
+          subject: ann.title,
+          audience: ann.is_public ? 'ALL' : 'PARTICIPANTS',
+          sentAt: new Date(ann.created_at).toLocaleString(),
+          count: ann.target_teams?.length || 0
+        })));
+      } else {
+        console.error('Error fetching announcements:', response.statusText);
+        // Fallback to empty array
+        setAnnouncements([]);
+      }
     } catch (error) {
       console.error('Error fetching announcements:', error);
+      // Fallback to empty array
+      setAnnouncements([]);
     }
   };
 
   const handleSendAnnouncement = async () => {
     try {
-      // API call to send announcement
-      console.log('Sending announcement:', formData);
-      setShowForm(false);
-      setFormData({
-        event: '',
-        audience: 'ALL',
-        subject: '',
-        body: '',
-        sendTest: false
+      if (!formData.event) {
+        alert('Please select an event');
+        return;
+      }
+      
+      if (!formData.subject || !formData.body) {
+        alert('Please fill in both subject and message');
+        return;
+      }
+
+      const response = await fetch(`/api/events/${formData.event}/announce/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: formData.subject,
+          message: formData.body,
+          audience: formData.audience
+        })
       });
-      fetchAnnouncements(); // Refresh the list
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Announcement sent successfully:', result);
+        setShowForm(false);
+        setFormData({
+          event: '',
+          audience: 'ALL',
+          subject: '',
+          body: '',
+          sendTest: false
+        });
+        fetchAnnouncements(); // Refresh the list
+        alert('Announcement sent successfully!');
+      } else {
+        const error = await response.json();
+        console.error('Error sending announcement:', error);
+        alert(`Error: ${error.error || 'Failed to send announcement'}`);
+      }
     } catch (error) {
       console.error('Error sending announcement:', error);
+      alert('Error sending announcement. Please try again.');
     }
   };
 

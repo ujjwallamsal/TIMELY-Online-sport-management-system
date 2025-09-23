@@ -49,7 +49,7 @@ class VenueSerializer(serializers.ModelSerializer):
 
 class EventSerializer(serializers.ModelSerializer):
     """Event serializer"""
-    sport_name = serializers.CharField(source='sport.name', read_only=True)
+    sport_name = serializers.CharField(source='sport', read_only=True)
     venue_name = serializers.CharField(source='venue.name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
     
@@ -59,7 +59,7 @@ class EventSerializer(serializers.ModelSerializer):
             'id', 'name', 'sport', 'sport_name', 'description', 'start_datetime',
             'end_datetime', 'registration_open_at', 'registration_close_at',
             'location', 'capacity', 'fee_cents', 'venue', 'venue_name',
-            'eligibility', 'status', 'visibility', 'created_by', 'created_by_name',
+            'status', 'visibility', 'created_by', 'created_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
@@ -101,18 +101,42 @@ class TeamSerializer(serializers.ModelSerializer):
 
 class RegistrationSerializer(serializers.ModelSerializer):
     """Registration serializer"""
-    applicant_name = serializers.CharField(source='applicant.full_name', read_only=True)
-    team_name = serializers.CharField(source='team.name', read_only=True)
+    applicant_name = serializers.SerializerMethodField()
+    team_name = serializers.SerializerMethodField()
     event_name = serializers.CharField(source='event.name', read_only=True)
+    user_id = serializers.IntegerField(source='applicant_user.id', read_only=True)
+    team_id = serializers.IntegerField(source='applicant_team.id', read_only=True)
     
     class Meta:
         model = Registration
         fields = [
-            'id', 'event', 'event_name', 'applicant', 'applicant_name',
-            'team', 'team_name', 'type', 'status', 'docs', 'submitted_at',
+            'id', 'event', 'event_name', 'applicant_user', 'applicant_name', 'user_id',
+            'applicant_team', 'team_name', 'team_id', 'type', 'status', 'docs', 'submitted_at',
             'decided_at', 'reason'
         ]
         read_only_fields = ['id', 'submitted_at', 'decided_at']
+    
+    def get_applicant_name(self, obj):
+        """Get applicant name from new fields"""
+        if obj.applicant_user:
+            return obj.applicant_user.full_name
+        elif obj.applicant_team:
+            return obj.applicant_team.name
+        # Fallback to legacy fields
+        elif obj.applicant:
+            return obj.applicant.full_name
+        elif obj.team:
+            return obj.team.name
+        return "Unknown"
+    
+    def get_team_name(self, obj):
+        """Get team name from new fields"""
+        if obj.applicant_team:
+            return obj.applicant_team.name
+        # Fallback to legacy field
+        elif obj.team:
+            return obj.team.name
+        return None
 
 
 class FixtureSerializer(serializers.ModelSerializer):
@@ -138,17 +162,17 @@ class ResultSerializer(serializers.ModelSerializer):
     fixture_home = serializers.CharField(source='fixture.home.name', read_only=True)
     fixture_away = serializers.CharField(source='fixture.away.name', read_only=True)
     winner_name = serializers.CharField(source='winner.name', read_only=True)
-    entered_by_name = serializers.CharField(source='entered_by.full_name', read_only=True)
+    verified_by_name = serializers.CharField(source='verified_by.full_name', read_only=True)
     
     class Meta:
         model = Result
         fields = [
             'id', 'fixture', 'fixture_event', 'fixture_home', 'fixture_away',
-            'home_score', 'away_score', 'winner', 'winner_name', 'entered_by',
-            'entered_by_name', 'entered_at', 'finalized_at', 'finalized_by',
+            'score_home', 'score_away', 'winner', 'winner_name', 'verified_by',
+            'verified_by_name', 'verified_at', 'finalized_at', 'finalized_by',
             'is_finalized', 'notes'
         ]
-        read_only_fields = ['id', 'entered_at', 'finalized_at', 'is_finalized']
+        read_only_fields = ['id', 'verified_at', 'finalized_at', 'is_finalized']
 
 
 class LeaderboardEntrySerializer(serializers.ModelSerializer):
@@ -178,15 +202,16 @@ class NotificationSerializer(serializers.ModelSerializer):
 class AnnouncementSerializer(serializers.ModelSerializer):
     """Announcement serializer"""
     event_name = serializers.CharField(source='event.name', read_only=True)
-    sent_by_name = serializers.CharField(source='sent_by.full_name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
     
     class Meta:
         model = Announcement
         fields = [
-            'id', 'event', 'event_name', 'subject', 'body', 'audience',
-            'sent_by', 'sent_by_name', 'sent_at'
+            'id', 'event', 'event_name', 'title', 'message', 'type', 'priority',
+            'is_public', 'target_teams', 'is_active', 'expires_at',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'sent_by', 'sent_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
 
 class ReportSerializer(serializers.Serializer):

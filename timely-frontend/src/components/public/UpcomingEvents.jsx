@@ -10,7 +10,7 @@ import {
   SparklesIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import { publicAPI } from '../../services/api';
+import { publicAPI } from '../../services/api.js';
 import useSocket from '../../hooks/useSocket';
 import Skeleton, { SkeletonCard } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
@@ -37,7 +37,7 @@ const UpcomingEvents = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await publicAPI.listPublicEvents({
+      const response = await publicAPI.getEvents({
         page_size: 6,
         status: 'upcoming',
         ordering: 'start_datetime'

@@ -24,6 +24,10 @@ from accounts.permissions import (
     IsOrganizerOfEvent, IsCoachOfTeam, IsAthleteSelf, 
     IsSpectatorReadOnly, IsAdmin
 )
+from accounts.audit_mixin import AuditLogMixin
+from realtime.services import (
+    broadcast_result_update, broadcast_leaderboard_update
+)
 
 
 class ResultViewSet(viewsets.ModelViewSet):
@@ -31,7 +35,7 @@ class ResultViewSet(viewsets.ModelViewSet):
     
     queryset = Result.objects.select_related(
         'fixture__event', 'fixture__home', 'fixture__away',
-        'winner', 'entered_by'
+        'winner', 'verified_by'
     ).all()
     serializer_class = ResultSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -104,7 +108,14 @@ class ResultViewSet(viewsets.ModelViewSet):
         if not self._can_manage_result(fixture.event):
             self.permission_denied(self.request)
         
-        serializer.save(fixture=fixture)
+        result = serializer.save(fixture=fixture)
+        
+        # Broadcast result update
+        broadcast_result_update(
+            fixture.event.id, 
+            result, 
+            f"New result recorded: {fixture.home.name if fixture.home else 'TBD'} {result.home_score}-{result.away_score} {fixture.away.name if fixture.away else 'TBD'}"
+        )
     
     def _can_manage_result(self, event):
         """Check if user can manage results for this event"""
@@ -142,6 +153,17 @@ class ResultViewSet(viewsets.ModelViewSet):
         
         # Recompute standings
         recompute_event_standings(result.fixture.event.id)
+        
+        # Broadcast result and leaderboard updates
+        broadcast_result_update(
+            result.fixture.event.id, 
+            result, 
+            f"Result finalized: {result.fixture.home.name if result.fixture.home else 'TBD'} {result.home_score}-{result.away_score} {result.fixture.away.name if result.fixture.away else 'TBD'}"
+        )
+        broadcast_leaderboard_update(
+            result.fixture.event.id, 
+            "Leaderboard updated after result finalization"
+        )
         
         serializer = self.get_serializer(result)
         return Response(serializer.data)
@@ -234,7 +256,11 @@ class FixtureResultView(APIView):
             broadcast_result_update(
                 fixture.event.id, 
                 result, 
-                f"New result recorded: {fixture.home.name} {result.home_score}-{result.away_score} {fixture.away.name}"
+                f"New result recorded: {fixture.home.name if fixture.home else 'TBD'} {result.home_score}-{result.away_score} {fixture.away.name if fixture.away else 'TBD'}"
+            )
+            broadcast_leaderboard_update(
+                fixture.event.id, 
+                "Leaderboard updated with new result"
             )
             
             response_serializer = ResultSerializer(result)

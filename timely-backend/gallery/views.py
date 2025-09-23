@@ -69,12 +69,12 @@ class IsOrganizerOrAdmin(permissions.BasePermission):
 
 class MediaUploadViewSet(viewsets.ModelViewSet):
     """ViewSet for media upload and management"""
-    queryset = Media.objects.select_related('event', 'fixture', 'uploaded_by')
+    queryset = Media.objects.select_related('event', 'uploaded_by')
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['event', 'fixture', 'type', 'status']
-    search_fields = ['title', 'description', 'event__name']
-    ordering_fields = ['created_at', 'updated_at', 'title']
+    filterset_fields = ['event', 'media_type', 'is_approved']
+    search_fields = ['caption', 'event__name']
+    ordering_fields = ['created_at', 'caption']
     ordering = ['-created_at']
 
     def get_serializer_class(self):
@@ -97,15 +97,15 @@ class MediaUploadViewSet(viewsets.ModelViewSet):
     def moderate(self, request, pk=None):
         """Moderate media (approve/reject) - admin/organizer only"""
         media = self.get_object()
-        status_value = request.data.get('status')
+        is_approved = request.data.get('is_approved')
         
-        if status_value not in [Media.Status.APPROVED, Media.Status.REJECTED]:
+        if is_approved not in [True, False]:
             return Response(
-                {'error': 'Invalid status. Must be APPROVED or REJECTED'}, 
+                {'error': 'Invalid is_approved. Must be true or false'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        media.status = status_value
+        media.is_approved = is_approved
         media.save()
         
         serializer = MediaModerationSerializer(media, context={'request': request})
@@ -114,33 +114,33 @@ class MediaUploadViewSet(viewsets.ModelViewSet):
 
 class MediaModerationViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for media moderation (admin/organizer only)"""
-    queryset = Media.objects.select_related('event', 'fixture', 'uploaded_by')
+    queryset = Media.objects.select_related('event', 'uploaded_by')
     serializer_class = MediaModerationSerializer
     permission_classes = [IsOrganizerOrAdmin]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['event', 'fixture', 'type', 'status']
-    search_fields = ['title', 'description', 'event__name', 'uploaded_by__email']
-    ordering_fields = ['created_at', 'updated_at', 'title']
+    filterset_fields = ['event', 'media_type', 'is_approved']
+    search_fields = ['caption', 'event__name', 'uploaded_by__email']
+    ordering_fields = ['created_at', 'caption']
     ordering = ['-created_at']
 
     def get_queryset(self):
         """Filter for moderation queue"""
         status_filter = self.request.query_params.get('status')
         if status_filter:
-            return self.queryset.filter(status=status_filter)
-        return self.queryset.filter(status=Media.Status.PENDING)
+            return self.queryset.filter(is_approved=status_filter)
+        return self.queryset.filter(is_approved=False)
 
 
 class PublicMediaViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for public media display (only approved media)"""
-    queryset = Media.objects.filter(status=Media.Status.APPROVED).select_related('event', 'fixture')
+    queryset = Media.objects.filter(is_approved=True).select_related('event')
     serializer_class = PublicMediaSerializer
     permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['event', 'fixture', 'type']
-    search_fields = ['title', 'description', 'event__name']
-    ordering_fields = ['created_at', 'approved_at', 'title']
-    ordering = ['-approved_at', '-created_at']
+    filterset_fields = ['event', 'media_type']
+    search_fields = ['caption', 'event__name']
+    ordering_fields = ['created_at', 'caption']
+    ordering = ['-created_at']
 
     def get_queryset(self):
         """Filter by event if specified"""
@@ -153,13 +153,13 @@ class PublicMediaViewSet(viewsets.ReadOnlyModelViewSet):
 # Legacy MediaViewSet for backward compatibility
 class MediaViewSet(viewsets.ModelViewSet):
     """General purpose media viewset"""
-    queryset = Media.objects.select_related('event', 'fixture', 'uploaded_by')
+    queryset = Media.objects.select_related('event', 'uploaded_by')
     serializer_class = MediaSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['event', 'fixture', 'type', 'status']
-    search_fields = ['title', 'description', 'event__name']
-    ordering_fields = ['created_at', 'updated_at', 'title']
+    filterset_fields = ['event', 'media_type', 'is_approved']
+    search_fields = ['caption', 'event__name']
+    ordering_fields = ['created_at', 'caption']
     ordering = ['-created_at']
 
     def get_permissions(self):
@@ -169,10 +169,10 @@ class MediaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if self.action == "list" and not self.request.user.is_authenticated:
-            return Media.objects.filter(status=Media.Status.APPROVED)
+            return Media.objects.filter(is_approved=True)
         elif self.action == "list" and self.request.user.role not in ['ADMIN', 'ORGANIZER']:
             return Media.objects.filter(
-                Q(status=Media.Status.APPROVED) | Q(uploaded_by=self.request.user)
+                Q(is_approved=True) | Q(uploaded_by=self.request.user)
             )
         return self.queryset
 

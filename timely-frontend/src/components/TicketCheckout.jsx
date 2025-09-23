@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { listTicketTypes, createTicketOrder, createStripeCheckout, createPayPalCheckout } from '../services/api';
+import { listTicketTypes, createTicketOrder, createStripeCheckout, createPayPalCheckout } from '../services/api.js';
 import { useNotifications } from '../components/NotificationSystem';
 
 const TicketCheckout = ({ eventId, onSuccess, onCancel }) => {

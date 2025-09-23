@@ -22,7 +22,7 @@ import {
 } from '@heroicons/react/24/outline';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
-import { getEvent, getEventRegistrations, getEventFixtures, getEventResults } from '../../services/api';
+import { getEvent, getEventRegistrations, getEventFixtures, getEventResults } from '../../services/api.js';
 
 const EventDetail = () => {
   const { id } = useParams();

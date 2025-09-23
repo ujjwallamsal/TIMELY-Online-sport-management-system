@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import api from '../services/api';
 
 export default function PasswordReset() {
   const [step, setStep] = useState('request'); // 'request' or 'confirm'
@@ -17,21 +18,11 @@ export default function PasswordReset() {
     setMessage('');
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/accounts/password/forgot/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-
-      if (response.ok) {
-        setMessage('If the email exists, a reset link will be sent.');
-        setStep('confirm');
-      } else {
-        const data = await response.json();
-        setError(data.detail || 'Failed to request reset');
-      }
+      await api.post('/auth/password/forgot/', { email });
+      setMessage('If the email exists, a reset link will be sent.');
+      setStep('confirm');
     } catch (err) {
-      setError('Network error. Please try again.');
+      setError(err.message || 'Failed to request reset');
     } finally {
       setLoading(false);
     }
@@ -44,23 +35,13 @@ export default function PasswordReset() {
     setMessage('');
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/accounts/auth/password/reset/confirm/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password: newPassword }),
-      });
-
-      if (response.ok) {
-        setMessage('Password updated successfully! You can now login.');
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 2000);
-      } else {
-        const data = await response.json();
-        setError(data.detail || 'Failed to reset password');
-      }
+      await api.post('/auth/password/reset/confirm/', { token, password: newPassword });
+      setMessage('Password updated successfully! You can now login.');
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 2000);
     } catch (err) {
-      setError('Network error. Please try again.');
+      setError(err.message || 'Failed to reset password');
     } finally {
       setLoading(false);
     }

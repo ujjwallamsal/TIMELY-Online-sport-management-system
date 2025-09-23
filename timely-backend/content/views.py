@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db import models
+from accounts.rbac_permissions import OrganizerOrAdminPermission
 from .models import Page, News, Banner, Announcement
 from .serializers import PageSerializer, NewsSerializer, BannerSerializer, AnnouncementSerializer
 
@@ -29,14 +30,16 @@ class PageViewSet(viewsets.ModelViewSet):
 
 
 class NewsViewSet(viewsets.ModelViewSet):
-    """Admin CRUD for news articles."""
+    """Organizer/Admin CRUD for news articles."""
     queryset = News.objects.all()
     serializer_class = NewsSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [OrganizerOrAdminPermission]
 
-    def perform_create(self, serializer):
-        """Set author to current user."""
-        serializer.save(author=self.request.user)
+    def get_serializer_context(self):
+        """Ensure request context is passed to serializer."""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
     @action(detail=False, methods=['get'])
     def published(self, request):

@@ -32,7 +32,7 @@ class EventSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'name', 'sport', 'description',
-            'start_date', 'end_date',
+            'start_datetime', 'end_datetime',
             'venue', 'eligibility',
             'status', 'visibility', 'phase', 'is_published',
             'created_by', 'created_by_name',
@@ -47,8 +47,8 @@ class EventSerializer(serializers.ModelSerializer):
     def validate(self, data):
         """Validate event data"""
         # Validate datetime order
-        if 'start_date' in data and 'end_date' in data:
-            if data['start_date'] >= data['end_date']:
+        if 'start_datetime' in data and 'end_datetime' in data:
+            if data['start_datetime'] >= data['end_datetime']:
                 raise ValidationError("End datetime must be after start datetime")
         
         # Validate registration windows
@@ -57,14 +57,14 @@ class EventSerializer(serializers.ModelSerializer):
                 raise ValidationError("Registration close must be after registration open")
         
         # Validate registration window
-        if all(key in data for key in ['registration_open_at', 'registration_close_at', 'start_date']):
+        if all(key in data for key in ['registration_open_at', 'registration_close_at', 'start_datetime']):
             # Registration can open before event starts (this is allowed)
-            if data['registration_close_at'] > data['start_date']:
+            if data['registration_close_at'] > data['start_datetime']:
                 raise ValidationError("Registration close cannot be after event start")
         
         # Validate registration close is not after event end
-        if all(key in data for key in ['registration_close_at', 'end_date']):
-            if data['registration_close_at'] > data['end_date']:
+        if all(key in data for key in ['registration_close_at', 'end_datetime']):
+            if data['registration_close_at'] > data['end_datetime']:
                 raise ValidationError("Registration close cannot be after event end")
         
         return data

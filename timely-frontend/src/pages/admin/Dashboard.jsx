@@ -19,6 +19,8 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Skeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import RealtimeAnnouncements from '../../components/RealtimeAnnouncements';
+import { adminDashboardAPI, dashboardUtils } from '../../services/dashboardAPI';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -57,69 +59,16 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Simulate API calls - in real app, these would be actual API calls
-        setStats({
-          totalEvents: 24,
-          activeEvents: 8,
-          totalUsers: 1247,
-          totalRevenue: 45680,
-          registrations: 156,
-          completedEvents: 89
-        });
-
-        setRecentEvents([
-          {
-            id: 1,
-            title: "Championship Finals 2024",
-            date: "2024-03-15",
-            status: "upcoming",
-            registrations: 45,
-            revenue: 2250
-          },
-          {
-            id: 2,
-            title: "Summer Olympics Qualifiers",
-            date: "2024-03-20",
-            status: "upcoming",
-            registrations: 32,
-            revenue: 1600
-          },
-          {
-            id: 3,
-            title: "Local Basketball Tournament",
-            date: "2024-03-10",
-            status: "ongoing",
-            registrations: 28,
-            revenue: 1400
-          }
+        // Fetch real data from API
+        const [statsData, eventsData, registrationsData] = await Promise.all([
+          adminDashboardAPI.getStats(),
+          adminDashboardAPI.getRecentEvents(5),
+          adminDashboardAPI.getRecentRegistrations(5)
         ]);
 
-        setRecentRegistrations([
-          {
-            id: 1,
-            user: "John Doe",
-            event: "Championship Finals 2024",
-            date: "2024-03-01",
-            status: "confirmed",
-            amount: 50
-          },
-          {
-            id: 2,
-            user: "Jane Smith",
-            event: "Summer Olympics Qualifiers",
-            date: "2024-03-01",
-            status: "pending",
-            amount: 75
-          },
-          {
-            id: 3,
-            user: "Mike Johnson",
-            event: "Local Basketball Tournament",
-            date: "2024-02-28",
-            status: "confirmed",
-            amount: 25
-          }
-        ]);
+        setStats(statsData);
+        setRecentEvents(eventsData);
+        setRecentRegistrations(registrationsData);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -132,13 +81,10 @@ export default function AdminDashboard() {
 
   // Update stats with live data
   useEffect(() => {
-    if (liveData) {
-      setStats(prev => ({
-        ...prev,
-        ...liveData.stats
-      }));
+    if (wsError) {
+      console.error('WebSocket error:', wsError);
     }
-  }, [liveData]);
+  }, [wsError]);
 
   const statCards = [
     {
@@ -281,6 +227,15 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      {/* Live Announcements */}
+      <div className="mb-8">
+        <RealtimeAnnouncements 
+          showInDashboard={true}
+          maxAnnouncements={3}
+          autoHide={false}
+        />
+      </div>
+
       {/* Quick Actions */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
@@ -323,7 +278,7 @@ export default function AdminDashboard() {
                 <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
                     <h3 className="font-medium text-gray-900">{event.title}</h3>
-                    <p className="text-sm text-gray-600">{event.date}</p>
+                    <p className="text-sm text-gray-600">{dashboardUtils.formatDate(event.start_date)}</p>
                     <div className="flex items-center mt-1">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         event.status === 'upcoming' 
@@ -337,14 +292,18 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">{event.registrations} registrations</p>
-                    <p className="text-sm text-gray-600">${event.revenue}</p>
+                    <p className="text-sm font-medium text-gray-900">{event.registration_count || 0} registrations</p>
+                    <p className="text-sm text-gray-600">{dashboardUtils.formatCurrency(event.revenue || 0)}</p>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <EmptyEvents />
+            <EmptyState
+              icon={CalendarDaysIcon}
+              title="No Recent Events"
+              description="No events have been created yet."
+            />
           )}
         </Card>
 
@@ -365,9 +324,9 @@ export default function AdminDashboard() {
               {recentRegistrations.map((registration) => (
                 <div key={registration.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <h3 className="font-medium text-gray-900">{registration.user}</h3>
-                    <p className="text-sm text-gray-600">{registration.event}</p>
-                    <p className="text-xs text-gray-500">{registration.date}</p>
+                    <h3 className="font-medium text-gray-900">{registration.user?.first_name} {registration.user?.last_name}</h3>
+                    <p className="text-sm text-gray-600">{registration.event?.title}</p>
+                    <p className="text-xs text-gray-500">{dashboardUtils.formatDate(registration.created_at)}</p>
                   </div>
                   <div className="text-right">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -377,13 +336,17 @@ export default function AdminDashboard() {
                     }`}>
                       {registration.status}
                     </span>
-                    <p className="text-sm font-medium text-gray-900 mt-1">${registration.amount}</p>
+                    <p className="text-sm font-medium text-gray-900 mt-1">{dashboardUtils.formatCurrency(registration.amount || 0)}</p>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <EmptyRegistrations />
+            <EmptyState
+              icon={UserGroupIcon}
+              title="No Recent Registrations"
+              description="No registrations have been made yet."
+            />
           )}
         </Card>
       </div>

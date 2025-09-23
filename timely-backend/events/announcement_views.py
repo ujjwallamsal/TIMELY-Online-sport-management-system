@@ -11,14 +11,14 @@ from django.utils import timezone
 
 from .models import Announcement, Event
 from .serializers import AnnouncementSerializer
-from .permissions import CanManageEvent
+from .permissions import IsEventOwnerOrAdmin
 
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
     """ViewSet for managing announcements"""
     
     serializer_class = AnnouncementSerializer
-    permission_classes = [IsAuthenticated, CanManageEvent]
+    permission_classes = [IsAuthenticated, IsEventOwnerOrAdmin]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['event', 'type', 'priority', 'is_active']
     

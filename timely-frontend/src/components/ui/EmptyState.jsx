@@ -74,12 +74,15 @@ const EmptyState = ({
 };
 
 // Predefined empty states for common scenarios
-export const EmptyEvents = ({ action, actionText }) => (
+export const EmptyEvents = ({ action, actionText, showCreateButton = false }) => (
   <EmptyState
     icon={CalendarDaysIcon}
     title="No events found"
-    description="There are no events scheduled at the moment. Check back later or create a new event."
-    action={action}
+    description={showCreateButton 
+      ? "There are no events scheduled at the moment. Check back later or create a new event."
+      : "There are no events scheduled at the moment. Check back later."
+    }
+    action={showCreateButton ? action : null}
     actionText={actionText || "Create Event"}
   />
 );

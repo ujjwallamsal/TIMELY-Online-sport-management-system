@@ -66,26 +66,40 @@ class TeamConsumer(AsyncWebsocketConsumer):
             message_type = data.get('type')
             
             if message_type == 'subscribe_schedule':
-                # Subscribe to team schedule updates
-                await self.channel_layer.group_add(
-                    self.schedule_group_name,
-                    self.channel_name
-                )
-                await self.send(text_data=json.dumps({
-                    'type': 'subscribed',
-                    'stream': 'schedule'
-                }))
+                # Check permissions and subscribe to team schedule updates
+                team = await self.get_team(self.team_id)
+                if team and await self.can_subscribe_to_topic(self.user, team, 'schedule'):
+                    await self.channel_layer.group_add(
+                        self.schedule_group_name,
+                        self.channel_name
+                    )
+                    await self.send(text_data=json.dumps({
+                        'type': 'subscribed',
+                        'stream': 'schedule'
+                    }))
+                else:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Permission denied for schedule stream'
+                    }))
                 
             elif message_type == 'subscribe_results':
-                # Subscribe to team results updates
-                await self.channel_layer.group_add(
-                    self.results_group_name,
-                    self.channel_name
-                )
-                await self.send(text_data=json.dumps({
-                    'type': 'subscribed',
-                    'stream': 'results'
-                }))
+                # Check permissions and subscribe to team results updates
+                team = await self.get_team(self.team_id)
+                if team and await self.can_subscribe_to_topic(self.user, team, 'results'):
+                    await self.channel_layer.group_add(
+                        self.results_group_name,
+                        self.channel_name
+                    )
+                    await self.send(text_data=json.dumps({
+                        'type': 'subscribed',
+                        'stream': 'results'
+                    }))
+                else:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Permission denied for results stream'
+                    }))
                 
             elif message_type == 'ping':
                 # Handle ping/pong for connection health
@@ -122,6 +136,27 @@ class TeamConsumer(AsyncWebsocketConsumer):
             'data': event['data']
         }))
     
+    async def leaderboard_update(self, event):
+        """Handle leaderboard updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'leaderboard_update',
+            'data': event['data']
+        }))
+    
+    async def result_update(self, event):
+        """Handle individual result updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'result_update',
+            'data': event['data']
+        }))
+    
+    async def fixture_update(self, event):
+        """Handle individual fixture updates"""
+        await self.send(text_data=json.dumps({
+            'type': 'fixture_update',
+            'data': event['data']
+        }))
+    
     @database_sync_to_async
     def get_team(self, team_id):
         """Get team by ID"""
@@ -145,6 +180,10 @@ class TeamConsumer(AsyncWebsocketConsumer):
         if team.event.created_by == user:
             return True
         
+        # Admin and staff can view all teams
+        if user.is_staff or (hasattr(user, 'role') and user.role in ['ADMIN', 'ORGANIZER']):
+            return True
+        
         # Check if user is registered for the event
         from registrations.models import Registration
         return Registration.objects.filter(
@@ -152,6 +191,18 @@ class TeamConsumer(AsyncWebsocketConsumer):
             applicant=user,
             status='APPROVED'
         ).exists()
+    
+    @database_sync_to_async
+    def can_subscribe_to_topic(self, user, team, topic):
+        """Check if user can subscribe to specific topic"""
+        if not self.can_view_team(user, team):
+            return False
+        
+        # Schedule and results are viewable by all team participants
+        if topic in ['schedule', 'results']:
+            return True
+        
+        return False
 
 
 class PurchaseConsumer(AsyncWebsocketConsumer):

@@ -5,7 +5,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
-import api from '../../services/api';
+import api from '../../services/api.js';
 import Skeleton, { SkeletonCard } from '../../components/ui/Skeleton';
 import EmptyState, { EmptyEvents } from '../../components/ui/EmptyState';
 
@@ -109,6 +109,7 @@ const PublicCheckout = ({ eventId, ticketType, quantity = 1 }) => {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <EmptyEvents 
+          showCreateButton={false}
           title="Event Not Found"
           description="The event you're trying to purchase tickets for doesn't exist."
           action={

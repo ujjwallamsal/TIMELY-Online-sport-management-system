@@ -24,7 +24,7 @@ class PublicEventViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return Event.objects.filter(
             visibility='PUBLIC',
-            status__in=['UPCOMING', 'ONGOING', 'COMPLETED']
+            status__in=['published']  # Only show published events publicly
         ).select_related("venue", "created_by")
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]

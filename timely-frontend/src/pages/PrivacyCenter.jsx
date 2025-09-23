@@ -7,7 +7,7 @@ import {
   requestDataDeletion, 
   getDeletionStatus, 
   getUserDeletions
-} from '../services/api';
+} from '../../services/api.js';
 import { useAuth } from '../context/AuthContext';
 
 const PrivacyCenter = () => {

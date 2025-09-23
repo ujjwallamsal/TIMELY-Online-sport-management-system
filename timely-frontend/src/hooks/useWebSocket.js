@@ -12,7 +12,7 @@ const useWebSocket = (url, options = {}) => {
     onOpen,
     onClose,
     onError,
-    reconnectInterval = 5000,
+    reconnectInterval = 30000, // Reduced reconnection frequency to prevent spam
     pingInterval = 30000,
     ...wsOptions
   } = options;
@@ -22,12 +22,25 @@ const useWebSocket = (url, options = {}) => {
       return;
     }
 
+    // Skip WebSocket connections if no URL provided or if backend is not available
+    if (!url) {
+      return;
+    }
+
     try {
-      wsRef.current = new WebSocket(url, ...wsOptions);
+      // Convert relative URLs to absolute backend URLs
+      let wsUrl = url;
+      if (url && url.startsWith('/')) {
+        const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const backendHost = '127.0.0.1:8000';
+        wsUrl = `${proto}://${backendHost}${url}`;
+      }
+      
+      wsRef.current = new WebSocket(wsUrl, ...wsOptions);
       
       wsRef.current.onopen = (event) => {
         setWsConnected(true);
-        console.log('WebSocket connected:', url);
+        console.log('WebSocket connected:', wsUrl);
         onOpen?.(event);
         
         // Start ping interval
@@ -68,7 +81,11 @@ const useWebSocket = (url, options = {}) => {
       };
       
       wsRef.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        // Reduce console spam - only log in debug mode
+        if (process.env.NODE_ENV === 'development' && window.DEBUG_WEBSOCKETS && !wsRef.current._errorLogged) {
+          console.warn('WebSocket connection failed - backend may not support WebSockets yet');
+          wsRef.current._errorLogged = true;
+        }
         setWsConnected(false);
         onError?.(error);
       };

@@ -1,7 +1,7 @@
 // components/VenueAvailability.jsx
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../hooks/useToast.jsx';
-import * as api from '../services/api';
+import * as api from '../services/api.js';
 import {
   XMarkIcon,
   PlusIcon,

@@ -1,6 +1,10 @@
 # api/permissions.py - RBAC Permission Classes
 from rest_framework.permissions import BasePermission
 from django.contrib.auth import get_user_model
+from accounts.permissions import (
+    IsOrganizerOwner, IsCoachRWTeamOrRoster, CoachCanViewFixturesResults,
+    IsAthleteSelfRW, AthleteCanViewOwnFixturesResults, SpectatorOwnPurchasesRW
+)
 
 User = get_user_model()
 

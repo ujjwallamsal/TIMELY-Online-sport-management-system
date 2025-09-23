@@ -41,36 +41,21 @@ INSTALLED_APPS = [
     "corsheaders",
     "channels",
     
-    # First-party (Timely) - MVP apps
-    "api",  # Re-enabled for full functionality
+    # First-party (Timely) - Lean MVP apps only
+    "api",
     "common",
-    "timely",
-    "events",  # Re-enabled for CSV endpoints
+    "events",
     "venues",
     "sports",
-    "teams",  # Re-enabled for CSV endpoints
-    "registrations",  # Re-enabled for CSV endpoints
-    "fixtures",  # Re-enabled for CSV endpoints
-    "results",  # Re-enabled for CSV endpoints
+    "teams",
+    "registrations",
+    "fixtures",
+    "results",
     "notifications",
-    
-    # Phase-2 modules disabled; will re-enable incrementally.
-    # "adminapi",
-    # "cms",
+    "tickets",
+    "gallery",
     "content",
-    "gallery",  # Re-enabled for media functionality
-    # "kyc",
-    # "mediahub",
-    # "payments",
-    # "ticketing",
-    "tickets",  # Enable tickets for simplified ticketing system
-    "reports",  # Re-enabled for CSV endpoints
-    # "privacy",
-    # "settingshub",
-    # "audit",
-    # "scheduler",
-    # "realtime",
-    # "public",
+    "reports",
 ]
 
 # --- Middleware ---
@@ -238,6 +223,10 @@ CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
 
 # Explicitly deny all other origins
 CORS_ALLOW_ALL_ORIGINS = False
+
+# In development, allow all origins for convenience
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",

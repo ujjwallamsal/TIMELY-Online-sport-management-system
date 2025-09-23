@@ -52,7 +52,7 @@ class EventSerializer(serializers.ModelSerializer):
     """Event serializer"""
     venue_name = serializers.CharField(source='venue.name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
-    sport_name = serializers.CharField(source='sport.name', read_only=True)
+    sport_name = serializers.CharField(source='sport', read_only=True)
     
     class Meta:
         model = Event
@@ -136,16 +136,16 @@ class ResultSerializer(serializers.ModelSerializer):
     home_team_name = serializers.CharField(source='fixture.home.name', read_only=True)
     away_team_name = serializers.CharField(source='fixture.away.name', read_only=True)
     winner_name = serializers.CharField(source='winner.name', read_only=True)
-    entered_by_name = serializers.CharField(source='entered_by.full_name', read_only=True)
+    verified_by_name = serializers.CharField(source='verified_by.full_name', read_only=True)
     is_draw = serializers.ReadOnlyField()
     is_finalized = serializers.ReadOnlyField()
     
     class Meta:
         model = Result
         fields = [
-            'id', 'fixture', 'home_team_name', 'away_team_name', 'home_score',
-            'away_score', 'winner', 'winner_name', 'stats',
-            'entered_by', 'entered_by_name', 'finalized_at',
+            'id', 'fixture', 'home_team_name', 'away_team_name', 'score_home',
+            'score_away', 'winner', 'winner_name',
+            'verified_by', 'verified_by_name', 'verified_at',
             'is_draw', 'is_finalized', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'is_draw', 'is_finalized']

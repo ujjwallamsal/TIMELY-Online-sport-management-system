@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getFixtureConflicts } from '../services/api';
+import { getFixtureConflicts } from '../services/api.js';
 import { useToast } from '../hooks/useToast.jsx';
 
 export default function FixtureRow({ fixture, canManage, onReschedule }) {

@@ -9,9 +9,9 @@ from unittest.mock import patch, MagicMock
 
 from events.models import Event
 from teams.models import Team
-from fixtures.models import Fixture, FixtureEntry
-from ..models import Result, LeaderboardEntry, AthleteStat
-from ..services.compute import StandingsComputer, AthleteStatsComputer
+from fixtures.models import Fixture
+from ..models import Result, LeaderboardEntry
+from ..services.compute import StandingsComputer
 
 User = get_user_model()
 

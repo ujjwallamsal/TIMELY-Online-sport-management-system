@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BarChart3, Users, DollarSign, TrendingUp, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { reportsAPI } from '../services/api';
+import { reportsAPI } from '../services/api.js';
 import ReportFilters from '../components/ReportFilters';
 import ReportTable from '../components/ReportTable';
 import ExportButton from '../components/ExportButton';

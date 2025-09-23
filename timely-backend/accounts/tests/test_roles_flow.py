@@ -5,7 +5,8 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from accounts.models import RoleRequest, AuditLog
+from accounts.models import RoleRequest
+from common.models import AuditLog
 from kyc.models import KycProfile
 
 User = get_user_model()

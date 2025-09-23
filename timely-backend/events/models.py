@@ -16,10 +16,8 @@ class Event(models.Model):
     
     # Basic Information
     name = models.CharField(max_length=200, help_text="Event name")
-    sport = models.ForeignKey(
-        'sports.Sport',
-        on_delete=models.CASCADE,
-        related_name="events",
+    sport = models.CharField(
+        max_length=100,
         help_text="Sport type"
     )
     description = models.TextField(blank=True, help_text="Event description")
@@ -44,11 +42,11 @@ class Event(models.Model):
     )
     
     # Eligibility and Status
-    eligibility = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Eligibility criteria (JSON)"
-    )
+    # eligibility = models.JSONField(
+    #     default=dict,
+    #     blank=True,
+    #     help_text="Eligibility criteria (JSON)"
+    # )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

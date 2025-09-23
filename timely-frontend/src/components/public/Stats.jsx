@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { publicAPI } from '../../services/api';
+import { publicAPI } from '../../services/api.js';
 import useSocket from '../../hooks/useSocket';
 import Skeleton from '../ui/Skeleton';
 import { 
@@ -44,7 +44,7 @@ const Stats = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await publicAPI.getPublicStats();
+      const response = await publicAPI.getStats();
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching stats:', error);

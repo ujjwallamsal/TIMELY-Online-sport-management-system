@@ -8,7 +8,7 @@ import {
   activateUser,
   deactivateUser,
   changeUserRole
-} from '../../services/api';
+} from '../../services/api.js';
 import useSocket from '../../hooks/useSocket';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Skeleton from '../../components/ui/Skeleton';

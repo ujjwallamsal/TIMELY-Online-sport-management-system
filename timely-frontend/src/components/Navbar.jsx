@@ -33,9 +33,10 @@ export default function Navbar() {
         <div className="hidden md:flex items-center space-x-8">
           <Link to="/" className={`font-medium transition-colors duration-200 ${isActive("/")}`}>Home</Link>
           <Link to="/events" className={`font-medium transition-colors duration-200 ${isActive("/events")}`}>Events</Link>
-          <Link to="/matches" className={`font-medium transition-colors duration-200 ${isActive("/matches")}`}>Matches</Link>
+          <Link to="/schedule" className={`font-medium transition-colors duration-200 ${isActive("/schedule") || isActive("/matches")}`}>Schedule</Link>
           <Link to="/results" className={`font-medium transition-colors duration-200 ${isActive("/results")}`}>Results</Link>
           <Link to="/news" className={`font-medium transition-colors duration-200 ${isActive("/news")}`}>News</Link>
+          <Link to="/gallery" className={`font-medium transition-colors duration-200 ${isActive("/gallery")}`}>Gallery</Link>
         </div>
 
         {/* Actions */}

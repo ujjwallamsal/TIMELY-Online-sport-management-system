@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 from django.core.cache import cache
 
-from accounts.models import AuditLog
+from common.models import AuditLog
 from events.models import Event
 from registrations.models import Registration
 from tickets.models import TicketOrder

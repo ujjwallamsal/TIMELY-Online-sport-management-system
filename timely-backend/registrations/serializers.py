@@ -40,33 +40,62 @@ class RegistrationDetailSerializer(serializers.ModelSerializer):
     """Serializer for registration detail views"""
     
     documents = RegistrationDocumentSerializer(many=True, read_only=True)
+    applicant_name = serializers.SerializerMethodField()
+    team_name = serializers.SerializerMethodField()
+    user_id = serializers.IntegerField(source='applicant_user.id', read_only=True)
+    team_id = serializers.IntegerField(source='applicant_team.id', read_only=True)
     
     class Meta:
         model = Registration
         fields = [
-            'id', 'event', 'type', 'team', 'applicant', 'status', 'docs',
+            'id', 'event', 'type', 'applicant_user', 'applicant_name', 'user_id',
+            'applicant_team', 'team_name', 'team_id', 'status', 'docs',
             'submitted_at', 'decided_at', 'decided_by', 'reason', 'documents'
         ]
+    
+    def get_applicant_name(self, obj):
+        """Get applicant name from new fields"""
+        if obj.applicant_user:
+            return obj.applicant_user.full_name
+        elif obj.applicant_team:
+            return obj.applicant_team.name
+        # Fallback to legacy fields
+        elif obj.applicant:
+            return obj.applicant.full_name
+        elif obj.team:
+            return obj.team.name
+        return "Unknown"
+    
+    def get_team_name(self, obj):
+        """Get team name from new fields"""
+        if obj.applicant_team:
+            return obj.applicant_team.name
+        # Fallback to legacy field
+        elif obj.team:
+            return obj.team.name
+        return None
 
 
 class RegistrationCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating registrations"""
+    user_id = serializers.IntegerField(write_only=True, required=False)
+    team_id = serializers.IntegerField(write_only=True, required=False)
     
     class Meta:
         model = Registration
         fields = [
-            'event', 'type', 'team', 'applicant', 'docs'
+            'event', 'type', 'user_id', 'team_id', 'docs'
         ]
     
     def validate(self, data):
         """Validate registration data"""
         event = data.get('event')
         reg_type = data.get('type')
-        team = data.get('team')
-        applicant = data.get('applicant')
+        user_id = data.get('user_id')
+        team_id = data.get('team_id')
         
         # Check if event is published and within registration window
-        if not event.is_published:
+        if event.status != 'published':
             raise serializers.ValidationError("Event is not published")
         
         now = timezone.now()
@@ -77,17 +106,39 @@ class RegistrationCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Registration is closed")
         
         # Validate registration requirements
-        if reg_type == Registration.Type.TEAM and not team:
-            raise serializers.ValidationError("Team is required for team registrations")
-        elif reg_type == Registration.Type.ATHLETE and not applicant:
-            raise serializers.ValidationError("Applicant is required for athlete registrations")
+        if reg_type == Registration.Type.TEAM:
+            if not team_id:
+                raise serializers.ValidationError("team_id is required for team registrations")
+            # Validate team exists
+            try:
+                from teams.models import Team
+                team = Team.objects.get(id=team_id)
+                data['applicant_team'] = team
+            except Team.DoesNotExist:
+                raise serializers.ValidationError("Team not found")
+        elif reg_type == Registration.Type.ATHLETE:
+            if not user_id:
+                raise serializers.ValidationError("user_id is required for athlete registrations")
+            # Validate user exists
+            try:
+                from accounts.models import User
+                user = User.objects.get(id=user_id)
+                data['applicant_user'] = user
+            except User.DoesNotExist:
+                raise serializers.ValidationError("User not found")
         
         return data
     
     def create(self, validated_data):
-        """Create registration with applicant from context"""
-        if not validated_data.get('applicant'):
-            validated_data['applicant'] = self.context['request'].user
+        """Create registration with proper applicant fields"""
+        # Remove the write-only fields
+        validated_data.pop('user_id', None)
+        validated_data.pop('team_id', None)
+        
+        # Set fee_cents from event if not provided
+        if 'fee_cents' not in validated_data and validated_data.get('event'):
+            validated_data['fee_cents'] = validated_data['event'].fee_cents
+            
         return super().create(validated_data)
 
 

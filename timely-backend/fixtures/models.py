@@ -88,6 +88,16 @@ class Fixture(models.Model):
         
         if self.home and self.away and self.home == self.away:
             raise ValidationError({'away': 'Home and away teams cannot be the same'})
+        
+        # Check for venue conflicts
+        if self.venue and self.start_at:
+            from .services.conflicts import check_venue_availability
+            exclude_id = self.id if self.pk else None
+            if not check_venue_availability(self.venue.id, self.start_at, exclude_fixture_id=exclude_id):
+                raise ValidationError({
+                    'venue': f'Venue {self.venue.name} is already booked at {self.start_at}',
+                    'start_at': 'This time slot conflicts with an existing booking'
+                })
 
     def save(self, *args, **kwargs):
         self.clean()

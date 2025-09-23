@@ -12,7 +12,8 @@ from .serializers import (
     RegistrationDrilldownSerializer, OrderDrilldownSerializer,
     AuditLogDrilldownSerializer, CSVExportMixin
 )
-from accounts.models import User, AuditLog
+from accounts.models import User
+from common.models import AuditLog
 from events.models import Event
 from registrations.models import Registration
 from tickets.models import TicketOrder

@@ -11,7 +11,7 @@ from results.models import Result
 class EventFilter(django_filters.FilterSet):
     """Event filtering"""
     status = django_filters.ChoiceFilter(choices=Event.Status.choices)
-    sport = django_filters.CharFilter(field_name='sport__name', lookup_expr='icontains')
+    sport = django_filters.CharFilter(field_name='sport', lookup_expr='icontains')
     venue = django_filters.CharFilter(field_name='venue__name', lookup_expr='icontains')
     start_date = django_filters.DateFilter(field_name='start_datetime', lookup_expr='gte')
     end_date = django_filters.DateFilter(field_name='end_datetime', lookup_expr='lte')

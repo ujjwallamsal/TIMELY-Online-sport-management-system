@@ -71,11 +71,11 @@ def ticket_issued(sender, instance, created, **kwargs):
             'order_id': instance.order.id,
             'serial': instance.serial,
             'ticket_type': instance.ticket_type.name,
-            'event_name': instance.order.event.name
+            'event_name': instance.order.event_id
         })
         
         # Broadcast to event organizer group
-        event_group = f"orders:event:{instance.order.event.id}"
+        event_group = f"orders:event:{instance.order.event_id}"
         safe_broadcast(event_group, 'ticket.issued', {
             'ticket_id': instance.id,
             'order_id': instance.order.id,
@@ -101,7 +101,7 @@ def ticket_used(sender, instance, **kwargs):
         })
         
         # Broadcast to event organizer group
-        event_group = f"orders:event:{instance.order.event.id}"
+        event_group = f"orders:event:{instance.order.event_id}"
         safe_broadcast(event_group, 'ticket.used', {
             'ticket_id': instance.id,
             'order_id': instance.order.id,

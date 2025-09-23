@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getPublicBanners } from '../services/api';
+import { getPublicBanners } from '../services/api.js';
 
 const BannerStrip = () => {
   const [banners, setBanners] = useState([]);

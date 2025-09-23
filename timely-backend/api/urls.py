@@ -21,7 +21,14 @@ router.register(r'announcements', views.AnnouncementViewSet, basename='announcem
 router.register(r'reports', views.ReportViewSet, basename='report')
 
 urlpatterns = [
-    # Include router URLs
+    # Explicit auth and profile endpoints (no trailing slashes)
+    path('health/', views.HealthView.as_view(), name='health'),
+    path('auth/login', views.LoginView.as_view(), name='auth-login'),
+    path('auth/refresh', views.TokenRefreshView.as_view(), name='auth-refresh'),
+    path('auth/register', views.RegisterView.as_view(), name='auth-register'),
+    path('me', views.MeView.as_view(), name='me'),
+
+    # Include router URLs (placed after to avoid collisions with explicit auth routes)
     path('', include(router.urls)),
     
     # Include tickets endpoints
@@ -35,6 +42,27 @@ urlpatterns = [
     
     # Include content endpoints (News, Pages, Banners)
     path('content/', include('content.urls')),
+    
+    # Include accounts endpoints (auth, users, admin)
+    path('', include('accounts.urls')),
+    
+    # Include venues endpoints
+    path('venues/', include('venues.urls')),
+    
+    # Include events endpoints
+    path('events/', include('events.urls')),
+    
+    # Include teams endpoints
+    path('teams/', include('teams.urls')),
+    
+    # Include registrations endpoints
+    path('registrations/', include('registrations.urls')),
+    
+    # Include fixtures endpoints
+    path('', include('fixtures.urls')),
+    
+    # Include results endpoints
+    path('results/', include('results.urls')),
     
     # Media endpoints
     path('media/upload/', views.MediaUploadView.as_view(), name='media-upload'),
@@ -60,7 +88,5 @@ urlpatterns = [
     path('public/events/<int:event_id>/fixtures/', views.PublicEventFixturesView.as_view(), name='public-event-fixtures'),
     path('public/events/<int:event_id>/results/', views.PublicEventResultsView.as_view(), name='public-event-results'),
     path('public/events/<int:event_id>/leaderboard/', views.PublicEventLeaderboardView.as_view(), name='public-event-leaderboard'),
-    
-    # Health check
-    path('health/', views.HealthView.as_view(), name='health'),
+    path('public/stats/', views.PublicStatsView.as_view(), name='public-stats'),
 ]

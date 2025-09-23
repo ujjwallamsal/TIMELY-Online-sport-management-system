@@ -10,6 +10,7 @@ import io
 from datetime import datetime
 
 from .services import ReportsService
+from .permissions import IsOrganizerOrAdmin
 from events.models import Event
 from registrations.models import Registration
 from fixtures.models import Fixture
@@ -33,7 +34,7 @@ class CSVStreamingMixin:
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsOrganizerOrAdmin])
 def stream_registrations_csv(request):
     """
     Stream registrations CSV data
@@ -44,13 +45,6 @@ def stream_registrations_csv(request):
     - date_to: end date (YYYY-MM-DD)
     - status: registration status filter
     """
-    # Check permissions (admin or organizer)
-    if not (request.user.is_staff or request.user.is_superuser):
-        return Response(
-            {'error': 'Admin access required'}, 
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
     # Parse filters
     filters = {}
     
@@ -147,14 +141,17 @@ def stream_registrations_csv(request):
             output.seek(0)
             output.truncate(0)
     
-    return StreamingHttpResponse(
+    response = StreamingHttpResponse(
         data_generator(),
         content_type='text/csv; charset=utf-8'
     )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Cache-Control'] = 'no-cache'
+    return response
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsOrganizerOrAdmin])
 def stream_fixtures_csv(request):
     """
     Stream fixtures CSV data
@@ -165,13 +162,6 @@ def stream_fixtures_csv(request):
     - date_to: end date (YYYY-MM-DD)
     - status: fixture status filter
     """
-    # Check permissions (admin or organizer)
-    if not (request.user.is_staff or request.user.is_superuser):
-        return Response(
-            {'error': 'Admin access required'}, 
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
     # Parse filters
     filters = {}
     
@@ -230,7 +220,7 @@ def stream_fixtures_csv(request):
         
         # Build queryset
         queryset = Fixture.objects.select_related(
-            'event', 'home', 'away', 'venue'
+            'event', 'home_team', 'away_team', 'venue'
         ).order_by('start_at')
         
         if filters.get('event'):
@@ -255,8 +245,8 @@ def stream_fixtures_csv(request):
                     fixture.event.name if fixture.event else '',
                     fixture.round,
                     fixture.get_phase_display(),
-                    fixture.home.name if fixture.home else '',
-                    fixture.away.name if fixture.away else '',
+                    fixture.home_team.name if fixture.home_team else '',
+                    fixture.away_team.name if fixture.away_team else '',
                     fixture.venue.name if fixture.venue else '',
                     fixture.start_at.strftime('%Y-%m-%d %H:%M:%S') if fixture.start_at else '',
                     fixture.end_at.strftime('%Y-%m-%d %H:%M:%S') if fixture.end_at else '',
@@ -267,14 +257,17 @@ def stream_fixtures_csv(request):
             output.seek(0)
             output.truncate(0)
     
-    return StreamingHttpResponse(
+    response = StreamingHttpResponse(
         data_generator(),
         content_type='text/csv; charset=utf-8'
     )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Cache-Control'] = 'no-cache'
+    return response
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsOrganizerOrAdmin])
 def stream_results_csv(request):
     """
     Stream results CSV data
@@ -285,13 +278,6 @@ def stream_results_csv(request):
     - date_to: end date (YYYY-MM-DD)
     - status: result status filter
     """
-    # Check permissions (admin or organizer)
-    if not (request.user.is_staff or request.user.is_superuser):
-        return Response(
-            {'error': 'Admin access required'}, 
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
     # Parse filters
     filters = {}
     
@@ -350,17 +336,17 @@ def stream_results_csv(request):
         
         # Build queryset
         queryset = Result.objects.select_related(
-            'fixture', 'fixture__event', 'fixture__home', 'fixture__away', 'winner'
-        ).order_by('-finalized_at')
+            'fixture', 'fixture__event', 'fixture__home_team', 'fixture__away_team', 'winner'
+        ).order_by('-created_at')
         
         if filters.get('event'):
             queryset = queryset.filter(fixture__event=filters['event'])
         
         if filters.get('date_from'):
-            queryset = queryset.filter(finalized_at__date__gte=filters['date_from'])
+            queryset = queryset.filter(created_at__date__gte=filters['date_from'])
         
         if filters.get('date_to'):
-            queryset = queryset.filter(finalized_at__date__lte=filters['date_to'])
+            queryset = queryset.filter(created_at__date__lte=filters['date_to'])
         
         if filters.get('status'):
             queryset = queryset.filter(status=filters['status'])
@@ -373,27 +359,30 @@ def stream_results_csv(request):
                 writer.writerow([
                     result.id,
                     result.fixture.event.name if result.fixture and result.fixture.event else '',
-                    f"{result.fixture.home.name if result.fixture and result.fixture.home else 'TBD'} vs {result.fixture.away.name if result.fixture and result.fixture.away else 'TBD'}" if result.fixture else '',
-                    result.fixture.home.name if result.fixture and result.fixture.home else '',
-                    result.fixture.away.name if result.fixture and result.fixture.away else '',
-                    result.home_score,
-                    result.away_score,
+                    f"{result.fixture.home_team.name if result.fixture and result.fixture.home_team else 'TBD'} vs {result.fixture.away_team.name if result.fixture and result.fixture.away_team else 'TBD'}" if result.fixture else '',
+                    result.fixture.home_team.name if result.fixture and result.fixture.home_team else '',
+                    result.fixture.away_team.name if result.fixture and result.fixture.away_team else '',
+                    result.score_home,
+                    result.score_away,
                     result.winner.name if result.winner else 'Draw',
-                    result.finalized_at.strftime('%Y-%m-%d %H:%M:%S') if result.finalized_at else '',
+                    result.verified_at.strftime('%Y-%m-%d %H:%M:%S') if result.verified_at else '',
                     result.created_at.strftime('%Y-%m-%d %H:%M:%S') if result.created_at else ''
                 ])
             yield output.getvalue()
             output.seek(0)
             output.truncate(0)
     
-    return StreamingHttpResponse(
+    response = StreamingHttpResponse(
         data_generator(),
         content_type='text/csv; charset=utf-8'
     )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Cache-Control'] = 'no-cache'
+    return response
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsOrganizerOrAdmin])
 def stream_ticket_sales_csv(request):
     """
     Stream ticket sales CSV data
@@ -404,13 +393,6 @@ def stream_ticket_sales_csv(request):
     - date_to: end date (YYYY-MM-DD)
     - status: order status filter
     """
-    # Check permissions (admin or organizer)
-    if not (request.user.is_staff or request.user.is_superuser):
-        return Response(
-            {'error': 'Admin access required'}, 
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
     # Parse filters
     filters = {}
     
@@ -527,7 +509,10 @@ def stream_ticket_sales_csv(request):
             output.seek(0)
             output.truncate(0)
     
-    return StreamingHttpResponse(
+    response = StreamingHttpResponse(
         data_generator(),
         content_type='text/csv; charset=utf-8'
     )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Cache-Control'] = 'no-cache'
+    return response

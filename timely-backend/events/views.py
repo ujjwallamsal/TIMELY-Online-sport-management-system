@@ -13,6 +13,7 @@ from accounts.permissions import (
     IsOrganizerOfEvent, IsCoachOfTeam, IsAthleteSelf, 
     IsSpectatorReadOnly, IsAdmin, IsOwnerOrReadOnly
 )
+from accounts.audit_mixin import AuditLogMixin
 
 # Create a simple permission class for event ownership
 class IsEventOwnerOrAdmin(permissions.BasePermission):
@@ -44,15 +45,15 @@ class IsEventOwnerOrAdmin(permissions.BasePermission):
         return False
 
 
-class EventViewSet(viewsets.ModelViewSet):
+class EventViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """Event ViewSet with RBAC and lifecycle management"""
     
     queryset = Event.objects.select_related('created_by').prefetch_related('divisions').all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['sport', 'status']
     search_fields = ['name', 'description', 'location']
-    ordering_fields = ['start_date', 'created_at', 'name']
-    ordering = ['start_date', 'created_at']
+    ordering_fields = ['start_datetime', 'created_at', 'name']
+    ordering = ['start_datetime', 'created_at']
     # Use default pagination from settings
     
     def get_serializer_class(self):
@@ -304,68 +305,33 @@ class EventViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            # Create new registration
+            # Create new registration using the new serializer
             from registrations.models import Registration
-            from registrations.serializers import RegistrationSerializer
+            from registrations.serializers import RegistrationCreateSerializer
             
             data = request.data.copy()
             data['event'] = event.id
-            data['applicant'] = request.user.id
             
-            serializer = RegistrationSerializer(data=data)
+            # Set user_id for athlete registrations
+            if data.get('type') == 'ATHLETE':
+                data['user_id'] = request.user.id
+            elif data.get('type') == 'TEAM' and 'team_id' not in data:
+                return Response(
+                    {"detail": "team_id is required for team registrations"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            serializer = RegistrationCreateSerializer(data=data)
             if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
+                registration = serializer.save()
+                # Return the full registration data
+                from registrations.serializers import RegistrationDetailSerializer
+                return Response(
+                    RegistrationDetailSerializer(registration).data, 
+                    status=status.HTTP_201_CREATED
+                )
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=True, methods=['post'], url_path='fixtures/generate')
-    def generate_fixtures(self, request, pk=None):
-        """Generate fixtures for an event (Round Robin or Knockout)"""
-        event = self.get_object()
-        
-        # Only admin/organizer can generate fixtures
-        if not request.user.is_authenticated:
-            return Response(
-                {"detail": "Authentication required"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-        
-        if not (request.user.is_staff or request.user.role in ['ADMIN', 'ORGANIZER']):
-            return Response(
-                {"detail": "Permission denied - only organizers can generate fixtures"},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        mode = request.query_params.get('mode', 'rr')  # Default to Round Robin
-        
-        if mode not in ['rr', 'ko']:
-            return Response(
-                {"detail": "Mode must be 'rr' (Round Robin) or 'ko' (Knockout)"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            # Import fixture generator
-            from fixtures.services.generator import generate_round_robin, generate_knockout
-            
-            if mode == 'rr':
-                fixtures = generate_round_robin(event)
-            else:
-                fixtures = generate_knockout(event)
-            
-            return Response({
-                'event_id': event.id,
-                'event_name': event.name,
-                'mode': mode,
-                'fixtures_generated': len(fixtures),
-                'message': f'Generated {len(fixtures)} fixtures using {mode.upper()} mode'
-            })
-            
-        except Exception as e:
-            return Response(
-                {"detail": f"Error generating fixtures: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
     
     def _send_realtime_update(self, event, action, extra_data=None):
         """Send realtime update via WebSocket (safe no-op if Channels not available)"""

@@ -13,7 +13,7 @@ from venues.models import Venue
 class EventFilter(django_filters.FilterSet):
     """Filter for events"""
     status = django_filters.ChoiceFilter(choices=Event.Status.choices)
-    sport = django_filters.NumberFilter(field_name='sport__id')
+    sport = django_filters.CharFilter(field_name='sport', lookup_expr='icontains')
     venue = django_filters.NumberFilter(field_name='venue__id')
     date_from = django_filters.DateFilter(field_name='start_date', lookup_expr='gte')
     date_to = django_filters.DateFilter(field_name='start_date', lookup_expr='lte')

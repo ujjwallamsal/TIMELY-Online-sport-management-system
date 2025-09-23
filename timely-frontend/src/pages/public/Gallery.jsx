@@ -6,7 +6,9 @@ import {
   FunnelIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-import api from '../../services/api';
+import api from '../../services/api.js';
+import useSocket from '../../hooks/useSocket';
+import LiveIndicator from '../../components/ui/LiveIndicator';
 import Skeleton, { SkeletonCard, SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState, { EmptyEvents } from '../../components/ui/EmptyState';
 
@@ -24,56 +26,45 @@ const PublicGallery = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // Real-time updates will be implemented later
-  const connectionStatus = 'connected';
+  // WebSocket connection for real-time updates
+  const { connectionStatus, lastMessage } = useSocket(
+    `${import.meta.env.VITE_WS_URL}/ws/spectator/`,
+    {
+      onMessage: (message) => {
+        console.log('Received message:', message);
+        handleRealtimeUpdate(message);
+      },
+      onPolling: () => {
+        fetchGallery();
+      }
+    }
+  );
 
   const fetchGallery = async (page = 1) => {
     try {
       setLoading(true);
-      // TODO: Implement gallery API endpoint in backend
-      // For now, show placeholder content
-      const mockGallery = [
-        {
-          id: 1,
-          caption: "Championship Victory",
-          image_url: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop",
-          event_title: "Basketball Championship 2024",
-          created_at: new Date().toISOString(),
-          category: "award"
-        },
-        {
-          id: 2,
-          caption: "Team Action Shot",
-          image_url: "https://images.unsplash.com/photo-1546519638-68e109450ff7?w=400&h=300&fit=crop",
-          event_title: "Soccer Tournament",
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-          category: "action"
-        },
-        {
-          id: 3,
-          caption: "Group Photo",
-          image_url: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop",
-          event_title: "Track & Field Meet",
-          created_at: new Date(Date.now() - 172800000).toISOString(),
-          category: "group"
-        },
-        {
-          id: 4,
-          caption: "Event Highlights",
-          image_url: "https://images.unsplash.com/photo-1546519638-68e109450ff7?w=400&h=300&fit=crop",
-          event_title: "Swimming Competition",
-          created_at: new Date(Date.now() - 259200000).toISOString(),
-          category: "event"
-        }
-      ];
       
-      setGallery(mockGallery);
+      // Get gallery from backend API
+      const response = await api.get('/api/gallery/public/media/', {
+        params: {
+          page,
+          page_size: 12,
+          ...(filters.search && { search: filters.search }),
+          ...(filters.category && { kind: filters.category }),
+          ...(filters.event && { album__event__id: filters.event }),
+          ...(filters.date_from && { uploaded_at__gte: filters.date_from }),
+          ...(filters.date_to && { uploaded_at__lte: filters.date_to })
+        }
+      });
+      
+      const galleryData = response.data;
+      setGallery(galleryData.results || []);
       setPagination({
-        page: 1,
-        page_size: 12,
-        count: mockGallery.length,
-        previous: null,
-        next: null
+        page: galleryData.page || 1,
+        page_size: galleryData.page_size || 12,
+        count: galleryData.count || 0,
+        previous: galleryData.previous,
+        next: galleryData.next
       });
     } catch (error) {
       console.error('Error fetching gallery:', error);
@@ -83,7 +74,20 @@ const PublicGallery = () => {
     }
   };
 
-  // Real-time updates will be implemented later
+  const handleRealtimeUpdate = (message) => {
+    switch (message.type) {
+      case 'media_update':
+        // Refresh gallery when media is updated
+        fetchGallery(currentPage);
+        break;
+      case 'content_update':
+        // Refresh gallery when content is updated
+        fetchGallery(currentPage);
+        break;
+      default:
+        break;
+    }
+  };
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -164,10 +168,7 @@ const PublicGallery = () => {
               <h1 className="text-3xl font-bold text-gray-900">Photo Gallery</h1>
               <p className="text-gray-600 mt-2">Browse through our collection of event photos and memories</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="text-sm text-gray-500">Live</span>
-            </div>
+            <LiveIndicator status={connectionStatus} />
           </div>
         </div>
       </div>
@@ -327,6 +328,7 @@ const PublicGallery = () => {
           </>
         ) : (
           <EmptyEvents 
+            showCreateButton={false}
             title="No Photos Available"
             description="There are no photos available in the gallery at the moment."
             action={

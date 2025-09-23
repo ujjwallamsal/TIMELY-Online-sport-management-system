@@ -18,8 +18,8 @@ export class API {
    */
   getBaseURL() {
     // Check for environment variable first
-    if (window.ENV && window.ENV.VITE_API_BASE_URL) {
-      return window.ENV.VITE_API_BASE_URL;
+    if (import.meta.env.VITE_API_URL) {
+      return import.meta.env.VITE_API_URL;
     }
     
     // Fallback to default development URL
@@ -273,7 +273,7 @@ export class API {
 
   async logout() {
     try {
-      await this.post('/accounts/auth/logout/');
+      await this.post('/auth/logout');
     } finally {
       this.setToken(null);
     }
@@ -492,12 +492,31 @@ export const getPublicEvents = (params = {}) => api.get('/public/events/', { par
 export const getPublicEventFixtures = (id) => api.get(`/public/events/${id}/fixtures/`);
 export const getPublicEventResults = (id) => api.get(`/public/events/${id}/results/`);
 export const getPublicEventLeaderboard = (id) => api.get(`/public/events/${id}/leaderboard/`);
+export const getPublicResults = (params = {}) => api.get('/results/public/results/', { params });
 
 // Other commonly used functions
 export const listEvents = (params = {}) => api.get('/events/', { params });
+export const getEvents = (params = {}) => api.get('/events/', { params }); // Alias for listEvents
 export const createEvent = (data) => api.post('/events/', data);
 export const updateEvent = (id, data) => api.put(`/events/${id}/`, data);
 export const deleteEvent = (id) => api.delete(`/events/${id}/`);
+export const publishEvent = (id) => api.post(`/events/${id}/publish/`);
+export const unpublishEvent = (id) => api.post(`/events/${id}/unpublish/`);
+
+// Admin user functions
+export const getAdminUsers = (params = {}) => api.get('/admin/users/', { params });
+export const createAdminUser = (data) => api.post('/admin/users/', data);
+export const updateAdminUser = (id, data) => api.put(`/admin/users/${id}/`, data);
+export const deleteAdminUser = (id) => api.delete(`/admin/users/${id}/`);
+export const activateUser = (id) => api.post(`/admin/users/${id}/activate/`);
+export const deactivateUser = (id) => api.post(`/admin/users/${id}/deactivate/`);
+export const changeUserRole = (id, role) => api.post(`/admin/users/${id}/change-role/`, { role });
+
+// Venue functions
+export const getVenues = (params = {}) => api.get('/venues/', { params });
+export const createVenue = (data) => api.post('/venues/', data);
+export const updateVenue = (id, data) => api.put(`/venues/${id}/`, data);
+export const deleteVenue = (id) => api.delete(`/venues/${id}/`);
 
 // Public pages
 export const getPublicPage = (slug) => api.get(`/public/pages/${slug}/`);
@@ -510,8 +529,10 @@ export const publicAPI = {
   getEventFixtures: getPublicEventFixtures,
   getEventResults: getPublicEventResults,
   getEventLeaderboard: getPublicEventLeaderboard,
+  getResults: getPublicResults,
   getPage: getPublicPage,
-  getBanners: getPublicBanners
+  getBanners: getPublicBanners,
+  getStats: () => api.get('/public/stats/')
 };
 
 export const eventsAPI = {
@@ -592,6 +613,32 @@ export const listTicketTypes = (eventId) => api.get(`/events/${eventId}/ticket-t
 export const createTicketOrder = (data) => api.post('/orders/', data);
 export const createStripeCheckout = (orderId) => api.post(`/orders/${orderId}/stripe-checkout/`);
 export const createPayPalCheckout = (orderId) => api.post(`/orders/${orderId}/paypal-checkout/`);
+
+// Additional missing exports for comprehensive coverage
+export const getRegistrations = (params = {}) => api.get('/registrations/', { params });
+export const createRegistration = (data) => api.post('/registrations/', data);
+export const updateRegistration = (id, data) => api.put(`/registrations/${id}/`, data);
+export const deleteRegistration = (id) => api.delete(`/registrations/${id}/`);
+
+export const getFixtures = (params = {}) => api.get('/fixtures/', { params });
+export const createFixture = (data) => api.post('/fixtures/', data);
+export const updateFixture = (id, data) => api.put(`/fixtures/${id}/`, data);
+export const deleteFixture = (id) => api.delete(`/fixtures/${id}/`);
+
+export const getResults = (params = {}) => api.get('/results/', { params });
+export const createResult = (data) => api.post('/results/', data);
+export const updateResult = (id, data) => api.put(`/results/${id}/`, data);
+export const deleteResult = (id) => api.delete(`/results/${id}/`);
+
+export const getTeams = (params = {}) => api.get('/teams/', { params });
+export const createTeam = (data) => api.post('/teams/', data);
+export const updateTeam = (id, data) => api.put(`/teams/${id}/`, data);
+export const deleteTeam = (id) => api.delete(`/teams/${id}/`);
+
+export const getUsers = (params = {}) => api.get('/users/', { params });
+export const createUser = (data) => api.post('/users/', data);
+export const updateUser = (id, data) => api.put(`/users/${id}/`, data);
+export const deleteUser = (id) => api.delete(`/users/${id}/`);
 
 // Utility functions
 export const utils = {

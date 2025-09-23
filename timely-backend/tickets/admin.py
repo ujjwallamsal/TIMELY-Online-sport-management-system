@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils import timezone
 
-from .models import TicketType, TicketOrder, Ticket, Purchase
+from .models import TicketType, TicketOrder, Ticket
 
 
 @admin.register(TicketType)
@@ -51,39 +51,6 @@ class TicketTypeAdmin(admin.ModelAdmin):
     available_quantity.short_description = 'Available'
 
 
-@admin.register(Purchase)
-class PurchaseAdmin(admin.ModelAdmin):
-    list_display = [
-        'id', 'user', 'event_id', 'status', 'amount_dollars', 'currency', 'created_at'
-    ]
-    list_filter = [
-        'status', 'currency', 'created_at'
-    ]
-    search_fields = [
-        'id', 'user__email', 'intent_id'
-    ]
-    readonly_fields = [
-        'amount_dollars', 'created_at', 'updated_at'
-    ]
-    list_editable = ['status']
-    
-    fieldsets = (
-        ('Purchase Information', {
-            'fields': ('user', 'event_id', 'status')
-        }),
-        ('Payment', {
-            'fields': ('intent_id', 'amount', 'currency')
-        }),
-        ('Timing', {
-            'fields': ('created_at', 'updated_at')
-        })
-    )
-    
-    def amount_dollars(self, obj):
-        return f"${obj.amount_dollars:.2f}"
-    amount_dollars.short_description = 'Amount'
-
-
 @admin.register(TicketOrder)
 class TicketOrderAdmin(admin.ModelAdmin):
     list_display = [
@@ -124,40 +91,40 @@ class TicketOrderAdmin(admin.ModelAdmin):
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = [
-        'code', 'purchase_link', 'status', 'created_at', 'is_valid'
+        'serial', 'order_link', 'status', 'issued_at', 'is_valid'
     ]
     list_filter = [
-        'status', 'created_at'
+        'status'
     ]
     search_fields = [
-        'code', 'qr_payload', 'purchase__id'
+        'serial', 'qr_payload', 'order__id'
     ]
     readonly_fields = [
-        'code', 'qr_payload', 'created_at', 'is_valid'
+        'serial', 'qr_payload', 'issued_at', 'is_valid'
     ]
     list_editable = ['status']
     
     fieldsets = (
         ('Ticket Information', {
-            'fields': ('code', 'purchase', 'status')
+            'fields': ('serial', 'order', 'ticket_type', 'status')
         }),
         ('QR Code', {
             'fields': ('qr_payload',)
         }),
         ('Timing', {
-            'fields': ('created_at', 'used_at')
+            'fields': ('issued_at', 'used_at')
         }),
         ('Validation', {
             'fields': ('is_valid',)
         })
     )
     
-    def purchase_link(self, obj):
-        if obj.purchase:
-            url = reverse('admin:tickets_purchase_change', args=[obj.purchase.id])
-            return format_html('<a href="{}">{}</a>', url, obj.purchase.id)
+    def order_link(self, obj):
+        if obj.order:
+            url = reverse('admin:tickets_ticketorder_change', args=[obj.order.id])
+            return format_html('<a href="{}">{}</a>', url, obj.order.id)
         return '-'
-    purchase_link.short_description = 'Purchase'
+    order_link.short_description = 'Order'
     
     def is_valid(self, obj):
         return obj.is_valid

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import api from "../services/api";
+import api from "../services/api.js";
 
 const AuthContext = createContext();
 
@@ -29,16 +29,24 @@ export function AuthProvider({ children }) {
 
   const checkAuthStatus = async () => {
     try {
-      // With cookie-based auth, we don't need to check localStorage
-      // The cookies are sent automatically with withCredentials: true
-      const { data } = await api.get('me');
-      setUser(data);
-    } catch (error) {
-      // Don't log 401 errors as they're expected for unauthenticated users
-      if (error.response?.status !== 401) {
-        console.log('Auth check failed:', error.message);
+      const token = api.getStoredToken();
+
+      if (!token) {
+        setUser(null);
+        return;
       }
-      setUser(null);
+
+      const me = await api.getCurrentUser();
+      setUser(me);
+    } catch (error) {
+      const status = error?.status || error?.response?.status;
+      if (status === 401) {
+        api.setToken(null);
+        setUser(null);
+      } else {
+        console.log('Auth check failed:', error?.message || error);
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -48,19 +56,11 @@ export function AuthProvider({ children }) {
     const payload = { email, password };
     console.log('Login attempt with payload:', payload);
     try {
-      const { data } = await api.post('auth/login', payload);
+      const data = await api.login(email, password);
       console.log('Login successful:', data);
       
-      // Store tokens if provided
-      if (data.access_token) {
-        localStorage.setItem('access_token', data.access_token);
-      }
-      if (data.refresh_token) {
-        localStorage.setItem('refresh_token', data.refresh_token);
-      }
-      
       // Get user data after successful login
-      const { data: userData } = await api.get('me');
+      const userData = await api.getCurrentUser();
       setUser(userData);
       return userData;
     } catch (error) {
@@ -71,17 +71,16 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      await api.post('accounts/auth/logout/');
+      await api.logout();
     } finally {
-      // With cookie-based auth, cookies are cleared by the backend
-      // Just clear the user state
+      // Clear the user state
       setUser(null);
     }
   };
 
   const signup = async ({ email, password, password_confirm, first_name = '', last_name = '', role = 'SPECTATOR' }) => {
     try {
-      const { data } = await api.post('accounts/auth/register/', { 
+      const data = await api.post('/accounts/auth/register/', { 
         email, 
         password, 
         password_confirm, 
@@ -100,7 +99,7 @@ export function AuthProvider({ children }) {
 
   const refreshUser = async () => {
     try {
-      const { data } = await api.get('me');
+      const data = await api.getCurrentUser();
       setUser(data);
       return data;
     } catch (error) {

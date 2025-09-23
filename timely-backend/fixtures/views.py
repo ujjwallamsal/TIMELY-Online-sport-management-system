@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Q
+from django.core.exceptions import ValidationError
 
 from .models import Fixture
 from .serializers import (
@@ -17,6 +18,8 @@ from accounts.permissions import (
     IsOrganizerOfEvent, IsCoachOfTeam, IsAthleteSelf, 
     IsSpectatorReadOnly, IsAdmin
 )
+from accounts.audit_mixin import AuditLogMixin
+from realtime.services import broadcast_schedule_update, broadcast_result_update, broadcast_leaderboard_update
 from .services.generator import (
     generate_round_robin, generate_knockout, get_available_teams_for_event,
     validate_participants
@@ -32,7 +35,7 @@ class FixtureViewSet(viewsets.ModelViewSet):
     ViewSet for fixture CRUD operations.
     """
     queryset = Fixture.objects.all()
-    permission_classes = [IsAuthenticated, CanViewFixtures]
+    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['event', 'status', 'venue']
     ordering_fields = ['start_at', 'round', 'created_at']
@@ -200,30 +203,58 @@ class FixtureViewSet(viewsets.ModelViewSet):
         try:
             # Create fixtures
             created_fixtures = []
-            for fixture_data in fixtures_data:
-                # Convert string dates to datetime
-                start_at = fixture_data['start_at']
-                if isinstance(start_at, str):
-                    start_at = timezone.datetime.fromisoformat(start_at.replace('Z', '+00:00'))
-                
-                # Create fixture
-                fixture = Fixture.objects.create(
-                    event=event,
-                    round=fixture_data['round'],
-                    phase=fixture_data.get('phase', Fixture.Phase.RR),
-                    start_at=start_at,
-                    venue_id=fixture_data.get('venue_id'),
-                    status=Fixture.Status.SCHEDULED
-                )
-                
-                # Set home and away teams
-                if 'home_team_id' in fixture_data:
-                    fixture.home_id = fixture_data['home_team_id']
-                if 'away_team_id' in fixture_data:
-                    fixture.away_id = fixture_data['away_team_id']
-                fixture.save()
-                
-                created_fixtures.append(FixtureSerializer(fixture).data)
+            errors = []
+            
+            for i, fixture_data in enumerate(fixtures_data):
+                try:
+                    # Convert string dates to datetime
+                    start_at = fixture_data['start_at']
+                    if isinstance(start_at, str):
+                        start_at = timezone.datetime.fromisoformat(start_at.replace('Z', '+00:00'))
+                    
+                    # Create fixture
+                    fixture = Fixture(
+                        event=event,
+                        round=fixture_data['round'],
+                        phase=fixture_data.get('phase', Fixture.Phase.RR),
+                        start_at=start_at,
+                        venue_id=fixture_data.get('venue_id'),
+                        status=Fixture.Status.SCHEDULED
+                    )
+                    
+                    # Set home and away teams
+                    if 'home_team_id' in fixture_data:
+                        fixture.home_id = fixture_data['home_team_id']
+                    if 'away_team_id' in fixture_data:
+                        fixture.away_id = fixture_data['away_team_id']
+                    
+                    # Validate and save
+                    fixture.clean()
+                    fixture.save()
+                    
+                    created_fixtures.append(FixtureSerializer(fixture).data)
+                    
+                except ValidationError as ve:
+                    errors.append({
+                        'index': i,
+                        'fixture_data': fixture_data,
+                        'errors': ve.message_dict if hasattr(ve, 'message_dict') else {'general': [str(ve)]}
+                    })
+                except Exception as e:
+                    errors.append({
+                        'index': i,
+                        'fixture_data': fixture_data,
+                        'errors': {'general': [str(e)]}
+                    })
+            
+            if errors:
+                return Response({
+                    'message': 'Some fixtures could not be created due to conflicts',
+                    'created_fixtures': created_fixtures,
+                    'errors': errors,
+                    'created_count': len(created_fixtures),
+                    'error_count': len(errors)
+                }, status=status.HTTP_400_BAD_REQUEST)
             
             return Response({
                 'message': 'Fixtures created successfully',
@@ -305,6 +336,13 @@ class FixtureViewSet(viewsets.ModelViewSet):
         
         fixture.save()
         
+        # Broadcast schedule update
+        broadcast_schedule_update(
+            fixture.event.id, 
+            fixture=fixture, 
+            message=f"Fixture rescheduled: {fixture.home.name if fixture.home else 'TBD'} vs {fixture.away.name if fixture.away else 'TBD'} at {fixture.start_at}"
+        )
+        
         return Response({
             'message': 'Fixture rescheduled successfully',
             'fixture': FixtureSerializer(fixture).data
@@ -351,6 +389,53 @@ class FixtureViewSet(viewsets.ModelViewSet):
             'has_conflicts': len(conflicts) > 0,
             'conflicts': conflicts
         })
+
+    @action(detail=True, methods=['post'], url_path='result')
+    def result(self, request, pk=None):
+        """Record a result for a fixture"""
+        fixture = self.get_object()
+        
+        # Check if user can manage this event
+        if not (request.user.is_staff or fixture.event.created_by == request.user):
+            return Response(
+                {'error': 'Permission denied'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if result already exists
+        if hasattr(fixture, 'result'):
+            return Response(
+                {'error': 'Result already exists for this fixture.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Import here to avoid circular imports
+        from results.serializers import ResultCreateSerializer
+        from results.services.compute import recompute_event_standings
+        
+        serializer = ResultCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            result = serializer.save(fixture=fixture)
+            
+            # Recompute standings
+            recompute_event_standings(fixture.event.id)
+            
+            # Broadcast real-time updates
+            broadcast_result_update(
+                fixture.event.id, 
+                result, 
+                f"New result recorded: {fixture.home.name if fixture.home else 'TBD'} {result.home_score}-{result.away_score} {fixture.away.name if fixture.away else 'TBD'}"
+            )
+            broadcast_leaderboard_update(
+                fixture.event.id, 
+                "Leaderboard updated with new result"
+            )
+            
+            from results.serializers import ResultSerializer
+            response_serializer = ResultSerializer(result)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EventFixtureViewSet(viewsets.ReadOnlyModelViewSet):

@@ -20,10 +20,10 @@ from rest_framework.generics import ListAPIView
 import json
 import logging
 
-from .models import Purchase, Ticket
+from .models import Ticket, TicketOrder
 from .serializers import (
     CheckoutSerializer, 
-    PurchaseSerializer, 
+    TicketOrderSerializer, 
     TicketSerializer, 
     TicketVerificationSerializer
 )
@@ -61,19 +61,19 @@ def checkout(request):
             }
         )
         
-        # Create Purchase record
-        purchase = Purchase.objects.create(
+        # Create TicketOrder record
+        ticket_order = TicketOrder.objects.create(
             user=request.user,
             event_id=event_id,
-            intent_id=intent.id,
-            amount=amount,
+            provider_payment_intent_id=intent.id,
+            total_cents=amount,
             currency=currency,
-            status=Purchase.Status.PENDING
+            status='PENDING'
         )
         
         return Response({
             'client_secret': intent.client_secret,
-            'purchase_id': purchase.id,
+            'ticket_order_id': ticket_order.id,
             'intent_id': intent.id
         }, status=status.HTTP_201_CREATED)
         
@@ -131,25 +131,25 @@ def handle_payment_succeeded(payment_intent):
     
     try:
         # Find the purchase
-        purchase = Purchase.objects.get(intent_id=intent_id)
+        ticket_order = TicketOrder.objects.get(provider_payment_intent_id=intent_id)
         
-        # Update purchase status
-        purchase.status = Purchase.Status.PAID
-        purchase.save()
+        # Update ticket order status
+        ticket_order.status = 'PAID'
+        ticket_order.save()
         
         # Create ticket
         ticket = Ticket.objects.create(
-            purchase=purchase,
+            order=ticket_order,
             status=Ticket.Status.VALID
         )
         
         # Send email receipt
         send_ticket_receipt(ticket)
         
-        logger.info(f"Ticket created for purchase {purchase.id}: {ticket.code}")
+        logger.info(f"Ticket created for ticket order {ticket_order.id}: {ticket.code}")
         
-    except Purchase.DoesNotExist:
-        logger.error(f"Purchase not found for intent_id: {intent_id}")
+    except TicketOrder.DoesNotExist:
+        logger.error(f"TicketOrder not found for intent_id: {intent_id}")
     except Exception as e:
         logger.error(f"Error handling payment succeeded: {e}")
 
@@ -224,8 +224,8 @@ class MyTicketsView(ListAPIView):
     
     def get_queryset(self):
         return Ticket.objects.filter(
-            purchase__user=self.request.user
-        ).select_related('purchase')
+            order__user=self.request.user
+        ).select_related('order')
 
 
 class TicketQRView(APIView):
@@ -239,7 +239,7 @@ class TicketQRView(APIView):
         ticket = get_object_or_404(
             Ticket, 
             id=ticket_id, 
-            purchase__user=request.user
+            order__user=request.user
         )
         
         # Generate QR code image
@@ -262,7 +262,7 @@ def verify_ticket(request):
         )
     
     try:
-        ticket = Ticket.objects.get(code=code)
+        ticket = Ticket.objects.get(serial=code)
         
         # Verify ticket is valid
         if not ticket.is_valid:
@@ -283,8 +283,8 @@ def verify_ticket(request):
         return Response({
             'valid': True,
             'ticket_id': ticket.id,
-            'purchase_id': ticket.purchase.id,
-            'event_id': ticket.purchase.event_id,
+            'order_id': ticket.order.id,
+            'event_id': ticket.order.event_id,
             'status': ticket.status
         })
         
@@ -311,7 +311,7 @@ def use_ticket(request, ticket_id):
     ticket = get_object_or_404(
         Ticket, 
         id=ticket_id, 
-        purchase__user=request.user
+        order__user=request.user
     )
     
     if ticket.use_ticket():

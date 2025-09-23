@@ -19,6 +19,6 @@ class PublicResultViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = (
         Result.objects
-        .select_related("match")
+        .select_related("fixture", "winner", "verified_by")
         .all()
     )

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { ChevronUpIcon, ChevronDownIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { ChevronUpIcon, ChevronDownIcon, MagnifyingGlassIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 
 const DataTable = ({
   data = [],
@@ -21,6 +21,9 @@ const DataTable = ({
   className = "",
   stickyHeader = true,
   serverPagination = false,
+  rowActions = [],
+  onRowAction,
+  confirmBulkAction = true,
   ...props
 }) => {
   const [sortField, setSortField] = useState('');
@@ -123,7 +126,22 @@ const DataTable = ({
 
   const handleBulkAction = (action) => {
     if (onBulkAction && selectedRows.size > 0) {
-      onBulkAction(action, Array.from(selectedRows));
+      if (confirmBulkAction) {
+        const confirmed = window.confirm(
+          `Are you sure you want to ${action.label.toLowerCase()} ${selectedRows.size} selected item(s)?`
+        );
+        if (confirmed) {
+          onBulkAction(action, Array.from(selectedRows));
+        }
+      } else {
+        onBulkAction(action, Array.from(selectedRows));
+      }
+    }
+  };
+
+  const handleRowAction = (action, row) => {
+    if (onRowAction) {
+      onRowAction(action, row);
     }
   };
 
@@ -256,6 +274,11 @@ const DataTable = ({
                   </div>
                 </th>
               ))}
+              {rowActions.length > 0 && (
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -285,12 +308,38 @@ const DataTable = ({
                       {renderCell(row, column)}
                     </td>
                   ))}
+                  {rowActions.length > 0 && (
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                      <div className="flex items-center space-x-2">
+                        {rowActions.map((action, actionIndex) => (
+                          <button
+                            key={actionIndex}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRowAction(action, row);
+                            }}
+                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${
+                              action.variant === 'danger'
+                                ? 'text-red-700 bg-red-100 hover:bg-red-200'
+                                : action.variant === 'warning'
+                                ? 'text-yellow-700 bg-yellow-100 hover:bg-yellow-200'
+                                : 'text-blue-700 bg-blue-100 hover:bg-blue-200'
+                            }`}
+                            title={action.label}
+                          >
+                            {action.icon && <action.icon className="w-3 h-3 mr-1" />}
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))
             ) : (
               <tr>
                 <td
-                  colSpan={columns.length + (bulkActions.length > 0 ? 1 : 0)}
+                  colSpan={columns.length + (bulkActions.length > 0 ? 1 : 0) + (rowActions.length > 0 ? 1 : 0)}
                   className="px-6 py-12 text-center text-sm text-gray-500"
                 >
                   {emptyMessage}

@@ -9,7 +9,8 @@ from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, AuditLog, RoleRequest
+from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, RoleRequest
+from common.models import AuditLog
 
 
 User = get_user_model()
@@ -423,17 +424,17 @@ class UserListSerializer(serializers.ModelSerializer):
 
 class AuditLogSerializer(serializers.ModelSerializer):
     """Serializer for audit logs"""
-    user_display = serializers.CharField(source='user.display_name', read_only=True)
+    actor_display = serializers.CharField(source='actor.display_name', read_only=True)
     action_display = serializers.CharField(source='get_action_display', read_only=True)
     
     class Meta:
         model = AuditLog
         fields = [
-            'id', 'user', 'user_display', 'action', 'action_display',
-            'resource_type', 'resource_id', 'details', 'ip_address',
-            'user_agent', 'created_at'
+            'id', 'actor', 'actor_display', 'action', 'action_display',
+            'target_type', 'target_id', 'target_description', 'details', 'ip_address',
+            'user_agent', 'timestamp'
         ]
-        read_only_fields = ['id', 'user', 'created_at']
+        read_only_fields = ['id', 'actor', 'timestamp']
 
 
 class UserRoleUpdateSerializer(serializers.Serializer):

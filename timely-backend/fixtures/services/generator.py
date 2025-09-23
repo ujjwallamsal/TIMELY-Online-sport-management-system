@@ -1,233 +1,190 @@
 # fixtures/services/generator.py
-from typing import List, Dict, Any, Optional
-from django.utils import timezone
-from datetime import timedelta
+from __future__ import annotations
+
 import random
-import math
+from datetime import datetime, timedelta
+from typing import List, Dict, Tuple, Optional
+from django.utils import timezone
+from django.db import transaction
+from django.core.exceptions import ValidationError
 
-from events.models import Event
-from teams.models import Team
+from ..models import Fixture
 from venues.models import Venue
-from django.contrib.auth import get_user_model
+from teams.models import Team
+from registrations.models import Registration
 
-User = get_user_model()
 
-
-def generate_round_robin(participants: List[int], slot_hints: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def generate_round_robin(teams: List[int], event_id: int, start_date: datetime = None, venues: List[int] = None) -> List[Dict]:
     """
-    Generate Round-Robin fixtures.
+    Generate round-robin fixtures for teams
     
     Args:
-        participants: List of team IDs or user IDs
-        slot_hints: Optional hints for scheduling (venue_id, starts_at, spacing_minutes)
+        teams: List of team IDs
+        event_id: Event ID
+        start_date: Start date for fixtures (defaults to now + 1 day)
+        venues: List of venue IDs to use
     
     Returns:
-        List of fixture proposals
+        List of fixture dictionaries
     """
-    if len(participants) < 2:
-        raise ValueError("At least 2 participants required for Round-Robin")
+    if len(teams) < 2:
+        raise ValidationError("Need at least 2 teams for round-robin")
     
-    # Ensure even number of participants (add bye if odd)
-    if len(participants) % 2 == 1:
-        participants = participants + [None]  # None represents a bye
+    # Handle odd number of teams
+    if len(teams) % 2 == 1:
+        teams = teams + [None]  # Add bye
     
-    n = len(participants)
+    # Default start date
+    if not start_date:
+        start_date = timezone.now() + timedelta(days=1)
+    
+    # Get venues
+    if venues:
+        venue_objects = Venue.objects.filter(id__in=venues)
+    else:
+        venue_objects = Venue.objects.all()[:3]  # Default to first 3 venues
+    
+    if not venue_objects.exists():
+        raise ValidationError("No venues available")
+    
+    venue_list = list(venue_objects)
+    
     fixtures = []
+    num_teams = len(teams)
+    rounds = num_teams - 1
     
-    # Generate Round-Robin schedule
-    for round_num in range(n - 1):
-        round_fixtures = []
-        
-        # Pair participants for this round
-        for i in range(n // 2):
+    for round_num in range(rounds):
+        # Generate matches for this round
+        for i in range(num_teams // 2):
             home_idx = i
-            away_idx = n - 1 - i
+            away_idx = num_teams - 1 - i
             
-            home_participant = participants[home_idx]
-            away_participant = participants[away_idx]
-            
-            # Skip if either participant is a bye
-            if home_participant is None or away_participant is None:
+            # Skip if either team is bye
+            if teams[home_idx] is None or teams[away_idx] is None:
                 continue
             
-            round_fixtures.append({
-                'round_no': round_num + 1,
-                'entries': [
-                    {'side': 'home', 'team_id': home_participant if isinstance(home_participant, int) else None, 'participant_id': home_participant if not isinstance(home_participant, int) else None},
-                    {'side': 'away', 'team_id': away_participant if isinstance(away_participant, int) else None, 'participant_id': away_participant if not isinstance(away_participant, int) else None}
-                ]
-            })
+            # Calculate match time
+            match_date = start_date + timedelta(days=round_num)
+            match_time = match_date.replace(hour=10 + (i * 2), minute=0, second=0, microsecond=0)
+            
+            # Assign venue
+            venue = venue_list[i % len(venue_list)]
+            
+            fixture_data = {
+                'event_id': event_id,
+                'round': round_num + 1,
+                'phase': 'RR',
+                'home_team_id': teams[home_idx],
+                'away_team_id': teams[away_idx],
+                'venue_id': venue.id,
+                'start_at': match_time.isoformat(),
+                'status': 'SCHEDULED'
+            }
+            
+            fixtures.append(fixture_data)
         
-        fixtures.extend(round_fixtures)
-        
-        # Rotate participants (except first one)
-        participants = [participants[0]] + participants[-1:] + participants[1:-1]
-    
-    # Add scheduling information
-    fixtures = _add_scheduling_info(fixtures, slot_hints)
+        # Rotate teams (except first team)
+        teams = [teams[0]] + teams[1:] + [teams[1]]
     
     return fixtures
 
 
-def generate_knockout(participants: List[int], slot_hints: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def generate_knockout(teams: List[int], event_id: int, start_date: datetime = None, venues: List[int] = None) -> List[Dict]:
     """
-    Generate Knockout fixtures.
+    Generate knockout fixtures for teams
     
     Args:
-        participants: List of team IDs or user IDs
-        slot_hints: Optional hints for scheduling (venue_id, starts_at, spacing_minutes)
+        teams: List of team IDs
+        event_id: Event ID
+        start_date: Start date for fixtures (defaults to now + 1 day)
+        venues: List of venue IDs to use
     
     Returns:
-        List of fixture proposals
+        List of fixture dictionaries
     """
-    if len(participants) < 2:
-        raise ValueError("At least 2 participants required for Knockout")
+    if len(teams) < 2:
+        raise ValidationError("Need at least 2 teams for knockout")
     
-    # Ensure power of 2 participants (add byes if needed)
-    n = len(participants)
-    power_of_2 = 2 ** math.ceil(math.log2(n))
+    # Default start date
+    if not start_date:
+        start_date = timezone.now() + timedelta(days=1)
     
-    if n < power_of_2:
-        # Add byes to make it a power of 2
-        byes_needed = power_of_2 - n
-        participants = participants + [None] * byes_needed
+    # Get venues
+    if venues:
+        venue_objects = Venue.objects.filter(id__in=venues)
+    else:
+        venue_objects = Venue.objects.all()[:3]  # Default to first 3 venues
+    
+    if not venue_objects.exists():
+        raise ValidationError("No venues available")
+    
+    venue_list = list(venue_objects)
     
     fixtures = []
-    current_participants = participants.copy()
-    round_num = 1
+    num_teams = len(teams)
+    rounds = (num_teams - 1).bit_length()
     
-    # Generate knockout rounds
-    while len(current_participants) > 1:
-        round_fixtures = []
-        next_round_participants = []
-        
-        # Pair participants for this round
-        for i in range(0, len(current_participants), 2):
-            home_participant = current_participants[i]
-            away_participant = current_participants[i + 1]
-            
-            # Skip if both participants are byes
-            if home_participant is None and away_participant is None:
-                next_round_participants.append(None)
-                continue
-            
-            # If one participant is a bye, the other advances
-            if home_participant is None:
-                next_round_participants.append(away_participant)
-                continue
-            if away_participant is None:
-                next_round_participants.append(home_participant)
-                continue
-            
-            # Create fixture for this pair
-            round_fixtures.append({
-                'round_no': round_num,
-                'entries': [
-                    {'side': 'home', 'team_id': home_participant if isinstance(home_participant, int) else None, 'participant_id': home_participant if not isinstance(home_participant, int) else None},
-                    {'side': 'away', 'team_id': away_participant if isinstance(away_participant, int) else None, 'participant_id': away_participant if not isinstance(away_participant, int) else None}
-                ]
-            })
-            
-            # Winner advances (placeholder for now)
-            next_round_participants.append(None)
-        
-        fixtures.extend(round_fixtures)
-        current_participants = next_round_participants
-        round_num += 1
+    # Add byes to make it a power of 2
+    while len(teams) < 2 ** rounds:
+        teams.append(None)
     
-    # Add scheduling information
-    fixtures = _add_scheduling_info(fixtures, slot_hints)
+    match_number = 1
+    current_teams = teams.copy()
+    
+    for round_num in range(1, rounds + 1):
+        matches_in_round = len(current_teams) // 2
+        next_round_teams = []
+        
+        for match_idx in range(matches_in_round):
+            home_idx = match_idx * 2
+            away_idx = home_idx + 1
+            
+            # Calculate match time
+            match_date = start_date + timedelta(days=(round_num - 1) * 2)
+            match_time = match_date.replace(hour=10 + (match_idx * 3), minute=0, second=0, microsecond=0)
+            
+            # Assign venue
+            venue = venue_list[match_idx % len(venue_list)]
+            
+            fixture_data = {
+                'event_id': event_id,
+                'round': round_num,
+                'phase': 'KO',
+                'home_team_id': current_teams[home_idx],
+                'away_team_id': current_teams[away_idx],
+                'venue_id': venue.id,
+                'start_at': match_time.isoformat(),
+                'status': 'SCHEDULED',
+                'match_number': match_number
+            }
+            
+            fixtures.append(fixture_data)
+            match_number += 1
+            
+            # Add winner to next round (placeholder for now)
+            next_round_teams.append(None)
+        
+        current_teams = next_round_teams
     
     return fixtures
 
 
-def _add_scheduling_info(fixtures: List[Dict[str, Any]], slot_hints: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """
-    Add scheduling information to fixtures.
+def get_available_teams_for_event(event_id: int) -> List[Dict]:
+    """Get available teams for an event"""
+    teams = Team.objects.filter(
+        event_id=event_id,
+        registrations__status=Registration.Status.APPROVED
+    ).distinct().values('id', 'name')
     
-    Args:
-        fixtures: List of fixture proposals
-        slot_hints: Optional hints for scheduling
-    
-    Returns:
-        Fixtures with scheduling information added
-    """
-    if not slot_hints:
-        slot_hints = {}
-    
-    # Default scheduling parameters
-    starts_at = slot_hints.get('starts_at', timezone.now() + timedelta(days=1))
-    spacing_minutes = slot_hints.get('spacing_minutes', 60)
-    venue_id = slot_hints.get('venue_id')
-    
-    # Add scheduling to each fixture
-    for i, fixture in enumerate(fixtures):
-        fixture_start = starts_at + timedelta(minutes=i * spacing_minutes)
-        fixture_end = fixture_start + timedelta(minutes=spacing_minutes)
-        
-        fixture['starts_at'] = fixture_start.isoformat()
-        fixture['ends_at'] = fixture_end.isoformat()
-        fixture['venue_id'] = venue_id
-    
-    return fixtures
+    return list(teams)
 
 
-def get_available_teams_for_event(event_id: int) -> List[Dict[str, Any]]:
-    """
-    Get available teams for an event.
-    
-    Args:
-        event_id: ID of the event
-    
-    Returns:
-        List of available teams with their details
-    """
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        return []
-    
-    # Get teams from registrations for this event
-    from registrations.models import Registration
-    
-    registrations = Registration.objects.filter(
-        event=event,
-        status=Registration.Status.APPROVED
-    ).select_related('team', 'user')
-    
-    teams = []
-    for registration in registrations:
-        if registration.team:
-            teams.append({
-                'id': registration.team.id,
-                'name': registration.team.name,
-                'type': 'team'
-            })
-        elif registration.user:
-            teams.append({
-                'id': registration.user.id,
-                'name': registration.user.get_full_name() or registration.user.username,
-                'type': 'participant'
-            })
-    
-    return teams
-
-
-def validate_participants(participants: List[int], event_id: int) -> Dict[str, Any]:
-    """
-    Validate participants for fixture generation.
-    
-    Args:
-        participants: List of participant IDs
-        event_id: ID of the event
-    
-    Returns:
-        Validation result with details
-    """
+def validate_participants(participants: List[int], event_id: int) -> Dict:
+    """Validate participant IDs for an event"""
     available_teams = get_available_teams_for_event(event_id)
-    available_ids = [team['id'] for team in available_teams]
+    available_team_ids = [team['id'] for team in available_teams]
     
-    invalid_ids = [pid for pid in participants if pid not in available_ids]
+    invalid_ids = [pid for pid in participants if pid not in available_team_ids]
     
     return {
         'valid': len(invalid_ids) == 0,

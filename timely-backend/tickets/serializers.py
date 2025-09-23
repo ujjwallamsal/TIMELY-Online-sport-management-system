@@ -2,24 +2,23 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
-from .models import Purchase, Ticket, TicketType, TicketOrder
+from .models import Ticket, TicketType, TicketOrder
 from .services.pricing import format_price
 
 User = get_user_model()
 
 
-class PurchaseSerializer(serializers.ModelSerializer):
-    """Serializer for Purchase model"""
+class TicketOrderSerializer(serializers.ModelSerializer):
+    """Serializer for TicketOrder model"""
     
-    amount_dollars = serializers.ReadOnlyField()
-    event_name = serializers.CharField(source='event.name', read_only=True)
+    total_dollars = serializers.ReadOnlyField()
     user_email = serializers.CharField(source='user.email', read_only=True)
     
     class Meta:
-        model = Purchase
+        model = TicketOrder
         fields = [
-            'id', 'user', 'user_email', 'event', 'event_name',
-            'intent_id', 'status', 'amount', 'amount_dollars', 'currency',
+            'id', 'user', 'user_email', 'event_id', 'fixture_id',
+            'provider_payment_intent_id', 'status', 'total_cents', 'total_dollars', 'currency',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -28,16 +27,15 @@ class PurchaseSerializer(serializers.ModelSerializer):
 class TicketSerializer(serializers.ModelSerializer):
     """Serializer for simplified Ticket model"""
     
-    event_name = serializers.CharField(source='purchase.event.name', read_only=True)
-    purchase_status = serializers.CharField(source='purchase.status', read_only=True)
+    order_status = serializers.CharField(source='order.status', read_only=True)
     
     class Meta:
         model = Ticket
         fields = [
-            'id', 'purchase', 'code', 'status', 'qr_payload',
-            'event_name', 'purchase_status', 'created_at', 'used_at'
+            'id', 'order', 'serial', 'code', 'status', 'qr_payload',
+            'order_status', 'issued_at', 'used_at'
         ]
-        read_only_fields = ['id', 'code', 'qr_payload', 'created_at']
+        read_only_fields = ['id', 'serial', 'code', 'qr_payload', 'issued_at']
 
 
 class CheckoutSerializer(serializers.Serializer):
@@ -74,15 +72,14 @@ class TicketTypeSerializer(serializers.ModelSerializer):
     
     price_dollars = serializers.ReadOnlyField()
     available_quantity = serializers.ReadOnlyField()
-    is_available = serializers.ReadOnlyField()
     
     class Meta:
         model = TicketType
         fields = [
-            'id', 'event', 'fixture', 'name', 'description',
+            'id', 'event_id', 'fixture_id', 'name', 'description',
             'price_cents', 'price_dollars', 'currency',
             'quantity_total', 'quantity_sold', 'available_quantity',
-            'on_sale', 'is_available', 'created_at', 'updated_at'
+            'on_sale', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'quantity_sold']
 
@@ -93,21 +90,26 @@ class TicketTypeCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TicketType
         fields = [
-            'event', 'fixture', 'name', 'description',
+            'event_id', 'fixture_id', 'name', 'description',
             'price_cents', 'currency', 'quantity_total', 'on_sale'
         ]
     
     def validate(self, data):
         """Validate ticket type data"""
-        # Ensure either event or fixture is provided, not both
-        if data.get('event') and data.get('fixture'):
-            if data['fixture'].event != data['event']:
-                raise serializers.ValidationError(
-                    "Fixture must belong to the specified event"
-                )
-        elif not data.get('event') and not data.get('fixture'):
+        # Ensure either event_id or fixture_id is provided, not both
+        if data.get('event_id') and data.get('fixture_id'):
+            from fixtures.models import Fixture
+            try:
+                fixture = Fixture.objects.get(id=data['fixture_id'])
+                if fixture.event.id != data['event_id']:
+                    raise serializers.ValidationError(
+                        "Fixture must belong to the specified event"
+                    )
+            except Fixture.DoesNotExist:
+                raise serializers.ValidationError("Fixture not found")
+        elif not data.get('event_id') and not data.get('fixture_id'):
             raise serializers.ValidationError(
-                "Either event or fixture must be specified"
+                "Either event_id or fixture_id must be specified"
             )
         
         return data
@@ -117,7 +119,7 @@ class TicketSerializer(serializers.ModelSerializer):
     """Serializer for individual tickets"""
     
     ticket_type_name = serializers.CharField(source='ticket_type.name', read_only=True)
-    event_name = serializers.CharField(source='order.event.name', read_only=True)
+    event_name = serializers.SerializerMethodField()
     fixture_info = serializers.SerializerMethodField()
     
     class Meta:
@@ -129,15 +131,29 @@ class TicketSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'qr_payload', 'serial', 'issued_at']
     
+    def get_event_name(self, obj):
+        """Get event name"""
+        try:
+            from events.models import Event
+            event = Event.objects.get(id=obj.order.event_id)
+            return event.name
+        except Event.DoesNotExist:
+            return None
+    
     def get_fixture_info(self, obj):
         """Get fixture information if applicable"""
-        if obj.order.fixture:
-            return {
-                'id': obj.order.fixture.id,
-                'starts_at': obj.order.fixture.starts_at,
-                'ends_at': obj.order.fixture.ends_at,
-                'venue': obj.order.fixture.venue.name if obj.order.fixture.venue else None
-            }
+        if obj.order.fixture_id:
+            try:
+                from fixtures.models import Fixture
+                fixture = Fixture.objects.get(id=obj.order.fixture_id)
+                return {
+                    'id': fixture.id,
+                    'starts_at': fixture.start_at,
+                    'ends_at': fixture.end_at,
+                    'venue': fixture.venue.name if fixture.venue else None
+                }
+            except Fixture.DoesNotExist:
+                return None
         return None
 
 
@@ -148,32 +164,46 @@ class TicketOrderSerializer(serializers.ModelSerializer):
     can_cancel = serializers.ReadOnlyField()
     tickets = TicketSerializer(many=True, read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True)
-    event_name = serializers.CharField(source='event.name', read_only=True)
+    event_name = serializers.SerializerMethodField()
     fixture_info = serializers.SerializerMethodField()
     
     class Meta:
         model = TicketOrder
         fields = [
-            'id', 'user', 'user_email', 'event', 'event_name', 'fixture', 'fixture_info',
+            'id', 'user', 'user_email', 'event_id', 'event_name', 'fixture_id', 'fixture_info',
             'total_cents', 'total_dollars', 'currency', 'status',
-            'provider', 'provider_session_id', 'provider_payment_intent',
+            'payment_provider', 'provider_session_id', 'provider_payment_intent_id',
             'created_at', 'updated_at', 'can_cancel', 'tickets'
         ]
         read_only_fields = [
             'id', 'user', 'total_cents', 'currency', 'status',
-            'provider_session_id', 'provider_payment_intent',
+            'provider_session_id', 'provider_payment_intent_id',
             'created_at', 'updated_at', 'tickets'
         ]
     
+    def get_event_name(self, obj):
+        """Get event name"""
+        try:
+            from events.models import Event
+            event = Event.objects.get(id=obj.event_id)
+            return event.name
+        except Event.DoesNotExist:
+            return None
+    
     def get_fixture_info(self, obj):
         """Get fixture information if applicable"""
-        if obj.fixture:
-            return {
-                'id': obj.fixture.id,
-                'starts_at': obj.fixture.starts_at,
-                'ends_at': obj.fixture.ends_at,
-                'venue': obj.fixture.venue.name if obj.fixture.venue else None
-            }
+        if obj.fixture_id:
+            try:
+                from fixtures.models import Fixture
+                fixture = Fixture.objects.get(id=obj.fixture_id)
+                return {
+                    'id': fixture.id,
+                    'starts_at': fixture.start_at,
+                    'ends_at': fixture.end_at,
+                    'venue': fixture.venue.name if fixture.venue else None
+                }
+            except Fixture.DoesNotExist:
+                return None
         return None
 
 
@@ -206,7 +236,8 @@ class CreateOrderSerializer(serializers.Serializer):
     
     def validate(self, data):
         """Validate order data"""
-        from .models import Event, TicketType
+        from events.models import Event
+        from .models import TicketType
         from .services.pricing import validate_inventory
         
         # Validate event exists
@@ -260,12 +291,17 @@ class MyTicketsListSerializer(serializers.ModelSerializer):
     
     def get_fixture_info(self, obj):
         """Get fixture information if applicable"""
-        if obj.order.fixture:
-            return {
-                'id': obj.order.fixture.id,
-                'starts_at': obj.order.fixture.starts_at,
-                'ends_at': obj.order.fixture.ends_at
-            }
+        if obj.order.fixture_id:
+            try:
+                from fixtures.models import Fixture
+                fixture = Fixture.objects.get(id=obj.order.fixture_id)
+                return {
+                    'id': fixture.id,
+                    'starts_at': fixture.start_at,
+                    'ends_at': fixture.end_at
+                }
+            except Fixture.DoesNotExist:
+                return None
         return None
 
 
@@ -287,11 +323,16 @@ class TicketDetailSerializer(serializers.ModelSerializer):
     
     def get_fixture_info(self, obj):
         """Get fixture information if applicable"""
-        if obj.order.fixture:
-            return {
-                'id': obj.order.fixture.id,
-                'starts_at': obj.order.fixture.starts_at,
-                'ends_at': obj.order.fixture.ends_at,
-                'venue': obj.order.fixture.venue.name if obj.order.fixture.venue else None
-            }
+        if obj.order.fixture_id:
+            try:
+                from fixtures.models import Fixture
+                fixture = Fixture.objects.get(id=obj.order.fixture_id)
+                return {
+                    'id': fixture.id,
+                    'starts_at': fixture.start_at,
+                    'ends_at': fixture.end_at,
+                    'venue': fixture.venue.name if fixture.venue else None
+                }
+            except Fixture.DoesNotExist:
+                return None
         return None
