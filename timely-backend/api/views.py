@@ -159,6 +159,10 @@ class VenueViewSet(viewsets.ModelViewSet):
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
+
+    def perform_create(self, serializer):
+        """Ensure created_by is set for Venue creation."""
+        serializer.save(created_by=self.request.user)
     
     @action(detail=False, methods=['get'])
     def availability(self, request):
@@ -233,7 +237,12 @@ class EventViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Create event with proper permissions"""
-        serializer.save(created_by=self.request.user)
+        try:
+            serializer.save(created_by=self.request.user)
+        except Exception as e:
+            # Surface DB/validation issues as 400 for easier debugging during acceptance run
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'non_field_errors': [str(e)]})
     
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
@@ -1035,7 +1044,7 @@ class PublicEventListView(APIView):
     def get(self, request):
         events = Event.objects.filter(
             visibility='PUBLIC',
-            status='published'  # Only show published events publicly
+            status=Event.Status.UPCOMING
         ).select_related('venue').order_by('start_datetime')
         
         # Apply filters
@@ -1126,9 +1135,10 @@ class PublicStatsView(APIView):
         User = get_user_model()
         now = timezone.now()
         
-        # Count published events
+        # Count public upcoming events
         events_count = Event.objects.filter(
-            status='published'
+            visibility='PUBLIC',
+            status=Event.Status.UPCOMING
         ).count()
         
         # Count total participants (users with athlete role)

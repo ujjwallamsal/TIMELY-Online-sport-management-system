@@ -49,6 +49,9 @@ class VenueSerializer(serializers.ModelSerializer):
 
 class EventSerializer(serializers.ModelSerializer):
     """Event serializer"""
+    # Support both FK id and legacy string for sport
+    sport = serializers.CharField(required=False)
+    sport_id = serializers.IntegerField(write_only=True, required=False)
     sport_name = serializers.CharField(source='sport', read_only=True)
     venue_name = serializers.CharField(source='venue.name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
@@ -56,13 +59,29 @@ class EventSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = [
-            'id', 'name', 'sport', 'sport_name', 'description', 'start_datetime',
+            'id', 'name', 'sport', 'sport_id', 'sport_name', 'description', 'start_datetime',
             'end_datetime', 'registration_open_at', 'registration_close_at',
             'location', 'capacity', 'fee_cents', 'venue', 'venue_name',
             'status', 'visibility', 'created_by', 'created_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        # Map sport_id -> sport name if provided
+        sport_id = attrs.pop('sport_id', None)
+        if sport_id is not None and not attrs.get('sport'):
+            try:
+                from sports.models import Sport
+                attrs['sport'] = Sport.objects.get(pk=sport_id).name
+            except Exception:
+                raise serializers.ValidationError({'sport_id': 'Invalid sport id'})
+        # Provide safe defaults for DB NOT NULL numeric fields when omitted
+        if attrs.get('capacity') is None:
+            attrs['capacity'] = 0
+        if attrs.get('fee_cents') is None:
+            attrs['fee_cents'] = 0
+        return super().validate(attrs)
 
 
 class TeamMemberSerializer(serializers.ModelSerializer):

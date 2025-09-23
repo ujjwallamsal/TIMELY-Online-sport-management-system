@@ -172,7 +172,8 @@ REST_FRAMEWORK = {
         "anon": "100/min",
         "user": "1000/min",
         "public_checkout": "10/min",
-        "login": "10/min",
+        # Temporarily higher for acceptance run
+        "login": "100/min",
     },
 }
 

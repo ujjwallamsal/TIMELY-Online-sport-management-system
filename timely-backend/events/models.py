@@ -16,6 +16,7 @@ class Event(models.Model):
     
     # Basic Information
     name = models.CharField(max_length=200, help_text="Event name")
+    # Store sport as a simple string (legacy-compatible); API can map ids to names
     sport = models.CharField(
         max_length=100,
         help_text="Sport type"

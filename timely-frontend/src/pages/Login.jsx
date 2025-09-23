@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useToast } from '../hooks/useToast';
 import { 
   EyeIcon, 
   EyeSlashIcon, 
@@ -13,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { useToast } from '../components/ui/Toast.jsx';
 
 export default function Login() {
   const [formData, setFormData] = useState({
@@ -24,9 +24,9 @@ export default function Login() {
   const [errors, setErrors] = useState({});
 
   const { login, getRoleBasedPath } = useAuth();
-  const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const { push } = useToast();
 
   const from = location.state?.from?.pathname || '/dashboard';
 
@@ -77,11 +77,8 @@ export default function Login() {
     
     try {
       const userData = await login(formData.email, formData.password);
-      showToast({
-        type: 'success',
-        title: 'Welcome back!',
-        message: 'You have successfully signed in.'
-      });
+      // success
+      push({ type: 'success', title: 'Signed in', message: 'Welcome back!' });
       
       // Route by role after successful login
       const redirectPath = getRoleBasedPath(userData.role);
@@ -89,14 +86,7 @@ export default function Login() {
     } catch (error) {
       console.error('Login error:', error);
       
-      // Use the transformed error message from the API interceptor
       const errorMessage = error.userMessage || 'Please try again.';
-      
-      showToast({
-        type: 'error',
-        title: 'Sign in failed',
-        message: errorMessage
-      });
       
       // Handle different error types
       if (error.response?.status === 401) {
@@ -104,15 +94,18 @@ export default function Login() {
           email: 'Invalid email or password',
           password: 'Invalid email or password'
         });
+        push({ type: 'error', title: 'Sign in failed', message: 'Invalid email or password' });
       } else if (error.response?.status === 400) {
         // Field validation errors
         const fieldErrors = error.response?.data || {};
         setErrors(fieldErrors);
+        push({ type: 'error', title: 'Sign in failed', message: 'Fix the highlighted errors and try again.' });
       } else {
         setErrors({
           email: errorMessage,
           password: errorMessage
         });
+        push({ type: 'error', title: 'Sign in failed', message: errorMessage });
       }
     } finally {
       setLoading(false);
@@ -259,12 +252,12 @@ export default function Login() {
           {/* Sign up link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
+              Don't have an account{'?'}{' '}
               <Link
-                to="/signup"
+                to="/register"
                 className="font-medium text-blue-600 hover:text-blue-500"
               >
-                Sign up for free
+                Create an account
               </Link>
             </p>
           </div>

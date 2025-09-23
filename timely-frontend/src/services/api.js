@@ -59,12 +59,19 @@ export class API {
   async request(url, options = {}) {
     // Ensure proper URL joining
     let fullUrl;
+    let path;
     if (url.startsWith('http')) {
       fullUrl = url;
+      try {
+        const u = new URL(url);
+        path = u.pathname;
+      } catch {
+        path = '/';
+      }
     } else {
       // Remove trailing slash from baseURL and add leading slash to url if missing
       const baseUrl = this.baseURL.replace(/\/$/, '');
-      const path = url.startsWith('/') ? url : `/${url}`;
+      path = url.startsWith('/') ? url : `/${url}`;
       fullUrl = `${baseUrl}${path}`;
     }
     
@@ -72,6 +79,15 @@ export class API {
       headers: this.getHeaders(options.headers),
       ...options
     };
+
+    // Do not send auth header to public or auth endpoints to avoid 401 on open routes
+    const isPublic = path.startsWith('/public/');
+    const isAuth = path.startsWith('/auth/');
+    if (isPublic || isAuth) {
+      if (config.headers && 'Authorization' in config.headers) {
+        delete config.headers['Authorization'];
+      }
+    }
 
     try {
       const response = await fetch(fullUrl, config);
@@ -287,6 +303,14 @@ export class API {
     return this.get('/me');
   }
 
+  async refresh() {
+    return this.post('/auth/refresh');
+  }
+
+  async updateMe(data) {
+    return this.patch('/me', data);
+  }
+
   // Events endpoints
   async getEvents(params = {}) {
     return this.paginate('/events/', params);
@@ -302,6 +326,10 @@ export class API {
 
   async updateEvent(id, data) {
     return this.patch(`/events/${id}/`, data);
+  }
+
+  async cancelEvent(id) {
+    return this.post(`/events/${id}/cancel/`);
   }
 
   async deleteEvent(id) {
@@ -492,7 +520,8 @@ export const getEventResults = (id) => api.get(`/events/${id}/results/`);
 
 // Public API functions
 export const getPublicEvent = (id) => api.get(`/public/events/${id}/`);
-export const getPublicEvents = (params = {}) => api.get('/public/events/', { params });
+// Correct param passing for public events list
+export const getPublicEvents = (params = {}) => api.get('/public/events/', params);
 export const getPublicEventFixtures = (id) => api.get(`/public/events/${id}/fixtures/`);
 export const getPublicEventResults = (id) => api.get(`/public/events/${id}/results/`);
 export const getPublicEventLeaderboard = (id) => api.get(`/public/events/${id}/leaderboard/`);
@@ -502,10 +531,11 @@ export const getPublicResults = (params = {}) => api.get('/results/public/result
 export const listEvents = (params = {}) => api.get('/events/', { params });
 export const getEvents = (params = {}) => api.get('/events/', { params }); // Alias for listEvents
 export const createEvent = (data) => api.post('/events/', data);
-export const updateEvent = (id, data) => api.put(`/events/${id}/`, data);
+export const updateEvent = (id, data) => api.patch(`/events/${id}/`, data);
 export const deleteEvent = (id) => api.delete(`/events/${id}/`);
 export const publishEvent = (id) => api.post(`/events/${id}/publish/`);
 export const unpublishEvent = (id) => api.post(`/events/${id}/unpublish/`);
+export const cancelEvent = (id) => api.post(`/events/${id}/cancel/`);
 
 // Admin user functions
 export const getAdminUsers = (params = {}) => api.get('/admin/users/', { params });
@@ -529,11 +559,14 @@ export const getPublicBanners = () => api.get('/public/banners/');
 // API modules for organized imports
 export const publicAPI = {
   getEvent: getPublicEvent,
-  getEvents: getPublicEvents,
+  // Provide paginated interface for tables
+  getEvents: (params = {}) => api.paginate('/public/events/', params),
   getEventFixtures: getPublicEventFixtures,
   getEventResults: getPublicEventResults,
   getEventLeaderboard: getPublicEventLeaderboard,
   getResults: getPublicResults,
+  getMedia: (params = {}) => api.get('/public/media/', params),
+  getNews: (params = {}) => api.get('/content/public/news/', params),
   getPage: getPublicPage,
   getBanners: getPublicBanners,
   getStats: () => api.get('/public/stats/')
@@ -569,10 +602,10 @@ export const mediaAPI = {
 };
 
 export const reportsAPI = {
-  getEvents: () => api.get('/reports/events/'),
-  getRegistrations: () => api.get('/reports/registrations/'),
-  getFixtures: () => api.get('/reports/fixtures/'),
-  getResults: () => api.get('/reports/results/')
+  registrationsCSV: () => api.download('/reports/registrations.csv', 'registrations.csv'),
+  fixturesCSV: () => api.download('/reports/fixtures.csv', 'fixtures.csv'),
+  resultsCSV: () => api.download('/reports/results.csv', 'results.csv'),
+  ticketSalesCSV: () => api.download('/reports/ticket_sales.csv', 'ticket_sales.csv')
 };
 
 export const kycAPI = {
@@ -613,10 +646,28 @@ export const updateProfile = (data) => api.put('/profile/', data);
 export const changePassword = (data) => api.post('/change-password/', data);
 
 // Ticket checkout functions
-export const listTicketTypes = (eventId) => api.get(`/events/${eventId}/ticket-types/`);
-export const createTicketOrder = (data) => api.post('/orders/', data);
-export const createStripeCheckout = (orderId) => api.post(`/orders/${orderId}/stripe-checkout/`);
-export const createPayPalCheckout = (orderId) => api.post(`/orders/${orderId}/paypal-checkout/`);
+export const ticketsAPI = {
+  checkout: (payload) => api.post('/tickets/checkout/', payload),
+  webhook: (payload) => api.post('/tickets/webhook/', payload),
+  myTickets: () => api.get('/me/tickets/'),
+  ticketQr: (ticketId) => api.get(`/tickets/${ticketId}/qr/`),
+  verify: (code) => api.get('/tickets/verify', { code })
+};
+
+// Event-scoped fixtures/results helpers per Phase 4
+export const eventFixturesAPI = {
+  list: (eventId, params = {}) => api.get(`/events/${eventId}/fixtures/`, params),
+  generate: (eventId, mode = 'rr') => api.post(`/events/${eventId}/fixtures/generate/`, { mode }),
+  patchFixture: (fixtureId, data) => api.patch(`/fixtures/${fixtureId}/`, data),
+  submitResult: (fixtureId, data) => api.post(`/fixtures/${fixtureId}/result/`, data),
+  leaderboard: (eventId) => api.get(`/events/${eventId}/leaderboard/`)
+};
+
+// Announcements per Phase 4
+export const announcementsAPI = {
+  list: () => api.get('/announcements/'),
+  announceEvent: (eventId, data) => api.post(`/events/${eventId}/announce/`, data)
+};
 
 // Additional missing exports for comprehensive coverage
 export const getRegistrations = (params = {}) => api.get('/registrations/', { params });
