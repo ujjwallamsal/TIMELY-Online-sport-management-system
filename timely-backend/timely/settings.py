@@ -180,11 +180,12 @@ REST_FRAMEWORK = {
 
 # Relax throttling for local development
 if DEBUG:
-    REST_FRAMEWORK.setdefault("DEFAULT_THROTTLE_CLASSES", [])
-    REST_FRAMEWORK.setdefault("DEFAULT_THROTTLE_RATES", {
-        "user": "1000/min",
-        "anon": "1000/min",
-    })
+    REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = []
+    REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
+        "user": "10000/min",
+        "anon": "10000/min",
+        "login": "10000/min",
+    }
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Timely API",
