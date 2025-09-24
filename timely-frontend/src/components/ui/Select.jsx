@@ -1,11 +1,50 @@
-export default function Select({ className = '', children, ...props }) {
+import React from "react";
+
+export default function Select({
+  id,
+  label,
+  error,
+  helper,
+  required,
+  disabled,
+  children,
+  className = "",
+  selectClassName = "",
+  ...props
+}) {
+  const describedBy = [];
+  if (helper) describedBy.push(`${id}-helper`);
+  if (error) describedBy.push(`${id}-error`);
   return (
-    <select
-      className={`block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm ${className}`}
-      {...props}
-    >
-      {children}
-    </select>
+    <div className={`w-full ${className}`}>
+      {label && (
+        <label htmlFor={id} className="mb-1 block text-sm font-medium text-gray-700">
+          {label}
+          {required ? <span className="text-red-600"> *</span> : null}
+        </label>
+      )}
+      <select
+        id={id}
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={describedBy.join(" ") || undefined}
+        required={required}
+        disabled={disabled}
+        className={`w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:bg-gray-100 ${selectClassName}`}
+        {...props}
+      >
+        {children}
+      </select>
+      {helper && (
+        <p id={`${id}-helper`} className="mt-1 text-xs text-gray-500">
+          {helper}
+        </p>
+      )}
+      {error && (
+        <p id={`${id}-error`} className="mt-1 text-xs text-red-600">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

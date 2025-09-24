@@ -221,10 +221,14 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Create user with validated data - always SPECTATOR"""
-        validated_data.pop('password_confirm')
+        # Extract and handle password separately to ensure proper hashing
+        password = validated_data.pop('password')
+        validated_data.pop('password_confirm', None)
         # Force role to SPECTATOR
         validated_data['role'] = User.Role.SPECTATOR
-        user = User.objects.create_user(**validated_data)
+        # Explicitly pass email and password to create_user so set_password() is called
+        email = validated_data.pop('email')
+        user = User.objects.create_user(email=email, password=password, **validated_data)
         return user
 
 

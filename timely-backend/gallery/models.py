@@ -35,6 +35,7 @@ def media_upload_path(instance: "MediaAsset", filename: str) -> str:
 class MediaAsset(models.Model):
     """
     Photo or video linked to an Event/Match.
+    DEPRECATED: Use Media model instead for new uploads.
     """
     PHOTO = "PHOTO"
     VIDEO = "VIDEO"
@@ -54,6 +55,8 @@ class MediaAsset(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = 'Legacy Media Asset'
+        verbose_name_plural = 'Legacy Media Assets'
         ordering = ["-uploaded_at"]
 
     def __str__(self) -> str:
@@ -99,6 +102,8 @@ class Media(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = 'Media Item'
+        verbose_name_plural = 'Media Items'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['event', 'is_approved']),

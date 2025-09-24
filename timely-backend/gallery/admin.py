@@ -24,6 +24,7 @@ class MediaAssetAdmin(admin.ModelAdmin):
 	list_filter = ["kind", "is_public", "uploaded_at"]
 	search_fields = ["album__title", "caption", "uploaded_by__email"]
 	ordering = ["-uploaded_at"]
+	readonly_fields = ["uploaded_at"]
 
 @admin.register(Media)
 class MediaAdmin(admin.ModelAdmin):

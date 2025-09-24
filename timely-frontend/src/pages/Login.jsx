@@ -238,12 +238,12 @@ export default function Login() {
             <div>
               <Button
                 type="submit"
-                loading={loading}
+                isLoading={loading}
                 className="w-full"
                 size="lg"
                 disabled={loading}
               >
-                {loading ? 'Signing in...' : 'Sign in'}
+                {!loading && 'Sign in'}
                 {!loading && <ArrowRightIcon className="w-5 h-5 ml-2" />}
               </Button>
             </div>

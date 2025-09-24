@@ -3,6 +3,14 @@ from django.utils import timezone
 from .models import Event, Division
 
 
+class DivisionInline(admin.TabularInline):
+    model = Division
+    extra = 0
+    fields = ['name', 'sort_order']
+    ordering = ['sort_order']
+
+# TicketTypeInline removed - TicketType doesn't have ForeignKey to Event
+
 @admin.register(Division)
 class DivisionAdmin(admin.ModelAdmin):
     list_display = ["name", "event", "sort_order"]
@@ -34,6 +42,8 @@ class EventAdmin(admin.ModelAdmin):
     date_hierarchy = "start_datetime"
     ordering = ["-start_datetime"]
     actions = [mark_ongoing, mark_completed]
+    inlines = [DivisionInline]
+    readonly_fields = ["created_at", "updated_at"]
     
     fieldsets = (
         ('Basic Information', {
@@ -66,3 +76,12 @@ class EventAdmin(admin.ModelAdmin):
     def has_module_permission(self, request):
         # Only staff may see events module in admin
         return request.user.is_staff
+    
+    def has_delete_permission(self, request, obj=None):
+        # Prevent deleting events that have fixtures or tickets
+        if obj:
+            if obj.fixtures.exists():
+                return False
+            if hasattr(obj, 'tickets') and obj.tickets.exists():
+                return False
+        return super().has_delete_permission(request, obj)

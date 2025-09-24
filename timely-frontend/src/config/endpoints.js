@@ -3,51 +3,51 @@
 
 export const ENDPOINTS = {
   // DRF root discovery (optional)
-  root: '/api/',
+  root: '/',
 
   // Stats cards (Total Users, Active Events, Tickets Sold, Total Revenue)
   // Use whichever exists in backend; try in order:
   stats: [
-    '/api/reports/admin/stats/',
-    '/api/reports/summary/',
-    '/api/admin/stats/',
+    'reports/admin/stats/',
+    'reports/summary/',
+    'admin/stats/',
   ],
 
   // Revenue time series (for chart range=week|month|year)
   revenue: [
-    '/api/reports/revenue/',
-    '/api/payments/revenue/',
+    'reports/revenue/',
+    'payments/revenue/',
   ],
 
   // User distribution by role (for pie)
   userDistribution: [
-    '/api/reports/users/by-role/',
-    '/api/stats/roles/',
+    'reports/users/by-role/',
+    'stats/roles/',
   ],
 
   // Recent events
   recentEvents: [
-    '/api/events/?ordering=-created_at&page_size=5',
-    '/api/events/recent/',
+    'events/',
+    'events/recent/',
   ],
 
   // Recent registrations
   recentRegistrations: [
-    '/api/registrations/recent/',
-    '/api/events/registrations/recent/',
+    'registrations/recent/',
+    'events/registrations/recent/',
   ],
 
   // Unread notifications count
   notifications: [
-    '/api/notifications/unread-count/',
-    '/api/notifications/unread/',
+    'notifications/unread-count/',
+    'notifications/unread/',
   ],
 
   // Health check
   health: [
-    '/health/',
-    '/api/health/',
-    '/healthz',
+    'health/',
+    'healthz/',
+    'healthz',
   ],
 };
 
@@ -71,8 +71,7 @@ export const getStats = async (api) => {
 };
 
 export const getRevenue = async (api, range = 'year') => {
-  const urls = ENDPOINTS.revenue.map(url => `${url}?range=${range}`);
-  return firstOk(api, urls);
+  return firstOk(api, ENDPOINTS.revenue, { params: { range } });
 };
 
 export const getUserDistribution = async (api) => {
@@ -80,7 +79,7 @@ export const getUserDistribution = async (api) => {
 };
 
 export const getRecentEvents = async (api) => {
-  return firstOk(api, ENDPOINTS.recentEvents);
+  return firstOk(api, ENDPOINTS.recentEvents, { params: { ordering: '-created_at', page_size: 5 } });
 };
 
 export const getRecentRegistrations = async (api) => {

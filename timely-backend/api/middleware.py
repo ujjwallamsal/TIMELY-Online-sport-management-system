@@ -201,6 +201,11 @@ class AuditLoggingMiddleware(MiddlewareMixin):
     
     def _log_api_metrics(self, request, response, response_time):
         """Log API usage metrics"""
+        from django.conf import settings
+        # Skip metrics in DEBUG mode unless explicitly enabled
+        if not getattr(settings, 'API_METRICS_ENABLED', not settings.DEBUG):
+            return
+            
         try:
             APIMetrics.objects.create(
                 endpoint=request.path,

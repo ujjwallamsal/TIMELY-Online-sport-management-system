@@ -40,3 +40,9 @@ class RegistrationAdmin(admin.ModelAdmin):
 
 	def has_module_permission(self, request):
 		return request.user.is_staff
+	
+	def has_delete_permission(self, request, obj=None):
+		# Prevent deleting registrations that have associated payments
+		if obj and hasattr(obj, 'payments') and obj.payments.exists():
+			return False
+		return super().has_delete_permission(request, obj)

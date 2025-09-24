@@ -7,6 +7,11 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from common.views import HealthView
 
+# Admin site branding
+admin.site.site_header = "Timely Sports Management"
+admin.site.site_title = "Timely Admin"
+admin.site.index_title = "Operations Dashboard"
+
 urlpatterns = [
     # Health check
     path("health/", HealthView.as_view(), name="health"),

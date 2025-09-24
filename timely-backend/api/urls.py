@@ -21,53 +21,31 @@ router.register(r'announcements', views.AnnouncementViewSet, basename='announcem
 router.register(r'reports', views.ReportViewSet, basename='report')
 
 urlpatterns = [
-    # Explicit auth and profile endpoints (no trailing slashes)
+    # Health check
     path('health/', views.HealthView.as_view(), name='health'),
-    path('auth/login', views.LoginView.as_view(), name='auth-login'),
-    path('auth/refresh', views.TokenRefreshView.as_view(), name='auth-refresh'),
-    path('auth/register', views.RegisterView.as_view(), name='auth-register'),
-    path('me', views.MeView.as_view(), name='me'),
+    path('health', views.HealthView.as_view(), name='health-noslash'),
+    
+    # Auth endpoints
+    path('auth/login/', views.LoginView.as_view(), name='auth-login'),
+    path('auth/refresh/', views.TokenRefreshView.as_view(), name='auth-refresh'),
+    path('auth/register/', views.RegisterView.as_view(), name='auth-register'),
+    path('me/', views.MeView.as_view(), name='me'),
 
-    # Include router URLs (placed after to avoid collisions with explicit auth routes)
+    # Include router URLs (main API endpoints)
     path('', include(router.urls)),
     
-    # Include tickets endpoints
+    # Include app-specific endpoints
     path('tickets/', include('tickets.urls')),
-    
-    # Include reports endpoints
     path('reports/', include('reports.urls')),
-    
-    # Include gallery endpoints
     path('gallery/', include('gallery.urls')),
-    
-    # Include content endpoints (News, Pages, Banners)
     path('content/', include('content.urls')),
-    
-    # Include accounts endpoints (auth, users, admin)
     path('', include('accounts.urls')),
-    
-    # Include venues endpoints
     path('venues/', include('venues.urls')),
-    
-    # Include events endpoints
     path('events/', include('events.urls')),
-    
-    # Include teams endpoints
     path('teams/', include('teams.urls')),
-    
-    # Include registrations endpoints
     path('registrations/', include('registrations.urls')),
-    
-    # Include fixtures endpoints
     path('', include('fixtures.urls')),
-    
-    # Include results endpoints
     path('results/', include('results.urls')),
-    
-    # Media endpoints
-    path('media/upload/', views.MediaUploadView.as_view(), name='media-upload'),
-    path('media/<int:pk>/', views.MediaModerationView.as_view(), name='media-moderation'),
-    path('public/media/', views.PublicMediaListView.as_view(), name='public-media-list'),
     
     # Additional endpoints not covered by viewsets
     path('events/<int:event_id>/registrations/', views.EventRegistrationsView.as_view(), name='event-registrations'),
@@ -82,11 +60,13 @@ urlpatterns = [
     path('registrations/<int:registration_id>/reject/', views.RejectRegistrationView.as_view(), name='reject-registration'),
     path('events/<int:event_id>/cancel/', views.CancelEventView.as_view(), name='cancel-event'),
     
-    # Public endpoints
+    # Public endpoints - normalized structure
     path('public/events/', views.PublicEventListView.as_view(), name='public-events'),
     path('public/events/<int:event_id>/', views.PublicEventDetailView.as_view(), name='public-event-detail'),
     path('public/events/<int:event_id>/fixtures/', views.PublicEventFixturesView.as_view(), name='public-event-fixtures'),
     path('public/events/<int:event_id>/results/', views.PublicEventResultsView.as_view(), name='public-event-results'),
     path('public/events/<int:event_id>/leaderboard/', views.PublicEventLeaderboardView.as_view(), name='public-event-leaderboard'),
+    path('public/media/', views.PublicMediaListView.as_view(), name='public-media-list'),
+    # Public news is available at /api/content/public/news/ via content.urls
     path('public/stats/', views.PublicStatsView.as_view(), name='public-stats'),
 ]

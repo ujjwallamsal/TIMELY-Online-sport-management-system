@@ -22,7 +22,7 @@ const RealtimeAnnouncements = ({
 
   // Real-time connection for announcements
   const { isConnected, error } = useLiveChannel(channelTopic, (data) => {
-    if (data.type === 'announcement_update') {
+    if (data.type === 'announcement_update' || data.type === 'announcements_update') {
       const announcement = data.data.announcement;
       
       // Add new announcement to the list
@@ -43,16 +43,31 @@ const RealtimeAnnouncements = ({
   useEffect(() => {
     const fetchAnnouncements = async () => {
       try {
-        const url = eventId 
-          ? `/api/events/${eventId}/announcements/`
-          : '/api/announcements/active/';
+        // Only fetch if we have an eventId or if user is authenticated
+        if (!eventId && !window.localStorage.getItem('auth_token')) {
+          return;
+        }
         
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        // Skip fetching announcements if no eventId and no token
+        if (!eventId) {
+          return;
+        }
+        
+        const url = eventId 
+          ? `/events/${eventId}/announcements/`
+          : '/announcements/active/';
+        
+        const headers = {
+          'Content-Type': 'application/json'
+        };
+        
+        // Add auth header for non-event announcements
+        const token = window.localStorage.getItem('auth_token');
+        if (!eventId && token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(`/api${url}`, { headers });
         
         if (response.ok) {
           const data = await response.json();

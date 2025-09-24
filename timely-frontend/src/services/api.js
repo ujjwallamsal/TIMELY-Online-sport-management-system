@@ -54,6 +54,18 @@ export class API {
   }
 
   /**
+   * Ensure URL path ends with a trailing slash for DRF endpoints.
+   * Leaves CSV downloads (ending with .csv) untouched.
+   */
+  ensureTrailingSlash(urlPath) {
+    // Preserve query strings while checking trailing slash on pathname
+    const [pathOnly, query = ''] = urlPath.split('?');
+    if (pathOnly.endsWith('.csv')) return urlPath;
+    const normalizedPath = pathOnly.endsWith('/') ? pathOnly : `${pathOnly}/`;
+    return query ? `${normalizedPath}?${query}` : normalizedPath;
+  }
+
+  /**
    * Make HTTP request with error handling
    */
   async request(url, options = {}) {
@@ -71,7 +83,9 @@ export class API {
     } else {
       // Remove trailing slash from baseURL and add leading slash to url if missing
       const baseUrl = this.baseURL.replace(/\/$/, '');
-      path = url.startsWith('/') ? url : `/${url}`;
+      // Normalize path for DRF trailing slash convention (except CSV)
+      const rawPath = url.startsWith('/') ? url : `/${url}`;
+      path = this.ensureTrailingSlash(rawPath);
       fullUrl = `${baseUrl}${path}`;
     }
     
@@ -138,8 +152,13 @@ export class API {
    * GET request
    */
   async get(url, params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    const fullUrl = queryString ? `${url}?${queryString}` : url;
+    // Support both get(url, params) and get(url, { params }) call styles
+    const normalizedParams = (params && typeof params === 'object' && 'params' in params)
+      ? params.params
+      : params;
+    const queryString = new URLSearchParams(normalizedParams || {}).toString();
+    const baseUrl = this.ensureTrailingSlash(url);
+    const fullUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl;
     
     return this.request(fullUrl, { method: 'GET' });
   }
@@ -148,7 +167,7 @@ export class API {
    * POST request
    */
   async post(url, data = {}) {
-    return this.request(url, {
+    return this.request(this.ensureTrailingSlash(url), {
       method: 'POST',
       body: JSON.stringify(data)
     });
@@ -158,7 +177,7 @@ export class API {
    * PUT request
    */
   async put(url, data = {}) {
-    return this.request(url, {
+    return this.request(this.ensureTrailingSlash(url), {
       method: 'PUT',
       body: JSON.stringify(data)
     });
@@ -168,7 +187,7 @@ export class API {
    * PATCH request
    */
   async patch(url, data = {}) {
-    return this.request(url, {
+    return this.request(this.ensureTrailingSlash(url), {
       method: 'PATCH',
       body: JSON.stringify(data)
     });
@@ -178,7 +197,7 @@ export class API {
    * DELETE request
    */
   async delete(url) {
-    return this.request(url, { method: 'DELETE' });
+    return this.request(this.ensureTrailingSlash(url), { method: 'DELETE' });
   }
 
   /**
@@ -284,7 +303,7 @@ export class API {
 
   // Authentication endpoints
   async login(email, password) {
-    const response = await this.post('/auth/login', { email, password });
+    const response = await this.post('/auth/login/', { email, password });
     if (response.access) {
       this.setToken(response.access);
     }
@@ -293,7 +312,7 @@ export class API {
 
   async logout() {
     try {
-      await this.post('/auth/logout');
+      await this.post('/auth/logout/');
     } finally {
       this.setToken(null);
     }
@@ -304,7 +323,7 @@ export class API {
   }
 
   async refresh() {
-    return this.post('/auth/refresh');
+    return this.post('/auth/refresh/');
   }
 
   async updateMe(data) {
@@ -525,7 +544,7 @@ export const getPublicEvents = (params = {}) => api.get('/public/events/', param
 export const getPublicEventFixtures = (id) => api.get(`/public/events/${id}/fixtures/`);
 export const getPublicEventResults = (id) => api.get(`/public/events/${id}/results/`);
 export const getPublicEventLeaderboard = (id) => api.get(`/public/events/${id}/leaderboard/`);
-export const getPublicResults = (params = {}) => api.get('/results/public/results/', { params });
+export const getPublicResults = (params = {}) => api.get('/public/events/', params);
 
 // Other commonly used functions
 export const listEvents = (params = {}) => api.get('/events/', { params });
@@ -649,9 +668,13 @@ export const changePassword = (data) => api.post('/change-password/', data);
 export const ticketsAPI = {
   checkout: (payload) => api.post('/tickets/checkout/', payload),
   webhook: (payload) => api.post('/tickets/webhook/', payload),
-  myTickets: () => api.get('/me/tickets/'),
+  myTickets: () => api.get('/tickets/me/tickets/'),
   ticketQr: (ticketId) => api.get(`/tickets/${ticketId}/qr/`),
-  verify: (code) => api.get('/tickets/verify', { code })
+  verify: (code) => api.get('/tickets/verify/', { code }),
+  getTicketTypes: (eventId) => api.get(`/tickets/events/${eventId}/types/`),
+  createTicketType: (eventId, data) => api.post(`/tickets/events/${eventId}/types/create/`, data),
+  updateTicketType: (typeId, data) => api.put(`/tickets/types/${typeId}/`, data),
+  deleteTicketType: (typeId) => api.delete(`/tickets/types/${typeId}/delete/`)
 };
 
 // Event-scoped fixtures/results helpers per Phase 4

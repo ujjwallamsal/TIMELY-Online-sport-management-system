@@ -12,6 +12,7 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionType, setConnectionType] = useState(null);
   const [error, setError] = useState(null);
+  const [lastMessage, setLastMessage] = useState(null);
   
   const wsRef = useRef(null);
   const eventSourceRef = useRef(null);
@@ -33,7 +34,10 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
   };
 
   const connectWebSocket = () => {
-    if (!enableWebSocket || !user) return;
+    if (!enableWebSocket) return;
+    
+    // Only connect to notifications if user is authenticated
+    if (!topic.startsWith('event_') && !user) return;
 
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -76,15 +80,18 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
             if (topic.startsWith('event_')) {
               const eventId = topic.replace('event_', '');
               if (topic.includes('_schedule')) {
-                ws.send(JSON.stringify({ type: 'subscribe_schedule' }));
+                ws.send(JSON.stringify({ type: 'subscribe_topic', topic: 'schedule' }));
               } else if (topic.includes('_results')) {
-                ws.send(JSON.stringify({ type: 'subscribe_results' }));
+                ws.send(JSON.stringify({ type: 'subscribe_topic', topic: 'results' }));
               } else if (topic.includes('_announcements')) {
-                ws.send(JSON.stringify({ type: 'subscribe_announcements' }));
+                ws.send(JSON.stringify({ type: 'subscribe_topic', topic: 'announcements' }));
               }
             }
-          } else if (onMessage) {
-            onMessage(data);
+          } else {
+            setLastMessage(data);
+            if (onMessage) {
+              onMessage(data);
+            }
           }
         } catch (err) {
           log('Error parsing WebSocket message:', err);
@@ -120,7 +127,10 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
   };
 
   const connectSSE = () => {
-    if (!enableSSEFallback || !user) return;
+    if (!enableSSEFallback) return;
+    
+    // Only connect to notifications if user is authenticated
+    if (!topic.startsWith('event_') && !user) return;
 
     try {
       // Support both event-specific and general SSE endpoints
@@ -145,6 +155,7 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
           const data = JSON.parse(event.data);
           log('SSE message received:', data);
           
+          setLastMessage(data);
           if (onMessage) {
             onMessage(data);
           }
@@ -223,6 +234,15 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
     }
   };
 
+  const subscribe = (subTopic) => {
+    if (!subTopic) return false;
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'subscribe_topic', topic: subTopic }));
+      return true;
+    }
+    return false;
+  };
+
   const ping = () => {
     sendMessage({
       type: 'ping',
@@ -232,7 +252,7 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
 
   // Connect on mount and when user changes
   useEffect(() => {
-    if (user && topic) {
+    if (topic && (topic.startsWith('event_') || user)) {
       connectWebSocket();
     }
 
@@ -252,9 +272,11 @@ export const useLiveChannel = (topic, onMessage, options = {}) => {
     isConnected,
     connectionType,
     error,
+    lastMessage,
     sendMessage,
     ping,
     disconnect,
+    subscribe,
     reconnect: () => {
       disconnect();
       reconnectAttempts.current = 0;

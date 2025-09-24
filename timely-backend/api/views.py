@@ -263,22 +263,24 @@ class EventViewSet(viewsets.ModelViewSet):
     def announce(self, request, pk=None):
         """Send announcement for an event"""
         event = self.get_object()
-        subject = request.data.get('subject')
-        body = request.data.get('body')
-        audience = request.data.get('audience', 'ALL')
+        title = request.data.get('title') or request.data.get('subject')
+        message = request.data.get('message') or request.data.get('body')
+        announcement_type = request.data.get('type', 'GENERAL')
+        priority = request.data.get('priority', 'NORMAL')
         
-        if not subject or not body:
+        if not title or not message:
             return Response(
-                {'error': 'subject and body are required'},
+                {'error': 'title and message are required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         announcement = Announcement.objects.create(
             event=event,
-            subject=subject,
-            body=body,
-            audience=audience,
-            sent_by=request.user
+            title=title,
+            message=message,
+            type=announcement_type,
+            priority=priority,
+            created_by=request.user
         )
         
         return Response({
@@ -1319,7 +1321,7 @@ class PublicMediaListView(APIView):
     permission_classes = [AllowAny]
     
     def get(self, request):
-        queryset = Media.objects.filter(status=Media.Status.APPROVED).select_related('event', 'fixture')
+        queryset = Media.objects.filter(is_approved=True).select_related('event', 'uploaded_by')
         
         # Filter by event if specified
         event_id = request.query_params.get('event')
@@ -1329,10 +1331,10 @@ class PublicMediaListView(APIView):
         # Filter by type if specified
         media_type = request.query_params.get('type')
         if media_type:
-            queryset = queryset.filter(type=media_type)
+            queryset = queryset.filter(media_type=media_type)
         
         # Order by most recent first
-        queryset = queryset.order_by('-approved_at', '-created_at')
+        queryset = queryset.order_by('-created_at')
         
         serializer = PublicMediaSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)

@@ -35,7 +35,6 @@ INSTALLED_APPS = [
 
     # 3rd-party
     "rest_framework",
-    "rest_framework.authtoken",
     "django_filters",
     "drf_spectacular",
     "corsheaders",
@@ -176,6 +175,14 @@ REST_FRAMEWORK = {
         "login": "100/min",
     },
 }
+
+# Relax throttling for local development
+if DEBUG:
+    REST_FRAMEWORK.setdefault("DEFAULT_THROTTLE_CLASSES", [])
+    REST_FRAMEWORK.setdefault("DEFAULT_THROTTLE_RATES", {
+        "user": "1000/min",
+        "anon": "1000/min",
+    })
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Timely API",

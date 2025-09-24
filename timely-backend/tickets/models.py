@@ -30,6 +30,8 @@ class TicketType(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        verbose_name = 'Ticket Type'
+        verbose_name_plural = 'Ticket Types'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['event_id']),
@@ -83,6 +85,8 @@ class TicketOrder(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        verbose_name = 'Ticket Order'
+        verbose_name_plural = 'Ticket Orders'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['user', 'status']),
@@ -120,6 +124,8 @@ class Ticket(models.Model):
     used_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
+        verbose_name = 'Ticket'
+        verbose_name_plural = 'Tickets'
         ordering = ['-issued_at']
         indexes = [
             models.Index(fields=['order']),

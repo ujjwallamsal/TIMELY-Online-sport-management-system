@@ -10,6 +10,7 @@ import EventDetail from '../pages/public/EventDetail.jsx';
 import Media from '../pages/public/Media.jsx';
 import News from '../pages/public/News.jsx';
 import Tickets from '../pages/public/Tickets.jsx';
+import VerifyTicket from '../pages/public/VerifyTicket.jsx';
 import NotFound from '../pages/NotFound.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import AdminDashboard from '../pages/admin/Dashboard.jsx';
@@ -65,7 +66,7 @@ const AdminAccessDenied = () => (
 );
 
 /**
- * Main App Routes Component
+ * Main App Routes Component - Updated
  */
 export default function AppRoutes() {
   const { user, loading } = useAuth();
@@ -116,6 +117,7 @@ export default function AppRoutes() {
         <Route path="/media" element={<Media />} />
         <Route path="/news" element={<News />} />
         <Route path="/tickets" element={<Tickets />} />
+        <Route path="/verify" element={<RequireAuth><VerifyTicket /></RequireAuth>} />
 
         {/* Admin/Organizer dashboard */}
         <Route path="/admin" element={<RequireAuth><RequireRole roles={["ADMIN", "ORGANIZER"]}><AdminDashboard /></RequireRole></RequireAuth>} />

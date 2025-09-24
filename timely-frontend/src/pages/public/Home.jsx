@@ -6,37 +6,52 @@ import {
   ClockIcon, 
   UserGroupIcon,
   TrophyIcon,
-  FireIcon
+  FireIcon,
+  NewspaperIcon,
+  ArrowRightIcon
 } from '@heroicons/react/24/outline';
-import { getPublicEvents } from '../../services/api.js';
+import { publicAPI } from '../../services/api.js';
+import RealtimeAnnouncements from '../../components/RealtimeAnnouncements.jsx';
 
 const Home = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('upcoming');
+  const [news, setNews] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(true);
 
   useEffect(() => {
     fetchEvents();
+    fetchNews();
   }, [filter]);
 
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const response = await getPublicEvents({ status: filter });
-      // Handle both array response and paginated response
-      const eventsData = response.data;
-      if (Array.isArray(eventsData)) {
-        setEvents(eventsData);
-      } else if (eventsData && eventsData.results) {
-        setEvents(eventsData.results);
-      } else {
-        setEvents([]);
-      }
+      // Home: featured events (limit 6) and published
+      const limit = 6;
+      const status = 'published';
+      const { data } = await publicAPI.getEvents({ limit, status });
+      setEvents(Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []));
     } catch (error) {
       console.error('Error fetching events:', error);
       setEvents([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchNews = async () => {
+    try {
+      setNewsLoading(true);
+      const response = await publicAPI.getNews({ page: 1, limit: 3 });
+      const items = response.results || response.data || [];
+      setNews(Array.isArray(items) ? items : []);
+    } catch (error) {
+      console.error('Error fetching news:', error);
+      setNews([]);
+    } finally {
+      setNewsLoading(false);
     }
   };
 
@@ -84,6 +99,14 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Optional Realtime Announcements Banner */}
+      <RealtimeAnnouncements 
+        showInDashboard={false} 
+        maxAnnouncements={1} 
+        autoHide={true}
+        className="max-w-6xl mx-auto px-4 pt-4"
+      />
+      
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -170,7 +193,7 @@ const Home = () => {
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
-                      {event.title}
+                      {event.name}
                     </h3>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
                       {getStatusText(event.status)}
@@ -184,25 +207,25 @@ const Home = () => {
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center text-sm text-gray-500">
                       <CalendarIcon className="h-4 w-4 mr-2" />
-                      {formatDate(event.start_date)}
+                      {formatDate(event.start_datetime)}
                     </div>
                     <div className="flex items-center text-sm text-gray-500">
                       <ClockIcon className="h-4 w-4 mr-2" />
-                      {formatTime(event.start_date)}
+                      {formatTime(event.start_datetime)}
                     </div>
                     <div className="flex items-center text-sm text-gray-500">
                       <MapPinIcon className="h-4 w-4 mr-2" />
-                      {event.venue?.name || 'TBA'}
+                      {event.venue_name || 'TBA'}
                     </div>
                     <div className="flex items-center text-sm text-gray-500">
                       <UserGroupIcon className="h-4 w-4 mr-2" />
-                      {event.sport?.name || 'Sport'}
+                      {event.sport_name || 'Sport'}
                     </div>
                   </div>
                   
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-gray-500">
-                      {event.registration_fee ? `$${event.registration_fee}` : 'Free'}
+                      {event.fee_cents ? `$${(event.fee_cents / 100).toFixed(2)}` : 'Free'}
                     </div>
                     <Link
                       to={`/events/${event.id}`}
@@ -230,6 +253,63 @@ const Home = () => {
           </div>
         )}
       </div>
+
+      {/* Latest News Section */}
+      {news.length > 0 && (
+        <div className="bg-white py-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+                Latest News
+              </h2>
+              <p className="mt-4 text-lg text-gray-600">
+                Stay updated with the latest sports news and announcements
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {news.map((article) => (
+                <article key={article.id} className="bg-gray-50 rounded-lg p-6 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-3">
+                    <NewspaperIcon className="h-5 w-5 text-blue-600" />
+                    <span className="text-sm text-gray-500">
+                      {new Date(article.published_at || article.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2 line-clamp-2">
+                    {article.title}
+                  </h3>
+                  <p className="text-gray-600 mb-4 line-clamp-3">
+                    {article.excerpt || article.content}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-500">
+                      By {article.author?.name || article.author?.username || 'Staff'}
+                    </div>
+                    <Link
+                      to="/news"
+                      className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      Read more
+                      <ArrowRightIcon className="h-4 w-4 ml-1" />
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="text-center mt-8">
+              <Link
+                to="/news"
+                className="inline-flex items-center px-6 py-3 border border-gray-300 rounded-md text-base font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                View All News
+                <ArrowRightIcon className="h-4 w-4 ml-2" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CTA Section */}
       <div className="bg-gray-900">

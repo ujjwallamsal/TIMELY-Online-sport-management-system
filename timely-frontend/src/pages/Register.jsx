@@ -94,7 +94,7 @@ export default function Register() {
             <Input id="password_confirm" name="password_confirm" type="password" autoComplete="new-password" value={form.password_confirm} onChange={handleChange} placeholder="••••••••" error={!!errors.password_confirm} />
             {errors.password_confirm ? <p className="mt-1 text-xs text-red-600">{errors.password_confirm}</p> : null}
           </div>
-          <Button type="submit" className="w-full" size="lg" disabled={loading} loading={loading}>
+          <Button type="submit" className="w-full" size="lg" disabled={loading} isLoading={loading}>
             {loading ? 'Creating account…' : 'Create account'}
           </Button>
         </form>

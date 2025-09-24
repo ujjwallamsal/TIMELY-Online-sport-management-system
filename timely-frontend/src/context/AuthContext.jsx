@@ -80,7 +80,7 @@ export function AuthProvider({ children }) {
 
   const signup = async ({ email, password, password_confirm, first_name = '', last_name = '', role = 'SPECTATOR' }) => {
     try {
-      const data = await api.post('/auth/register', { 
+      const data = await api.post('/auth/register/', { 
         email, 
         password, 
         password_confirm, 

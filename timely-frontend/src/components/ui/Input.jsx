@@ -1,61 +1,48 @@
-import React, { forwardRef } from 'react';
+import React from "react";
 
-const Input = forwardRef(({ 
-  name,
+export default function Input({
+  id,
   label,
+  type = "text",
   error,
-  helperText,
-  className = '',
-  as: Component = 'input',
-  children,
-  value,
-  onChange,
-  required = false,
-  ...props 
-}, ref) => {
-  const baseClasses = 'block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 text-sm';
-  const errorClasses = error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : '';
-  
-  // Handle NaN values for number inputs
-  const safeValue = (typeof value === 'number' && isNaN(value)) ? '' : value;
-  
-  const inputProps = {
-    ...props,
-    name,
-    ...(ref ? { ref } : {}),
-    ...(value !== undefined ? { value: safeValue } : {}),
-    ...(onChange ? { onChange } : {}),
-  };
-  
+  helper,
+  required,
+  disabled,
+  className = "",
+  inputClassName = "",
+  ...props
+}) {
+  const describedBy = [];
+  if (helper) describedBy.push(`${id}-helper`);
+  if (error) describedBy.push(`${id}-error`);
   return (
-    <div className={className}>
+    <div className={`w-full ${className}`}>
       {label && (
-        <label 
-          htmlFor={name}
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
+        <label htmlFor={id} className="mb-1 block text-sm font-medium text-gray-700">
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {required ? <span className="text-red-600"> *</span> : null}
         </label>
       )}
-      <Component 
-        className={`${baseClasses} ${errorClasses}`}
-        {...inputProps}
-      >
-        {children}
-      </Component>
+      <input
+        id={id}
+        type={type}
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={describedBy.join(" ") || undefined}
+        required={required}
+        disabled={disabled}
+        className={`w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 shadow-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:bg-gray-100 ${inputClassName}`}
+        {...props}
+      />
+      {helper && (
+        <p id={`${id}-helper`} className="mt-1 text-xs text-gray-500">
+          {helper}
+        </p>
+      )}
       {error && (
-        <p className="mt-1 text-sm text-red-600">
+        <p id={`${id}-error`} className="mt-1 text-xs text-red-600">
           {error}
         </p>
       )}
-      {helperText && !error && (
-        <p className="mt-1 text-sm text-gray-500">{helperText}</p>
-      )}
     </div>
   );
-});
-
-Input.displayName = 'Input';
-
-export default Input;
+}

@@ -84,6 +84,10 @@ class News(models.Model):
     """
     News articles and announcements with scheduled publishing and SEO.
     """
+    
+    class Meta:
+        verbose_name = 'News'
+        verbose_name_plural = 'News'
     title = models.CharField(
         max_length=200,
         validators=[MinLengthValidator(3)],
