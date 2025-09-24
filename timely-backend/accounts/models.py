@@ -121,11 +121,10 @@ class OrganizerApplication(models.Model):
         APPROVED = "APPROVED", "Approved"
         REJECTED = "REJECTED", "Rejected"
     
-    user = models.ForeignKey(
+    user = models.OneToOneField(
         User, 
         on_delete=models.CASCADE, 
-        related_name='organizer_applications',
-        unique=True  # One active application per user
+        related_name='organizer_application'
     )
     status = models.CharField(
         max_length=20, 

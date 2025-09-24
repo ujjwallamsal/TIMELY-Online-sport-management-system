@@ -84,7 +84,7 @@ class Media(models.Model):
 
     # Core fields
     file = models.FileField(upload_to=media_upload_path, help_text="Media file")
-    media_type = models.CharField(max_length=20, choices=MediaType.choices, help_text="Type of media")
+    media_type = models.CharField(max_length=20, choices=MediaType.choices, default=MediaType.IMAGE, help_text="Type of media")
     
     # Relationships
     event = models.ForeignKey('events.Event', on_delete=models.CASCADE, related_name="media", help_text="Associated event")

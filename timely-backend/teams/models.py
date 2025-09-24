@@ -28,7 +28,7 @@ class Team(models.Model):
         related_name='teams',
         help_text="Event this team participates in"
     )
-    sport = models.CharField(max_length=100, help_text="Sport type")
+    sport = models.CharField(max_length=100, default="General", help_text="Sport type")
     description = models.TextField(blank=True, help_text="Team description")
     is_active = models.BooleanField(default=True, help_text="Whether team is active")
     is_public = models.BooleanField(default=True, help_text="Whether team is public")

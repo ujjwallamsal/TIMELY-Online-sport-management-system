@@ -56,7 +56,13 @@ export function AuthProvider({ children }) {
     try {
       const data = await api.login(email, password);
       
-      // Get user data after successful login
+      // Use user data from login response
+      if (data.user) {
+        setUser(data.user);
+        return data.user;
+      }
+      
+      // Fallback: get user data if not in response
       const userData = await api.getCurrentUser();
       setUser(userData);
       return userData;
