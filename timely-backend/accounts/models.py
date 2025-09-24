@@ -113,6 +113,297 @@ class User(AbstractBaseUser, PermissionsMixin):
         super().save(*args, **kwargs)
 
 
+class AthleteApplication(models.Model):
+    """Model for athlete role applications"""
+    
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+    
+    user = models.OneToOneField(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='athlete_application'
+    )
+    status = models.CharField(
+        max_length=20, 
+        choices=Status.choices, 
+        default=Status.PENDING,
+        db_index=True
+    )
+    
+    # Athlete-specific fields
+    date_of_birth = models.DateField(help_text="Date of birth for age verification")
+    sports = models.JSONField(
+        default=list, 
+        help_text="List of sports the athlete participates in"
+    )
+    id_document = models.FileField(
+        upload_to='athlete_documents/id/',
+        help_text="Government-issued ID document"
+    )
+    medical_clearance = models.FileField(
+        upload_to='athlete_documents/medical/',
+        help_text="Medical clearance certificate"
+    )
+    
+    reason = models.TextField(blank=True, help_text="Reason for application")
+    reviewed_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='reviewed_athlete_applications',
+        limit_choices_to={'is_staff': True}
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'accounts_athlete_application'
+        verbose_name = 'Athlete Application'
+        verbose_name_plural = 'Athlete Applications'
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - Athlete Application ({self.get_status_display()})"
+    
+    def approve(self, reviewer):
+        """Approve the application and upgrade user role"""
+        if self.status == self.Status.APPROVED:
+            return self  # Idempotent - already approved
+        
+        self.status = self.Status.APPROVED
+        self.reviewed_by = reviewer
+        self.reviewed_at = timezone.now()
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+        
+        # Upgrade user role to ATHLETE
+        self.user.role = User.Roles.ATHLETE
+        self.user.is_staff = False  # Athlete is not admin
+        self.user.save(update_fields=['role', 'is_staff', 'updated_at'])
+        
+        # Send realtime notification
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f"user_{self.user.id}",
+                    {
+                        "type": "role_update",
+                        "role": "ATHLETE"
+                    }
+                )
+        except Exception:
+            # Don't fail the approval if realtime fails
+            pass
+        
+        # Send email notification
+        try:
+            from .emails import send_athlete_application_status
+            send_athlete_application_status(self.user, 'APPROVED')
+        except Exception:
+            # Don't fail the approval if email fails
+            pass
+        
+        return self
+    
+    def reject(self, reviewer, reason=""):
+        """Reject the application"""
+        if self.status == self.Status.REJECTED:
+            return self  # Idempotent - already rejected
+        
+        self.status = self.Status.REJECTED
+        self.reviewed_by = reviewer
+        self.reviewed_at = timezone.now()
+        if reason:
+            self.reason = reason
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'reason', 'updated_at'])
+        
+        # Send email notification
+        try:
+            from .emails import send_athlete_application_status
+            send_athlete_application_status(self.user, 'REJECTED', reason)
+        except Exception:
+            # Don't fail the rejection if email fails
+            pass
+        
+        return self
+    
+    def clean(self):
+        """Validate application data"""
+        super().clean()
+        if self.status not in [choice[0] for choice in self.Status.choices]:
+            raise ValidationError({'status': 'Invalid status choice'})
+    
+    def save(self, *args, **kwargs):
+        """Override save to ensure data integrity"""
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class CoachApplication(models.Model):
+    """Model for coach role applications"""
+    
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+    
+    user = models.OneToOneField(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='coach_application'
+    )
+    status = models.CharField(
+        max_length=20, 
+        choices=Status.choices, 
+        default=Status.PENDING,
+        db_index=True
+    )
+    
+    # Coach-specific fields
+    sports = models.JSONField(
+        default=list, 
+        help_text="List of sports the coach can teach"
+    )
+    team_preference = models.CharField(
+        max_length=255, 
+        blank=True, 
+        help_text="Preferred team or organization to coach"
+    )
+    coaching_certificate = models.FileField(
+        upload_to='coach_documents/certificates/',
+        null=True,
+        blank=True,
+        help_text="Coaching certificate or license"
+    )
+    resume = models.FileField(
+        upload_to='coach_documents/resumes/',
+        null=True,
+        blank=True,
+        help_text="Coaching resume or CV"
+    )
+    
+    reason = models.TextField(blank=True, help_text="Reason for application")
+    reviewed_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='reviewed_coach_applications',
+        limit_choices_to={'is_staff': True}
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'accounts_coach_application'
+        verbose_name = 'Coach Application'
+        verbose_name_plural = 'Coach Applications'
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - Coach Application ({self.get_status_display()})"
+    
+    def approve(self, reviewer):
+        """Approve the application and upgrade user role"""
+        if self.status == self.Status.APPROVED:
+            return self  # Idempotent - already approved
+        
+        self.status = self.Status.APPROVED
+        self.reviewed_by = reviewer
+        self.reviewed_at = timezone.now()
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+        
+        # Upgrade user role to COACH
+        self.user.role = User.Roles.COACH
+        self.user.is_staff = False  # Coach is not admin
+        self.user.save(update_fields=['role', 'is_staff', 'updated_at'])
+        
+        # Send realtime notification
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f"user_{self.user.id}",
+                    {
+                        "type": "role_update",
+                        "role": "COACH"
+                    }
+                )
+        except Exception:
+            # Don't fail the approval if realtime fails
+            pass
+        
+        # Send email notification
+        try:
+            from .emails import send_coach_application_status
+            send_coach_application_status(self.user, 'APPROVED')
+        except Exception:
+            # Don't fail the approval if email fails
+            pass
+        
+        return self
+    
+    def reject(self, reviewer, reason=""):
+        """Reject the application"""
+        if self.status == self.Status.REJECTED:
+            return self  # Idempotent - already rejected
+        
+        self.status = self.Status.REJECTED
+        self.reviewed_by = reviewer
+        self.reviewed_at = timezone.now()
+        if reason:
+            self.reason = reason
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'reason', 'updated_at'])
+        
+        # Send email notification
+        try:
+            from .emails import send_coach_application_status
+            send_coach_application_status(self.user, 'REJECTED', reason)
+        except Exception:
+            # Don't fail the rejection if email fails
+            pass
+        
+        return self
+    
+    def clean(self):
+        """Validate application data"""
+        super().clean()
+        if self.status not in [choice[0] for choice in self.Status.choices]:
+            raise ValidationError({'status': 'Invalid status choice'})
+        
+        # Ensure at least one document is provided
+        if not self.coaching_certificate and not self.resume:
+            raise ValidationError({
+                'coaching_certificate': 'Either coaching certificate or resume must be provided',
+                'resume': 'Either coaching certificate or resume must be provided'
+            })
+    
+    def save(self, *args, **kwargs):
+        """Override save to ensure data integrity"""
+        self.clean()
+        super().save(*args, **kwargs)
+
+
 class OrganizerApplication(models.Model):
     """Model for organizer role applications"""
     

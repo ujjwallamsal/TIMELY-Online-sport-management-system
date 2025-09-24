@@ -6,7 +6,8 @@ import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/ui/EmptyState.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
-import useLiveChannel from '../../hooks/useLiveChannel.js';
+// import useLiveChannel from '../../hooks/useLiveChannel.js'; // Not used until team channels are implemented
+import useWebSocket from '../../hooks/useWebSocket.js';
 import { 
   UserGroupIcon, 
   CalendarIcon, 
@@ -57,30 +58,30 @@ export default function CoachDashboard() {
       });
   }, [user?.id, push]);
 
-  // Realtime subscriptions for team updates
-  useLiveChannel(`team_${user?.id}_schedule`, (msg) => {
-    if (msg.type === 'schedule_update') {
-      // Refresh upcoming fixtures
-      api.getEvents({ status: 'UPCOMING' })
-        .then(data => {
-          const items = data.results || data.data || [];
-          setUpcomingFixtures(prev => ({ ...prev, items: items.slice(0, 5) }));
-        })
-        .catch(() => {});
+  // Note: Team-specific realtime channels are not yet implemented in backend
+  // Using event-based channels instead until team channels are available
+
+  // Subscribe to user-specific realtime updates
+  useWebSocket(user ? `/ws/user/${user.id}/` : null, {
+    onMessage: (data) => {
+      if (data?.type === 'fixture_update') {
+        // Refresh fixtures data
+        api.getEvents({ status: 'UPCOMING' })
+          .then(data => {
+            const items = data.results || data.data || [];
+            setUpcomingFixtures(prev => ({ ...prev, items: items.slice(0, 5) }));
+          })
+          .catch(() => {});
+      }
+      if (data?.type === 'announcement' || data?.type === 'notification') {
+        // Handle team announcements
+        console.log('Received team announcement:', data);
+      }
     }
   });
 
-  useLiveChannel(`team_${user?.id}_results`, (msg) => {
-    if (msg.type === 'results_update') {
-      // Refresh recent results
-      api.getEvents({ status: 'COMPLETED' })
-        .then(data => {
-          const items = data.results || data.data || [];
-          setRecentResults(prev => ({ ...prev, items: items.slice(0, 5) }));
-        })
-        .catch(() => {});
-    }
-  });
+  // Note: Team-specific results channels are not yet implemented in backend
+  // Results updates will come through the user WebSocket channel
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {

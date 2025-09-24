@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api.js';
+import { useAuth } from '../../context/AuthContext.jsx';
+import useWebSocket from '../../hooks/useWebSocket.js';
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     totalEvents: 0,
     totalRegistrations: 0,
@@ -17,6 +20,16 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Subscribe to realtime updates for admin
+  useWebSocket(user ? `/ws/user/${user.id}/` : null, {
+    onMessage: (data) => {
+      if (data?.type === 'registration_update' || data?.type === 'fixture_update' || data?.type === 'order_paid') {
+        // Refresh dashboard data on any significant update
+        loadDashboardData();
+      }
+    }
+  });
 
   const loadDashboardData = async () => {
     try {

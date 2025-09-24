@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../services/api.js';
 import { can } from '../../utils/capabilities.js';
+import useWebSocket from '../../hooks/useWebSocket.js';
 
 export default function OrganizerDashboard() {
   const { user } = useAuth();
@@ -20,6 +21,34 @@ export default function OrganizerDashboard() {
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Subscribe to realtime updates for organizer
+  useWebSocket(user ? `/ws/user/${user.id}/` : null, {
+    onMessage: (data) => {
+      if (data?.type === 'registration_update') {
+        // Refresh pending registrations
+        setPendingRegistrations(prev => 
+          prev.map(r => r.id === data.registration_id ? { ...r, status: data.status } : r)
+        );
+        // Update stats
+        setStats(prev => ({
+          ...prev,
+          pendingRegistrations: data.status === 'APPROVED' ? prev.pendingRegistrations - 1 : prev.pendingRegistrations
+        }));
+      }
+      if (data?.type === 'fixture_update') {
+        // Refresh fixtures data
+        loadDashboardData();
+      }
+      if (data?.type === 'announcement') {
+        // Update announcements count
+        setStats(prev => ({
+          ...prev,
+          myAnnouncements: prev.myAnnouncements + 1
+        }));
+      }
+    }
+  });
 
   const loadDashboardData = async () => {
     try {

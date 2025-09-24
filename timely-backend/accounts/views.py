@@ -9,7 +9,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.db import models, transaction
 
-from .models import User, OrganizerApplication
+from .models import User, OrganizerApplication, AthleteApplication, CoachApplication
 from common.models import AuditLog
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -20,7 +20,11 @@ from .serializers import (
     UserProfileUpdateSerializer,
     UserProfileWithKycSerializer,
     OrganizerApplicationSerializer,
-    OrganizerApplicationCreateSerializer
+    OrganizerApplicationCreateSerializer,
+    AthleteApplicationSerializer,
+    AthleteApplicationCreateSerializer,
+    CoachApplicationSerializer,
+    CoachApplicationCreateSerializer
 )
 from .permissions import IsUserManager, IsSelfOrAdmin
 from .auth import set_jwt_cookies, clear_jwt_cookies, CookieJWTAuthentication
@@ -224,6 +228,124 @@ class OrganizerApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         """Reject organizer application (admin only)"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only administrators can reject applications'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        application = self.get_object()
+        reason = request.data.get('reason', '')
+        application.reject(request.user, reason)
+        
+        return Response({'message': 'Application rejected successfully'})
+
+
+class AthleteApplicationViewSet(viewsets.ModelViewSet):
+    """Athlete application management"""
+    queryset = AthleteApplication.objects.all()
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return AthleteApplicationCreateSerializer
+        return AthleteApplicationSerializer
+    
+    def get_queryset(self):
+        """Filter queryset based on user permissions"""
+        if self.request.user.is_superuser:
+            return AthleteApplication.objects.all()
+        return AthleteApplication.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        """Create athlete application for current user"""
+        # Check if user already has a pending application
+        existing_application = AthleteApplication.objects.filter(
+            user=self.request.user,
+            status=AthleteApplication.Status.PENDING
+        ).exists()
+        
+        if existing_application:
+            raise serializers.ValidationError('You already have a pending athlete application')
+        
+        serializer.save(user=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Approve athlete application (admin only)"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only administrators can approve applications'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        application = self.get_object()
+        application.approve(request.user)
+        
+        return Response({'message': 'Application approved successfully'})
+    
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Reject athlete application (admin only)"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only administrators can reject applications'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        application = self.get_object()
+        reason = request.data.get('reason', '')
+        application.reject(request.user, reason)
+        
+        return Response({'message': 'Application rejected successfully'})
+
+
+class CoachApplicationViewSet(viewsets.ModelViewSet):
+    """Coach application management"""
+    queryset = CoachApplication.objects.all()
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CoachApplicationCreateSerializer
+        return CoachApplicationSerializer
+    
+    def get_queryset(self):
+        """Filter queryset based on user permissions"""
+        if self.request.user.is_superuser:
+            return CoachApplication.objects.all()
+        return CoachApplication.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        """Create coach application for current user"""
+        # Check if user already has a pending application
+        existing_application = CoachApplication.objects.filter(
+            user=self.request.user,
+            status=CoachApplication.Status.PENDING
+        ).exists()
+        
+        if existing_application:
+            raise serializers.ValidationError('You already have a pending coach application')
+        
+        serializer.save(user=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Approve coach application (admin only)"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only administrators can approve applications'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        application = self.get_object()
+        application.approve(request.user)
+        
+        return Response({'message': 'Application approved successfully'})
+    
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Reject coach application (admin only)"""
         if not request.user.is_superuser:
             return Response(
                 {'error': 'Only administrators can reject applications'},

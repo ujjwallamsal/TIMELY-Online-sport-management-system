@@ -9,7 +9,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from .models import User, OrganizerApplication
+from .models import User, OrganizerApplication, AthleteApplication, CoachApplication
 from common.models import AuditLog
 
 
@@ -227,6 +227,120 @@ class OrganizerApplicationCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = self.context['request'].user
         return OrganizerApplication.objects.create(
+            user=user,
+            **validated_data
+        )
+
+
+# ------------ Athlete applications ------------
+
+class AthleteApplicationSerializer(serializers.ModelSerializer):
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    user_name = serializers.CharField(source='user.full_name', read_only=True)
+    reviewed_by_email = serializers.CharField(source='reviewed_by.email', read_only=True)
+    
+    class Meta:
+        model = AthleteApplication
+        fields = [
+            'id',
+            'user',
+            'user_email',
+            'user_name',
+            'status',
+            'date_of_birth',
+            'sports',
+            'id_document',
+            'medical_clearance',
+            'reason',
+            'reviewed_by',
+            'reviewed_by_email',
+            'reviewed_at',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = [
+            'id',
+            'user',
+            'reviewed_by',
+            'reviewed_at',
+            'created_at',
+            'updated_at'
+        ]
+
+
+class AthleteApplicationCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AthleteApplication
+        fields = ['date_of_birth', 'sports', 'id_document', 'medical_clearance', 'reason']
+    
+    def validate_sports(self, value):
+        if not value or len(value) == 0:
+            raise serializers.ValidationError("At least one sport must be selected")
+        return value
+    
+    def create(self, validated_data):
+        user = self.context['request'].user
+        return AthleteApplication.objects.create(
+            user=user,
+            **validated_data
+        )
+
+
+# ------------ Coach applications ------------
+
+class CoachApplicationSerializer(serializers.ModelSerializer):
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    user_name = serializers.CharField(source='user.full_name', read_only=True)
+    reviewed_by_email = serializers.CharField(source='reviewed_by.email', read_only=True)
+    
+    class Meta:
+        model = CoachApplication
+        fields = [
+            'id',
+            'user',
+            'user_email',
+            'user_name',
+            'status',
+            'sports',
+            'team_preference',
+            'coaching_certificate',
+            'resume',
+            'reason',
+            'reviewed_by',
+            'reviewed_by_email',
+            'reviewed_at',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = [
+            'id',
+            'user',
+            'reviewed_by',
+            'reviewed_at',
+            'created_at',
+            'updated_at'
+        ]
+
+
+class CoachApplicationCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachApplication
+        fields = ['sports', 'team_preference', 'coaching_certificate', 'resume', 'reason']
+    
+    def validate_sports(self, value):
+        if not value or len(value) == 0:
+            raise serializers.ValidationError("At least one sport must be selected")
+        return value
+    
+    def validate(self, attrs):
+        # Ensure at least one document is provided
+        if not attrs.get('coaching_certificate') and not attrs.get('resume'):
+            raise serializers.ValidationError("Either coaching certificate or resume must be provided")
+        return attrs
+    
+    def create(self, validated_data):
+        user = self.context['request'].user
+        return CoachApplication.objects.create(
             user=user,
             **validated_data
         )

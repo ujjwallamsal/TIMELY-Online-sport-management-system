@@ -103,6 +103,16 @@ export class API {
       
       if (!response.ok) {
         const errorData = await this.parseResponse(response);
+        
+        // Handle 401 Unauthorized - auto-redirect to login
+        if (response.status === 401) {
+          this.setToken(null);
+          // Dispatch a custom event to notify the app about logout
+          window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'unauthorized' } }));
+          // Redirect to login page
+          window.location.href = '/login';
+        }
+        
         throw new APIError(
           errorData.message || `HTTP ${response.status}`,
           response.status,
@@ -256,8 +266,20 @@ export class API {
     return this.post('/auth/refresh/');
   }
 
-  async applyOrganizer() {
-    return this.post('/auth/apply-organizer/');
+  async applyOrganizer(data = {}) {
+    return this.post('/auth/apply-organizer/', data);
+  }
+
+  async applyAthlete(data = {}) {
+    return this.post('/auth/apply-athlete/', data);
+  }
+
+  async applyCoach(data = {}) {
+    return this.post('/auth/apply-coach/', data);
+  }
+
+  async getUserApplications() {
+    return this.get('/auth/applications/');
   }
 
   // Events endpoints
@@ -384,20 +406,20 @@ export class API {
 
   // News endpoints
   async getNews(params = {}) {
-    return this.get('/news/public/news/', params);
+    return this.get('/news/', params);
   }
 
   async getNewsItem(slugOrId) {
-    return this.get(`/news/public/news/${slugOrId}/`);
+    return this.get(`/news/${slugOrId}/`);
   }
 
   // Gallery endpoints
   async getAlbums(params = {}) {
-    return this.get('/gallery/public/albums/', params);
+    return this.get('/gallery/albums/', params);
   }
 
   async getMedia(params = {}) {
-    return this.get('/gallery/public/media/', params);
+    return this.get('/gallery/media/', params);
   }
 
   // Notifications endpoints

@@ -39,6 +39,9 @@ export default function AppLayout({ children }) {
         links.push({ href: '/admin/reports', label: 'System Reports' });
       }
       
+      // Add My Tickets for admins too
+      links.push({ href: '/my-tickets', label: 'My Tickets' });
+      
       return links;
     }
     if (role === 'ORGANIZER') {
@@ -66,6 +69,9 @@ export default function AppLayout({ children }) {
         links.push({ href: '/organizer/announcements', label: 'My Announcements' });
       }
       
+      // Add My Tickets for organizers too
+      links.push({ href: '/my-tickets', label: 'My Tickets' });
+      
       return links;
     }
     if (role === 'COACH') {
@@ -73,6 +79,7 @@ export default function AppLayout({ children }) {
         { href: '/', label: 'Home' },
         { href: '/coach', label: 'Coach Dashboard' },
         { href: '/events', label: 'Events' },
+        { href: '/my-tickets', label: 'My Tickets' },
         { href: '/news', label: 'News' },
         { href: '/media', label: 'Gallery' },
       ];
@@ -82,7 +89,7 @@ export default function AppLayout({ children }) {
         { href: '/', label: 'Home' },
         { href: '/athlete', label: 'Athlete Dashboard' },
         { href: '/events', label: 'Events' },
-        { href: '/tickets', label: 'My Tickets' },
+        { href: '/my-tickets', label: 'My Tickets' },
         { href: '/news', label: 'News' },
         { href: '/media', label: 'Gallery' },
       ];
@@ -94,6 +101,7 @@ export default function AppLayout({ children }) {
       { href: '/news', label: 'News' },
       { href: '/media', label: 'Gallery' },
       { href: '/tickets', label: 'Tickets' },
+      { href: '/upgrade', label: 'Upgrade Center' },
     ];
   }, [user, role]);
 
@@ -173,7 +181,7 @@ export default function AppLayout({ children }) {
                   {user && can(user.role, 'system_settings') && (
                     <a href="/admin/" className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Django Admin</a>
                   )}
-                  <a href="/athlete/profile" className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Profile</a>
+                  <a href="/profile" className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Profile</a>
                   <button onClick={logout} className="mt-1 w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Sign out</button>
                 </div>
               )}

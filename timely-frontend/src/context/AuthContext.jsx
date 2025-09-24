@@ -56,6 +56,18 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     checkAuthStatus();
+    
+    // Listen for logout events from API service (e.g., 401 responses)
+    const handleLogout = (event) => {
+      setUser(null);
+      setLoading(false);
+    };
+    
+    window.addEventListener('auth:logout', handleLogout);
+    
+    return () => {
+      window.removeEventListener('auth:logout', handleLogout);
+    };
   }, []);
 
   const checkAuthStatus = async () => {

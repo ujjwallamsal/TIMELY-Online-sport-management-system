@@ -2,6 +2,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from content.views import PublicNewsViewSet
+from gallery.views import PublicGalleryAlbumViewSet, PublicGalleryMediaViewSet
 
 # Create unified router for all API endpoints
 router = DefaultRouter()
@@ -20,6 +22,11 @@ router.register(r'results', views.ResultViewSet, basename='result')
 router.register(r'announcements', views.AnnouncementViewSet, basename='announcement')
 router.register(r'reports', views.ReportViewSet, basename='report')
 
+# Public read-only endpoints required for portal
+router.register(r'news', PublicNewsViewSet, basename='public-news')
+router.register(r'gallery/albums', PublicGalleryAlbumViewSet, basename='public-gallery-albums')
+router.register(r'gallery/media', PublicGalleryMediaViewSet, basename='public-gallery-media')
+
 urlpatterns = [
     # Health check
     path('health/', views.HealthView.as_view(), name='health'),
@@ -31,11 +38,17 @@ urlpatterns = [
     path('auth/register/', views.RegisterView.as_view(), name='auth-register'),
     path('me/', views.MeView.as_view(), name='me'),
 
+    # Include app-specific endpoints FIRST (before router to avoid conflicts)
+    path('tickets/', include('tickets.urls')),
+    
+    # Role application endpoints
+    path('auth/apply-athlete/', views.ApplyAthleteView.as_view(), name='apply-athlete'),
+    path('auth/apply-coach/', views.ApplyCoachView.as_view(), name='apply-coach'),
+    path('auth/apply-organizer/', views.ApplyOrganizerView.as_view(), name='apply-organizer'),
+    path('auth/applications/', views.UserApplicationsView.as_view(), name='user-applications'),
+    
     # Include router URLs (main API endpoints)
     path('', include(router.urls)),
-    
-    # Include app-specific endpoints
-    path('tickets/', include('tickets.urls')),
     path('notifications/', include('notifications.urls')),
     # path('', include('accounts.urls')),
     # path('venues/', include('venues.urls')),
@@ -67,9 +80,6 @@ urlpatterns = [
     path('public/media/', views.PublicMediaListView.as_view(), name='public-media-list'),
     path('public/stats/', views.PublicStatsView.as_view(), name='public-stats'),
     
-    # Content (pages/news/banners)
-    path('news/', include('content.urls')),
-
-    # Gallery
-    path('gallery/', include('gallery.urls')),
+    # Content and Gallery admin/public routers are not mounted here to avoid
+    # duplicating routes; public endpoints are registered above on the main router.
 ]

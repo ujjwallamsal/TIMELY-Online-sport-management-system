@@ -91,6 +91,28 @@ def handle_payment_succeeded(event):
                 ticket_type.quantity_sold += 1
                 ticket_type.save()
             
+            # Send realtime notification
+            try:
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f"user_{order.user.id}",
+                        {
+                            "type": "order_paid",
+                            "order_id": order.id,
+                            "status": "PAID",
+                            "total_cents": order.total_cents,
+                            "currency": order.currency,
+                            "event_name": order.event.name
+                        }
+                    )
+            except Exception:
+                # Don't fail the webhook for realtime errors
+                pass
+            
             # Send confirmation email
             try:
                 order_data = {

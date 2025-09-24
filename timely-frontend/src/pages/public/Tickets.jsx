@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useToast } from '../../components/ui/Toast.jsx';
 import api from '../../services/api.js';
+import { loadStripe } from '@stripe/stripe-js';
 
 export default function Tickets() {
   const { user } = useAuth();
+  const { push } = useToast();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
 
   useEffect(() => {
     loadEvents();
@@ -18,14 +23,50 @@ export default function Tickets() {
       setLoading(true);
       setError(null);
       
-      // Load events that have fees (purchasable)
+      // Load upcoming events; logged-in sees full list, logged-out sees public list
       const data = user ? await api.getEvents() : await api.getPublicEvents();
-      const purchasableEvents = (data.results || data).filter(event => event.fee_cents > 0);
-      setEvents(purchasableEvents);
+      const items = (data.results || data) || [];
+      // Sort: paid first (fee_cents > 0), then by start time
+      const sorted = items
+        .slice()
+        .sort((a, b) => {
+          const aPaid = (a.fee_cents || 0) > 0 ? 0 : 1;
+          const bPaid = (b.fee_cents || 0) > 0 ? 0 : 1;
+          if (aPaid !== bPaid) return aPaid - bPaid;
+          return new Date(a.start_datetime) - new Date(b.start_datetime);
+        });
+      setEvents(sorted);
     } catch (err) {
       setError(err.message || 'Failed to load events');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBuyOrGet = async (eventId, feeCents) => {
+    if (!user) {
+      window.location.href = '/login';
+      return;
+    }
+    try {
+      setProcessingId(eventId);
+      if ((feeCents || 0) > 0) {
+        const result = await api.createCheckoutSession(eventId);
+        if (result.session_id) {
+          const stripe = await loadStripe(import.meta.env.VITE_STRIPE_PK);
+          if (!stripe) throw new Error('Stripe failed to load');
+          const { error } = await stripe.redirectToCheckout({ sessionId: result.session_id });
+          if (error) throw new Error(error.message);
+        } else {
+          throw new Error('No session_id received');
+        }
+      } else {
+        await api.createRegistration({ event: eventId });
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to initiate ticket flow');
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -52,6 +93,77 @@ export default function Tickets() {
         {status}
       </span>
     );
+  };
+
+  const handleBuyTicket = async (event) => {
+    if (!user) {
+      push({ type: 'error', title: 'Login Required', message: 'Please log in to purchase tickets.' });
+      return;
+    }
+
+    setProcessing(true);
+    setProcessingId(event.id);
+
+    try {
+      // Create checkout session
+      const stripe = await loadStripe(import.meta.env.VITE_STRIPE_PK);
+      if (!stripe) {
+        throw new Error('Stripe failed to load');
+      }
+
+      const checkoutSession = await api.createCheckoutSession(event.id);
+      
+      // Redirect to Stripe Checkout
+      const { error } = await stripe.redirectToCheckout({
+        sessionId: checkoutSession.session_id,
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (err) {
+      push({ 
+        type: 'error', 
+        title: 'Purchase Failed', 
+        message: err.message || 'Failed to process ticket purchase. Please try again.' 
+      });
+    } finally {
+      setProcessing(false);
+      setProcessingId(null);
+    }
+  };
+
+  const handleGetFreeTicket = async (event) => {
+    if (!user) {
+      push({ type: 'error', title: 'Login Required', message: 'Please log in to get free tickets.' });
+      return;
+    }
+
+    setProcessing(true);
+    setProcessingId(event.id);
+
+    try {
+      // For free events, we can create a direct registration/ticket
+      const response = await api.post(`/events/${event.id}/register/`);
+      
+      push({ 
+        type: 'success', 
+        title: 'Ticket Secured!', 
+        message: 'Your free ticket has been secured. Check your dashboard for details.' 
+      });
+      
+      // Reload events to update availability
+      loadEvents();
+    } catch (err) {
+      push({ 
+        type: 'error', 
+        title: 'Registration Failed', 
+        message: err.message || 'Failed to secure your free ticket. Please try again.' 
+      });
+    } finally {
+      setProcessing(false);
+      setProcessingId(null);
+    }
   };
 
   if (loading) {
@@ -115,20 +227,6 @@ export default function Tickets() {
           )}
         </div>
 
-        {/* Coming Soon Notice */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
-          <div className="flex items-center">
-            <svg className="h-6 w-6 text-yellow-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div>
-              <h3 className="text-lg font-semibold text-yellow-900">Ticket System Coming Soon</h3>
-              <p className="text-yellow-800">
-                We're currently working on our ticketing system. For now, you can request access to events and organizers will approve your requests.
-              </p>
-            </div>
-          </div>
-        </div>
 
         {/* Error Display */}
         {error && (
@@ -198,17 +296,30 @@ export default function Tickets() {
                   
                   <div className="flex items-center justify-between">
                     <div className="text-2xl font-bold text-gray-900">
-                      ${(event.fee_cents / 100).toFixed(2)}
+                      {event.fee_cents > 0 ? `$${(event.fee_cents / 100).toFixed(2)}` : 'FREE'}
                     </div>
-                    <Link
-                      to={`/events/${event.id}`}
-                      className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-500"
-                    >
-                      View Details
-                      <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => event.fee_cents > 0 ? handleBuyTicket(event) : handleGetFreeTicket(event)}
+                        disabled={processingId === event.id}
+                        className={`inline-flex items-center text-sm font-medium text-white px-3 py-2 rounded-md disabled:opacity-50 ${
+                          event.fee_cents > 0 
+                            ? 'bg-blue-600 hover:bg-blue-700' 
+                            : 'bg-green-600 hover:bg-green-700'
+                        }`}
+                      >
+                        {processingId === event.id ? 'Processing...' : (event.fee_cents > 0 ? 'Buy Ticket' : 'Get Ticket')}
+                      </button>
+                      <Link
+                        to={`/events/${event.id}`}
+                        className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-500"
+                      >
+                        View Details
+                        <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -219,7 +330,7 @@ export default function Tickets() {
         {/* Additional Info */}
         <div className="mt-12 bg-gray-100 rounded-lg p-8">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">How It Works</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">How Ticketing Works</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="text-center">
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -232,15 +343,15 @@ export default function Tickets() {
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl font-bold text-blue-600">2</span>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Request Access</h3>
-                <p className="text-gray-600">Request a ticket for events that require approval</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Purchase or Get Free</h3>
+                <p className="text-gray-600">Buy tickets for paid events or get free tickets for free events</p>
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl font-bold text-blue-600">3</span>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Get Approved</h3>
-                <p className="text-gray-600">Organizers will review and approve your request</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Enjoy the Event</h3>
+                <p className="text-gray-600">Access your tickets in your dashboard and enjoy the event</p>
               </div>
             </div>
           </div>

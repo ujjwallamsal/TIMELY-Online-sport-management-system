@@ -39,7 +39,11 @@ from registrations.models import Registration
 from fixtures.models import Fixture
 from results.models import Result, LeaderboardEntry
 # from notifications.models import Notification  # Disabled for minimal boot profile
-from accounts.models import User
+from accounts.models import User, AthleteApplication, CoachApplication, OrganizerApplication
+from accounts.serializers import (
+    AthleteApplicationCreateSerializer, CoachApplicationCreateSerializer, OrganizerApplicationCreateSerializer,
+    AthleteApplicationSerializer, CoachApplicationSerializer, OrganizerApplicationSerializer
+)
 from events.models import Announcement
 
 # Import gallery models and serializers for media endpoints
@@ -1429,3 +1433,139 @@ class PublicMediaListView(APIView):
         
         serializer = PublicMediaSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
+
+
+# ===== ROLE APPLICATION VIEWS =====
+
+class ApplyAthleteView(APIView):
+    """Apply for athlete role"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        # Check if user is already an athlete or has higher role
+        if request.user.role in ['ATHLETE', 'COACH', 'ORGANIZER', 'ADMIN']:
+            return Response(
+                {'error': 'You already have an athlete role or higher'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user already has a pending application
+        existing_application = AthleteApplication.objects.filter(
+            user=request.user,
+            status=AthleteApplication.Status.PENDING
+        ).exists()
+        
+        if existing_application:
+            return Response(
+                {'error': 'You already have a pending athlete application'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = AthleteApplicationCreateSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            application = serializer.save()
+            response_serializer = AthleteApplicationSerializer(application)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ApplyCoachView(APIView):
+    """Apply for coach role"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        # Check if user is already a coach or has higher role
+        if request.user.role in ['COACH', 'ORGANIZER', 'ADMIN']:
+            return Response(
+                {'error': 'You already have a coach role or higher'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user already has a pending application
+        existing_application = CoachApplication.objects.filter(
+            user=request.user,
+            status=CoachApplication.Status.PENDING
+        ).exists()
+        
+        if existing_application:
+            return Response(
+                {'error': 'You already have a pending coach application'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = CoachApplicationCreateSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            application = serializer.save()
+            response_serializer = CoachApplicationSerializer(application)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ApplyOrganizerView(APIView):
+    """Apply for organizer role"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        # Check if user is already an organizer or admin
+        if request.user.role in ['ORGANIZER', 'ADMIN']:
+            return Response(
+                {'error': 'You already have an organizer role or higher'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user already has a pending application
+        existing_application = OrganizerApplication.objects.filter(
+            user=request.user,
+            status=OrganizerApplication.Status.PENDING
+        ).exists()
+        
+        if existing_application:
+            return Response(
+                {'error': 'You already have a pending organizer application'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = OrganizerApplicationCreateSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            application = serializer.save()
+            response_serializer = OrganizerApplicationSerializer(application)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserApplicationsView(APIView):
+    """Get current user's role applications"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        applications = {
+            'athlete': None,
+            'coach': None,
+            'organizer': None
+        }
+        
+        # Get athlete application if exists
+        try:
+            athlete_app = AthleteApplication.objects.get(user=request.user)
+            applications['athlete'] = AthleteApplicationSerializer(athlete_app).data
+        except AthleteApplication.DoesNotExist:
+            pass
+        
+        # Get coach application if exists
+        try:
+            coach_app = CoachApplication.objects.get(user=request.user)
+            applications['coach'] = CoachApplicationSerializer(coach_app).data
+        except CoachApplication.DoesNotExist:
+            pass
+        
+        # Get organizer application if exists
+        try:
+            organizer_app = OrganizerApplication.objects.get(user=request.user)
+            applications['organizer'] = OrganizerApplicationSerializer(organizer_app).data
+        except OrganizerApplication.DoesNotExist:
+            pass
+        
+        return Response(applications)

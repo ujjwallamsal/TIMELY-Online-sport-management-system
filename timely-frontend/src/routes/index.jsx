@@ -39,6 +39,8 @@ import AthleteDashboard from '../pages/athlete/Dashboard.jsx';
 import AthleteProfile from '../pages/athlete/Profile.jsx';
 import Profile from '../pages/Profile.jsx';
 import CoachDashboard from '../pages/coach/Dashboard.jsx';
+import MyTickets from '../pages/user/MyTickets.jsx';
+import UpgradeCenter from '../pages/public/UpgradeCenter.jsx';
 
 /**
  * SkipLink component for accessibility
@@ -128,6 +130,7 @@ export default function AppRoutes() {
         <Route path="/events" element={<Events />} />
         <Route path="/events/:id" element={<EventDetail />} />
         <Route path="/tickets" element={<Tickets />} />
+        <Route path="/upgrade" element={<UpgradeCenter />} />
         <Route path="/news" element={<News />} />
         <Route path="/news/:slug" element={<NewsItem />} />
         <Route path="/media" element={<Media />} />
@@ -299,6 +302,18 @@ export default function AppRoutes() {
             <RequireAuth>
               <RequireRole roles={["SPECTATOR", "ATHLETE", "COACH", "ORGANIZER", "ADMIN"]}>
                 <Profile />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        {/* My Tickets - available to all logged-in users */}
+        <Route
+          path="/my-tickets"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["SPECTATOR", "ATHLETE", "COACH", "ORGANIZER", "ADMIN"]}>
+                <MyTickets />
               </RequireRole>
             </RequireAuth>
           }

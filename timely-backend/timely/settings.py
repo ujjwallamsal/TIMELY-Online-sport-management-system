@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "gallery",
     "content",
     "notifications",
+    "ticketing",
     "tickets",
     "reports",
 ]

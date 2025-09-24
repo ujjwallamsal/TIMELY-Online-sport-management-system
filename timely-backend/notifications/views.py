@@ -136,6 +136,30 @@ class AnnouncementView(APIView):
             )
             notifications.append(notification)
             
+            # Send realtime notification
+            try:
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f"user_{user.id}",
+                        {
+                            "type": "announcement",
+                            "id": notification.id,
+                            "title": notification.title,
+                            "body": notification.body,
+                            "kind": notification.kind,
+                            "topic": notification.topic,
+                            "link_url": notification.link_url,
+                            "created_at": notification.created_at.isoformat()
+                        }
+                    )
+            except Exception:
+                # Don't fail the announcement for realtime errors
+                pass
+            
             # Send email/SMS (stubs)
             send_notification_email(notification)
             send_notification_sms(notification)
