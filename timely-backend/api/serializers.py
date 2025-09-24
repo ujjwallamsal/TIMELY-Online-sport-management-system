@@ -8,7 +8,7 @@ from teams.models import Team, TeamMember
 from registrations.models import Registration
 from fixtures.models import Fixture
 from results.models import Result, LeaderboardEntry
-from notifications.models import Notification
+# from notifications.models import Notification  # Disabled for minimal boot profile
 from events.models import Announcement
 
 
@@ -207,15 +207,15 @@ class LeaderboardEntrySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class NotificationSerializer(serializers.ModelSerializer):
-    """Notification serializer"""
-    class Meta:
-        model = Notification
-        fields = [
-            'id', 'user', 'title', 'message', 'kind', 'is_read', 'data',
-            'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+# class NotificationSerializer(serializers.ModelSerializer):
+#     """Notification serializer - disabled for minimal boot profile"""
+#     class Meta:
+#         model = Notification
+#         fields = [
+#             'id', 'user', 'title', 'message', 'kind', 'is_read', 'data',
+#             'created_at', 'updated_at'
+#         ]
+#         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):

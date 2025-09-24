@@ -1,142 +1,151 @@
 # events/sse_views.py
 """
-Server-Sent Events (SSE) fallback endpoints for real-time updates.
-Provides HTTP-based real-time updates when WebSockets are not available.
+Lean SSE fallback endpoints for real-time updates when WebSockets aren't available.
 """
 import json
 import time
-import asyncio
 from django.http import StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.utils.decorators import method_decorator
-from django.views import View
-from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from django.db import models
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
+from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Event
-from results.services import compute_event_leaderboard
-from results.models import Result
+from results.models import Result, LeaderboardEntry
 from fixtures.models import Fixture
 
 
-class SSEEventStreamView(View):
-    """SSE endpoint for event-specific updates"""
-    
-    def get(self, request, event_id):
-        """Stream event updates via SSE"""
-        try:
-            event = Event.objects.get(id=event_id)
-        except Event.DoesNotExist:
-            return Response(
-                {"error": "Event not found"}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Check permissions
-        if not self._can_view_event(request.user, event):
-            return Response(
-                {"error": "Permission denied"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        def event_generator():
-            """Generate SSE events"""
-            channel_layer = get_channel_layer()
-            group_name = f'event_{event_id}'
-            
-            # Send initial connection event
-            yield f"data: {json.dumps({'type': 'connected', 'event_id': event_id})}\n\n"
-            
-            # Listen for updates from the channel layer
-            while True:
-                try:
-                    # This is a simplified version - in production you'd want to use
-                    # a proper message queue or Redis pub/sub
-                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': timezone.now().isoformat()})}\n\n"
-                    time.sleep(30)  # Send heartbeat every 30 seconds
-                except Exception as e:
-                    yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-                    break
-        
-        response = StreamingHttpResponse(
-            event_generator(),
-            content_type='text/event-stream'
-        )
-        response['Cache-Control'] = 'no-cache'
-        response['Connection'] = 'keep-alive'
-        response['Access-Control-Allow-Origin'] = '*'
-        response['Access-Control-Allow-Headers'] = 'Cache-Control'
-        return response
-    
-    def _can_view_event(self, user, event):
-        """Check if user can view the event"""
-        if event.visibility == 'PUBLIC':
-            return True
-        if user.is_authenticated:
-            # Add more permission logic here
-            return True
-        return False
-
-
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def event_results_sse(request, event_id):
-    """SSE endpoint for event results updates"""
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        return Response(
-            {"error": "Event not found"}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
+@permission_classes([AllowAny])
+@csrf_exempt
+def event_stream_sse(request, event_id):
+    """SSE endpoint for event heartbeat and future hooks"""
+    event = get_object_or_404(Event, id=event_id)
     
-    def results_generator():
-        """Generate results updates"""
-        # Send initial leaderboard
-        leaderboard = compute_event_leaderboard(event_id)
-        yield f"data: {json.dumps({'type': 'leaderboard_update', 'data': leaderboard})}\n\n"
+    def event_generator():
+        """Generate SSE heartbeat events"""
+        # Send initial connection event
+        yield f"data: {json.dumps({'type': 'connected', 'event_id': event_id, 'event_name': event.name})}\n\n"
         
-        # Monitor for result changes
-        last_update = timezone.now()
+        # Heartbeat loop - no infinite busy loop
         while True:
             try:
-                # Check for new results
-                recent_results = Result.objects.filter(
-                    fixture__event_id=event_id,
-                    updated_at__gt=last_update
-                ).select_related('fixture', 'fixture__home', 'fixture__away')
-                
-                if recent_results.exists():
-                    # Recompute leaderboard
-                    leaderboard = compute_event_leaderboard(event_id)
-                    yield f"data: {json.dumps({'type': 'leaderboard_update', 'data': leaderboard})}\n\n"
-                    
-                    # Send individual result updates
-                    for result in recent_results:
-                        result_data = {
-                            'fixture_id': result.fixture.id,
-                            'home_score': result.home_score,
-                            'away_score': result.away_score,
-                            'winner': result.winner.id if result.winner else None,
-                            'finalized_at': result.finalized_at.isoformat() if result.finalized_at else None
-                        }
-                        yield f"data: {json.dumps({'type': 'result_update', 'data': result_data})}\n\n"
-                    
-                    last_update = timezone.now()
-                
-                time.sleep(5)  # Check every 5 seconds
+                heartbeat_data = {
+                    'type': 'heartbeat',
+                    'timestamp': timezone.now().isoformat(),
+                    'event_id': event_id,
+                    'event_status': event.status
+                }
+                yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                time.sleep(30)  # Sleep 30s between heartbeats
                 
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
                 break
+    
+    response = StreamingHttpResponse(
+        event_generator(),
+        content_type='text/event-stream'
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['Connection'] = 'keep-alive'
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Headers'] = 'Cache-Control'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@csrf_exempt
+def event_results_stream_sse(request, event_id):
+    """SSE endpoint for leaderboard and result updates"""
+    event = get_object_or_404(Event, id=event_id)
+    
+    def results_generator():
+        """Generate results and leaderboard updates"""
+        try:
+            # Send initial leaderboard
+            leaderboard = LeaderboardEntry.objects.filter(
+                event=event
+            ).select_related('team').order_by('-points', '-goal_difference', '-goals_for')
+            
+            leaderboard_data = []
+            for i, entry in enumerate(leaderboard):
+                leaderboard_data.append({
+                    'position': i + 1,
+                    'team_id': entry.team.id,
+                    'team_name': entry.team.name,
+                    'points': entry.points,
+                    'played': entry.matches_played,
+                    'won': entry.wins,
+                    'drawn': entry.draws,
+                    'lost': entry.losses,
+                    'goals_for': entry.goals_for,
+                    'goals_against': entry.goals_against,
+                    'goal_difference': entry.goal_difference
+                })
+            
+            yield f"data: {json.dumps({'type': 'leaderboard_update', 'data': leaderboard_data})}\n\n"
+            
+            # Monitor for result changes
+            last_check = timezone.now()
+            while True:
+                try:
+                    # Check for new results every 15 seconds
+                    time.sleep(15)
+                    
+                    recent_results = Result.objects.filter(
+                        fixture__event=event,
+                        verified_at__gt=last_check
+                    ).select_related('fixture', 'fixture__home', 'fixture__away')
+                    
+                    if recent_results.exists():
+                        # Send individual result updates
+                        for result in recent_results:
+                            result_data = {
+                                'fixture_id': result.fixture.id,
+                                'home_team': result.fixture.home.name if result.fixture.home else 'TBD',
+                                'away_team': result.fixture.away.name if result.fixture.away else 'TBD',
+                                'home_score': result.home_score,
+                                'away_score': result.away_score,
+                                'winner': result.winner.name if result.winner else None,
+                                'verified_at': result.verified_at.isoformat()
+                            }
+                            yield f"data: {json.dumps({'type': 'result_update', 'data': result_data})}\n\n"
+                        
+                        # Recompute and send updated leaderboard
+                        leaderboard = LeaderboardEntry.objects.filter(
+                            event=event
+                        ).select_related('team').order_by('-points', '-goal_difference', '-goals_for')
+                        
+                        leaderboard_data = []
+                        for i, entry in enumerate(leaderboard):
+                            leaderboard_data.append({
+                                'position': i + 1,
+                                'team_id': entry.team.id,
+                                'team_name': entry.team.name,
+                                'points': entry.points,
+                                'played': entry.matches_played,
+                                'won': entry.wins,
+                                'drawn': entry.draws,
+                                'lost': entry.losses,
+                                'goals_for': entry.goals_for,
+                                'goals_against': entry.goals_against,
+                                'goal_difference': entry.goal_difference
+                            })
+                        
+                        yield f"data: {json.dumps({'type': 'leaderboard_update', 'data': leaderboard_data})}\n\n"
+                        last_check = timezone.now()
+                        
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                    break
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
     response = StreamingHttpResponse(
         results_generator(),
@@ -144,136 +153,6 @@ def event_results_sse(request, event_id):
     )
     response['Cache-Control'] = 'no-cache'
     response['Connection'] = 'keep-alive'
-    return response
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def event_schedule_sse(request, event_id):
-    """SSE endpoint for event schedule updates"""
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        return Response(
-            {"error": "Event not found"}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
-    def schedule_generator():
-        """Generate schedule updates"""
-        # Send initial schedule
-        fixtures = Fixture.objects.filter(event_id=event_id).select_related('home', 'away', 'venue')
-        schedule_data = []
-        for fixture in fixtures:
-            schedule_data.append({
-                'id': fixture.id,
-                'home_team': fixture.home.name if fixture.home else None,
-                'away_team': fixture.away.name if fixture.away else None,
-                'start_at': fixture.start_at.isoformat(),
-                'venue': fixture.venue.name if fixture.venue else None,
-                'status': fixture.status,
-                'round': fixture.round,
-                'phase': fixture.phase
-            })
-        
-        yield f"data: {json.dumps({'type': 'schedule_update', 'data': schedule_data})}\n\n"
-        
-        # Monitor for schedule changes
-        last_update = timezone.now()
-        while True:
-            try:
-                # Check for fixture changes
-                recent_fixtures = Fixture.objects.filter(
-                    event_id=event_id,
-                    updated_at__gt=last_update
-                ).select_related('home', 'away', 'venue')
-                
-                if recent_fixtures.exists():
-                    # Send updated schedule
-                    schedule_data = []
-                    for fixture in Fixture.objects.filter(event_id=event_id).select_related('home', 'away', 'venue'):
-                        schedule_data.append({
-                            'id': fixture.id,
-                            'home_team': fixture.home.name if fixture.home else None,
-                            'away_team': fixture.away.name if fixture.away else None,
-                            'start_at': fixture.start_at.isoformat(),
-                            'venue': fixture.venue.name if fixture.venue else None,
-                            'status': fixture.status,
-                            'round': fixture.round,
-                            'phase': fixture.phase
-                        })
-                    
-                    yield f"data: {json.dumps({'type': 'schedule_update', 'data': schedule_data})}\n\n"
-                    last_update = timezone.now()
-                
-                time.sleep(10)  # Check every 10 seconds
-                
-            except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-                break
-    
-    response = StreamingHttpResponse(
-        schedule_generator(),
-        content_type='text/event-stream'
-    )
-    response['Cache-Control'] = 'no-cache'
-    response['Connection'] = 'keep-alive'
-    return response
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def team_updates_sse(request, team_id):
-    """SSE endpoint for team-specific updates"""
-    try:
-        from teams.models import Team
-        team = Team.objects.get(id=team_id)
-    except Team.DoesNotExist:
-        return Response(
-            {"error": "Team not found"}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
-    def team_generator():
-        """Generate team updates"""
-        # Send initial team data
-        yield f"data: {json.dumps({'type': 'team_connected', 'team_id': team_id, 'team_name': team.name})}\n\n"
-        
-        # Monitor for team-related updates
-        last_update = timezone.now()
-        while True:
-            try:
-                # Check for fixture updates for this team
-                recent_fixtures = Fixture.objects.filter(
-                    models.Q(home_id=team_id) | models.Q(away_id=team_id),
-                    updated_at__gt=last_update
-                ).select_related('home', 'away', 'venue', 'event')
-                
-                if recent_fixtures.exists():
-                    for fixture in recent_fixtures:
-                        fixture_data = {
-                            'fixture_id': fixture.id,
-                            'home_team': fixture.home.name if fixture.home else None,
-                            'away_team': fixture.away.name if fixture.away else None,
-                            'start_at': fixture.start_at.isoformat(),
-                            'venue': fixture.venue.name if fixture.venue else None,
-                            'status': fixture.status,
-                            'event_id': fixture.event.id
-                        }
-                        yield f"data: {json.dumps({'type': 'fixture_update', 'data': fixture_data})}\n\n"
-                    
-                    last_update = timezone.now()
-                
-                time.sleep(10)  # Check every 10 seconds
-                
-            except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-                break
-    
-    response = StreamingHttpResponse(
-        team_generator(),
-        content_type='text/event-stream'
-    )
-    response['Cache-Control'] = 'no-cache'
-    response['Connection'] = 'keep-alive'
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Headers'] = 'Cache-Control'
     return response

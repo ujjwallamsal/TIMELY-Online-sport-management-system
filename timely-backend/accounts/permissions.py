@@ -1,28 +1,9 @@
 # accounts/permissions.py
 from rest_framework import permissions
-from .models import UserRole
 from teams.models import Team, TeamMember
 from events.models import Event
 from fixtures.models import Fixture
 from results.models import Result
-
-# Import the new comprehensive RBAC permissions
-from .rbac_permissions import (
-    OrganizerPermissions,
-    CoachPermissions, 
-    AthletePermissions,
-    SpectatorPermissions,
-    MultiRolePermissions,
-    PublicReadOnlyPermission,
-    AdminSensitiveActionPermission,
-    OrganizerOrAdminPermission,
-    CoachOrAdminPermission,
-    AthleteOrAdminPermission,
-    SpectatorOrAdminPermission,
-    PublicOrAuthenticatedPermission,
-    MultiRoleWithOrganizerPermission,
-    MultiRoleWithCoachPermission
-)
 
 
 class IsAdmin(permissions.BasePermission):
@@ -34,12 +15,7 @@ class IsAdmin(permissions.BasePermission):
             return False
         return (request.user.is_superuser or 
                 request.user.is_staff or 
-                request.user.role == 'ADMIN' or
-                UserRole.objects.filter(
-                    user=request.user,
-                    is_active=True,
-                    role_type=UserRole.RoleType.ADMIN
-                ).exists())
+                request.user.role == 'ADMIN')
 
 
 class IsOrganizerOrAdmin(permissions.BasePermission):
@@ -53,18 +29,13 @@ class IsOrganizerOrAdmin(permissions.BasePermission):
         return (request.user.is_superuser or 
                 request.user.is_staff or
                 request.user.role == 'ADMIN' or 
-                request.user.role == 'ORGANIZER' or
-                UserRole.objects.filter(
-                    user=request.user,
-                    is_active=True,
-                    role_type__in=[UserRole.RoleType.ADMIN, UserRole.RoleType.ORGANIZER]
-                ).exists())
+                request.user.role == 'ORGANIZER')
 
 
 class IsUserManager(permissions.BasePermission):
     """
     Permission to check if user can manage other users.
-    Allows access if user is admin or has user management permissions.
+    Allows access if user is admin.
     """
     
     def has_permission(self, request, view):
@@ -76,24 +47,16 @@ class IsUserManager(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        # Check if user has user management permissions
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_manage_users=True
-        ).exists()
+        # Only admins can manage users
+        return request.user.role == 'ADMIN'
     
     def has_object_permission(self, request, view, obj):
         # Admin users can do anything
         if request.user.is_staff:
             return True
         
-        # Check if user has user management permissions
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_manage_users=True
-        ).exists()
+        # Only admins can manage users
+        return request.user.role == 'ADMIN'
 
 
 class IsSelfOrAdmin(permissions.BasePermission):
@@ -138,11 +101,7 @@ class CanManageEvents(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_manage_events=True
-        ).exists()
+        return request.user.role in ['ADMIN', 'ORGANIZER']
 
 
 class CanManageTeams(permissions.BasePermission):
@@ -157,11 +116,7 @@ class CanManageTeams(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_manage_teams=True
-        ).exists()
+        return request.user.role in ['ADMIN', 'ORGANIZER', 'COACH']
 
 
 class CanManageFixtures(permissions.BasePermission):
@@ -176,11 +131,7 @@ class CanManageFixtures(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_manage_fixtures=True
-        ).exists()
+        return request.user.role in ['ADMIN', 'ORGANIZER', 'COACH']
 
 
 class CanManageResults(permissions.BasePermission):
@@ -195,68 +146,7 @@ class CanManageResults(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_manage_results=True
-        ).exists()
-
-
-class CanManagePayments(permissions.BasePermission):
-    """
-    Permission to check if user can manage payments.
-    """
-    
-    def has_permission(self, request, view):
-        if request.user.is_staff:
-            return True
-        
-        if not request.user.is_authenticated:
-            return False
-        
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_manage_payments=True
-        ).exists()
-
-
-class CanManageContent(permissions.BasePermission):
-    """
-    Permission to check if user can manage content.
-    """
-    
-    def has_permission(self, request, view):
-        if request.user.is_staff:
-            return True
-        
-        if not request.user.is_authenticated:
-            return False
-        
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_manage_content=True
-        ).exists()
-
-
-class CanViewReports(permissions.BasePermission):
-    """
-    Permission to check if user can view reports.
-    """
-    
-    def has_permission(self, request, view):
-        if request.user.is_staff:
-            return True
-        
-        if not request.user.is_authenticated:
-            return False
-        
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            can_view_reports=True
-        ).exists()
+        return request.user.role in ['ADMIN', 'ORGANIZER', 'COACH']
 
 
 class IsOrganizer(permissions.BasePermission):
@@ -271,11 +161,7 @@ class IsOrganizer(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            role_type=UserRole.RoleType.ORGANIZER
-        ).exists()
+        return request.user.role == 'ORGANIZER'
 
 
 class IsAthlete(permissions.BasePermission):
@@ -290,11 +176,7 @@ class IsAthlete(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            role_type=UserRole.RoleType.ATHLETE
-        ).exists()
+        return request.user.role == 'ATHLETE'
 
 
 class IsCoach(permissions.BasePermission):
@@ -309,16 +191,12 @@ class IsCoach(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            role_type=UserRole.RoleType.COACH
-        ).exists()
+        return request.user.role == 'COACH'
 
 
-class IsTeamManager(permissions.BasePermission):
+class IsSpectator(permissions.BasePermission):
     """
-    Permission to check if user is a team manager.
+    Permission to check if user is a spectator.
     """
     
     def has_permission(self, request, view):
@@ -328,56 +206,7 @@ class IsTeamManager(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        return UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            role_type=UserRole.RoleType.MANAGER
-        ).exists()
-
-
-class HasRoleInContext(permissions.BasePermission):
-    """
-    Permission to check if user has a specific role in a specific context.
-    """
-    
-    def __init__(self, required_role_type, context_type=None):
-        self.required_role_type = required_role_type
-        self.context_type = context_type
-    
-    def has_permission(self, request, view):
-        if request.user.is_staff:
-            return True
-        
-        if not request.user.is_authenticated:
-            return False
-        
-        queryset = UserRole.objects.filter(
-            user=request.user,
-            is_active=True,
-            role_type=self.required_role_type
-        )
-        
-        if self.context_type:
-            queryset = queryset.filter(context_type=self.context_type)
-        
-        return queryset.exists()
-    
-    def has_object_permission(self, request, view, obj):
-        if request.user.is_staff:
-            return True
-        
-        # Check if user has role in the specific context
-        context_id = getattr(obj, 'id', None)
-        if context_id:
-            return UserRole.objects.filter(
-                user=request.user,
-                is_active=True,
-                role_type=self.required_role_type,
-                context_type=self.context_type,
-                context_id=context_id
-            ).exists()
-        
-        return False
+        return request.user.role == 'SPECTATOR'
 
 
 # New RBAC Permission Classes
@@ -393,13 +222,8 @@ class IsOrganizerOfEvent(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        # Check if user is organizer (legacy role or UserRole)
-        return (request.user.role == 'ORGANIZER' or 
-                UserRole.objects.filter(
-                    user=request.user,
-                    is_active=True,
-                    role_type=UserRole.RoleType.ORGANIZER
-                ).exists())
+        # Check if user is organizer
+        return request.user.role == 'ORGANIZER'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -428,13 +252,8 @@ class IsCoachOfTeam(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        # Check if user is coach (legacy role or UserRole)
-        return (request.user.role == 'COACH' or 
-                UserRole.objects.filter(
-                    user=request.user,
-                    is_active=True,
-                    role_type=UserRole.RoleType.COACH
-                ).exists())
+        # Check if user is coach
+        return request.user.role == 'COACH'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -467,13 +286,8 @@ class IsAthleteSelf(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        # Check if user is athlete (legacy role or UserRole)
-        return (request.user.role == 'ATHLETE' or 
-                UserRole.objects.filter(
-                    user=request.user,
-                    is_active=True,
-                    role_type=UserRole.RoleType.ATHLETE
-                ).exists())
+        # Check if user is athlete
+        return request.user.role == 'ATHLETE'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -506,13 +320,8 @@ class IsSpectatorReadOnly(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        # Check if user is spectator (legacy role or UserRole)
-        is_spectator = (request.user.role == 'SPECTATOR' or 
-                       UserRole.objects.filter(
-                           user=request.user,
-                           is_active=True,
-                           role_type=UserRole.RoleType.SPECTATOR
-                       ).exists())
+        # Check if user is spectator
+        is_spectator = request.user.role == 'SPECTATOR'
         
         # Spectators can only read (GET, HEAD, OPTIONS)
         if is_spectator:
@@ -570,12 +379,7 @@ class IsOrganizerOrReadOnly(permissions.BasePermission):
             return True
         
         # Allow write access only to organizers
-        return (request.user.role == 'ORGANIZER' or 
-                UserRole.objects.filter(
-                    user=request.user,
-                    is_active=True,
-                    role_type=UserRole.RoleType.ORGANIZER
-                ).exists())
+        return request.user.role == 'ORGANIZER'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -586,12 +390,7 @@ class IsOrganizerOrReadOnly(permissions.BasePermission):
             return True
         
         # Allow write access only to organizers
-        return (request.user.role == 'ORGANIZER' or 
-                UserRole.objects.filter(
-                    user=request.user,
-                    is_active=True,
-                    role_type=UserRole.RoleType.ORGANIZER
-                ).exists())
+        return request.user.role == 'ORGANIZER'
 
 
 class IsOrganizerOwner(permissions.BasePermission):
@@ -605,15 +404,8 @@ class IsOrganizerOwner(permissions.BasePermission):
             return True
         if not request.user.is_authenticated:
             return False
-        # Organizer role check (legacy or RBAC)
-        return (
-            request.user.role == 'ORGANIZER' or
-            UserRole.objects.filter(
-                user=request.user,
-                is_active=True,
-                role_type=UserRole.RoleType.ORGANIZER
-            ).exists()
-        )
+        # Organizer role check
+        return request.user.role == 'ORGANIZER'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -644,14 +436,7 @@ class IsCoachRWTeamOrRoster(permissions.BasePermission):
             return True
         if not request.user.is_authenticated:
             return False
-        return (
-            request.user.role == 'COACH' or
-            UserRole.objects.filter(
-                user=request.user,
-                is_active=True,
-                role_type=UserRole.RoleType.COACH
-            ).exists()
-        )
+        return request.user.role == 'COACH'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -681,14 +466,7 @@ class CoachCanViewFixturesResults(permissions.BasePermission):
         # Only read access through this permission
         if request.method not in permissions.SAFE_METHODS:
             return False
-        return (
-            request.user.role == 'COACH' or
-            UserRole.objects.filter(
-                user=request.user,
-                is_active=True,
-                role_type=UserRole.RoleType.COACH
-            ).exists()
-        )
+        return request.user.role == 'COACH'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -720,14 +498,7 @@ class IsAthleteSelfRW(permissions.BasePermission):
             return True
         if not request.user.is_authenticated:
             return False
-        return (
-            request.user.role == 'ATHLETE' or
-            UserRole.objects.filter(
-                user=request.user,
-                is_active=True,
-                role_type=UserRole.RoleType.ATHLETE
-            ).exists()
-        )
+        return request.user.role == 'ATHLETE'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -755,14 +526,7 @@ class AthleteCanViewOwnFixturesResults(permissions.BasePermission):
             return False
         if request.method not in permissions.SAFE_METHODS:
             return False
-        return (
-            request.user.role == 'ATHLETE' or
-            UserRole.objects.filter(
-                user=request.user,
-                is_active=True,
-                role_type=UserRole.RoleType.ATHLETE
-            ).exists()
-        )
+        return request.user.role == 'ATHLETE'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -800,14 +564,7 @@ class SpectatorOwnPurchasesRW(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         # Spectators can access purchase endpoints; object-level will enforce ownership
-        return (
-            request.user.role == 'SPECTATOR' or
-            UserRole.objects.filter(
-                user=request.user,
-                is_active=True,
-                role_type=UserRole.RoleType.SPECTATOR
-            ).exists()
-        )
+        return request.user.role == 'SPECTATOR'
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:

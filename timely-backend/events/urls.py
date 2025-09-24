@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import EventViewSet, DivisionViewSet
 from .public_views import PublicEventViewSet
-from .sse_views import SSEEventStreamView, event_results_sse, event_schedule_sse, team_updates_sse
+from .sse_views import event_stream_sse, event_results_stream_sse
 from .announcement_views import AnnouncementViewSet
 
 # Create routers
@@ -37,10 +37,12 @@ urlpatterns = [
     # Fixtures endpoint for schedule/results pages
     path('<int:event_id>/fixtures/', EventViewSet.as_view({'get': 'fixtures'}), name='event-fixtures'),
     
-    # SSE endpoints for real-time updates
-    path('<int:event_id>/stream/', SSEEventStreamView.as_view(), name='event-sse'),
-    path('<int:event_id>/stream/results/', event_results_sse, name='event-results-sse'),
-    path('<int:event_id>/stream/schedule/', event_schedule_sse, name='event-schedule-sse'),
+    # Ticket purchase endpoint (request mode)
+    path('<int:event_id>/purchase/', EventViewSet.as_view({'post': 'purchase'}), name='event-purchase'),
+    
+    # SSE endpoints for real-time updates (fallback when WS unavailable)
+    path('<int:event_id>/stream/', event_stream_sse, name='event-sse'),
+    path('<int:event_id>/results/stream/', event_results_stream_sse, name='event-results-sse'),
     
     # Announcements
     path('announcements/', include(announcements_router.urls)),

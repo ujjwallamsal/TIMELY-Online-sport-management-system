@@ -35,14 +35,14 @@ INSTALLED_APPS = [
 
     # 3rd-party
     "rest_framework",
+    "rest_framework_simplejwt",
     "django_filters",
-    "drf_spectacular",
     "corsheaders",
     "channels",
     
-    # First-party (Timely) - Lean MVP apps only
-    "api",
+    # First-party (Timely) - Minimal boot profile
     "common",
+    "api",
     "events",
     "venues",
     "sports",
@@ -50,12 +50,13 @@ INSTALLED_APPS = [
     "registrations",
     "fixtures",
     "results",
-    "notifications",
-    "tickets",
     "gallery",
-    "content",
     "reports",
 ]
+
+# NOTE: Payments (Stripe) and app-level notifications are intentionally disabled for stabilization.
+# Ticketing will run in "Request Ticket → admin/organizer approval" mode until we re-enable the ticketing app.
+# Realtime UX uses WS/SSE + UI toasts; optional email-only notifications can be enabled via django.core.mail.
 
 # --- Middleware ---
 MIDDLEWARE = [
@@ -67,10 +68,11 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "common.middleware.PublicEndpointMiddleware",  # Add our custom middleware
-    "common.security.SecurityHeadersMiddleware",  # Security headers
-    "api.middleware.AuditLoggingMiddleware",  # Re-enabled for full functionality
-    "api.middleware.RateLimitingMiddleware",  # Re-enabled for full functionality
+    # Custom middlewares commented out for minimal boot profile
+    # "common.middleware.PublicEndpointMiddleware",
+    # "common.security.SecurityHeadersMiddleware",
+    # "api.middleware.AuditLoggingMiddleware",
+    # "api.middleware.RateLimitingMiddleware",
 ]
 
 ROOT_URLCONF = "timely.urls"
@@ -211,50 +213,17 @@ EMAIL_VERIFICATION_TOKEN_EXPIRY = 24 * 60 * 60  # 24 hours in seconds
 
 # --- CORS Configuration ---
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:5174",
-    "http://localhost:5174",
-    "http://127.0.0.1:5175",
-    "http://localhost:5175",
-    "http://127.0.0.1:5176",
-    "http://localhost:5176",
-    "http://127.0.0.1:5177",
-    "http://localhost:5177",
-    "http://127.0.0.1:5178",
-    "http://localhost:5178",
-]
-
-# CORS origin whitelist for compatibility
-CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
-
-# Explicitly deny all other origins
-CORS_ALLOW_ALL_ORIGINS = False
-
-# In development, allow all origins for convenience
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = True  # Dev only - allow all origins
 
 CSRF_TRUSTED_ORIGINS = [
-    "http://127.0.0.1:5173",
     "http://localhost:5173",
-    "http://127.0.0.1:5174",
-    "http://localhost:5174",
-    "http://127.0.0.1:5175",
-    "http://localhost:5175",
-    "http://127.0.0.1:5176",
-    "http://localhost:5176",
-    "http://127.0.0.1:5177",
-    "http://localhost:5177",
-    "http://127.0.0.1:5178",
-    "http://localhost:5178",
+    "http://127.0.0.1:5173"
 ]
 
 # Email configuration
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-FRONTEND_ORIGIN = "http://localhost:5173"
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"  # dev
 DEFAULT_FROM_EMAIL = "no-reply@timely.local"
+FRONTEND_ORIGIN = "http://localhost:5173"
 
 # Point to your React app for deep links (change later)
 FRONTEND_URL = "http://localhost:5173"

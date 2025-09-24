@@ -53,11 +53,8 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    const payload = { email, password };
-    console.log('Login attempt with payload:', payload);
     try {
       const data = await api.login(email, password);
-      console.log('Login successful:', data);
       
       // Get user data after successful login
       const userData = await api.getCurrentUser();
@@ -73,26 +70,18 @@ export function AuthProvider({ children }) {
     try {
       await api.logout();
     } finally {
-      // Clear the user state
       setUser(null);
     }
   };
 
-  const signup = async ({ email, password, password_confirm, first_name = '', last_name = '', role = 'SPECTATOR' }) => {
+  const register = async ({ email, password, password_confirm, first_name = '', last_name = '', role = 'SPECTATOR' }) => {
     try {
-      const data = await api.post('/auth/register/', { 
-        email, 
-        password, 
-        password_confirm, 
-        first_name, 
-        last_name, 
-        role 
-      });
+      const data = await api.register(email, password, password_confirm, first_name, last_name, role);
       // Auto login after successful registration
       await login(email, password);
       return data;
     } catch (error) {
-      console.error('Signup failed:', error);
+      console.error('Registration failed:', error);
       throw error;
     }
   };
@@ -108,15 +97,13 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Remove duplicate getMe function - use refreshUser instead
   const value = {
     user,
     loading,
     login,
     logout,
-    signup,
+    register,
     refreshUser,
-    getMe: refreshUser, // Alias to prevent breaking existing code
     getRoleBasedPath,
     isAuthenticated: !!user,
   };

@@ -25,7 +25,7 @@ class Event(models.Model):
     
     # Dates and Times
     start_datetime = models.DateTimeField(help_text="Event start date and time")
-    end_datetime = models.DateTimeField(help_text="Event end date and time")
+    end_datetime = models.DateTimeField(default=timezone.now, help_text="Event end date and time")
     registration_open_at = models.DateTimeField(null=True, blank=True, help_text="Registration open date")
     registration_close_at = models.DateTimeField(null=True, blank=True, help_text="Registration close date")
     
@@ -48,6 +48,10 @@ class Event(models.Model):
     #     blank=True,
     #     help_text="Eligibility criteria (JSON)"
     # )
+    requires_approval = models.BooleanField(
+        default=False,
+        help_text="Whether ticket purchases require approval"
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

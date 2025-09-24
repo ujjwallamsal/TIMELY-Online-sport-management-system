@@ -1,10 +1,7 @@
-# accounts/models.py
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
-from django.core.validators import RegexValidator
-from django.conf import settings
-import uuid
+from django.core.exceptions import ValidationError
 
 
 class UserManager(BaseUserManager):
@@ -16,16 +13,8 @@ class UserManager(BaseUserManager):
             raise ValueError('The Email field must be set')
         email = self.normalize_email(email)
         
-        # Generate username from email if not provided
-        if not extra_fields.get('username'):
-            username = email.split('@')[0]
-            # Ensure username is unique
-            counter = 1
-            original_username = username
-            while self.model.objects.filter(username=username).exists():
-                username = f"{original_username}{counter}"
-                counter += 1
-            extra_fields['username'] = username
+        # Ensure role is always SPECTATOR for new users
+        extra_fields.setdefault('role', 'SPECTATOR')
         
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
@@ -38,7 +27,7 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
         extra_fields.setdefault('email_verified', True)
-        extra_fields.setdefault('role', 'ADMIN')  # Set default role for superuser
+        extra_fields.setdefault('role', 'ADMIN')
         
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser must have is_staff=True.')
@@ -51,71 +40,42 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     """Custom user model with email-based authentication and RBAC"""
     
-    # Role choices for the lean MVP
-    class Role(models.TextChoices):
-        ADMIN = "ADMIN", "Administrator"
-        ORGANIZER = "ORGANIZER", "Event Organizer"
+    class Roles(models.TextChoices):
+        SPECTATOR = "SPECTATOR", "Spectator"
+        ORGANIZER = "ORGANIZER", "Organizer"
         COACH = "COACH", "Coach"
         ATHLETE = "ATHLETE", "Athlete"
-        SPECTATOR = "SPECTATOR", "Spectator"
+        ADMIN = "ADMIN", "Admin"
     
+    # Core fields
     email = models.EmailField(unique=True, db_index=True)
-    username = models.CharField(max_length=150, unique=True, blank=True, null=True)
-    first_name = models.CharField(max_length=80, blank=True)
-    last_name = models.CharField(max_length=80, blank=True)
+    username = models.CharField(max_length=150, unique=True, null=True, blank=True)
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
     
-    # User Status
-    is_active = models.BooleanField(default=True, db_index=True)
+    # Status fields
+    is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
-    email_verified = models.BooleanField(default=False, db_index=True)
-    email_verified_at = models.DateTimeField(null=True, blank=True)
-    date_joined = models.DateTimeField(default=timezone.now)
+    email_verified = models.BooleanField(default=False)
     
-    # Legacy role field for backward compatibility
-    role = models.CharField(max_length=12, choices=Role.choices, default=Role.SPECTATOR)
-    
-    # Profile Information
-    phone_regex = RegexValidator(
-        regex=r'^\+?1?\d{9,15}$',
-        message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
+    # Role field - users never set this at registration
+    role = models.CharField(
+        max_length=20, 
+        choices=Roles.choices, 
+        default=Roles.SPECTATOR, 
+        db_index=True
     )
-    phone_number = models.CharField(validators=[phone_regex], max_length=17, blank=True)
-    date_of_birth = models.DateField(null=True, blank=True)
     
-    # Address Information
-    address = models.TextField(blank=True)
-    city = models.CharField(max_length=100, blank=True)
-    state = models.CharField(max_length=100, blank=True)
-    postal_code = models.CharField(max_length=20, blank=True)
-    country = models.CharField(max_length=100, default='Australia')
-    
-    # Profile Media
-    profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
-    bio = models.TextField(blank=True, max_length=500)
-    website = models.URLField(blank=True)
-    
-    # Social Media & Preferences
-    social_media = models.JSONField(default=dict, blank=True)
-    preferences = models.JSONField(default=dict, blank=True)
-    
-    # Stripe Integration
-    stripe_customer_id = models.CharField(max_length=255, blank=True, db_index=True)
-    
-    # Timestamps - make these optional for existing data
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True, null=True, blank=True)
-    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
-    last_login = models.DateTimeField(null=True, blank=True)
-    
-    # Audit Fields - temporarily removed for migration compatibility
-    # created_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_users')
-    # updated_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_users')
+    # Timestamps
+    date_joined = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     objects = UserManager()
     
-    # Use username for authentication
-    USERNAME_FIELD = 'username'
-    REQUIRED_FIELDS = ['email', 'first_name', 'last_name']
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name']
     
     class Meta:
         db_table = 'accounts_user'
@@ -123,20 +83,13 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = 'Users'
         indexes = [
             models.Index(fields=['email']),
+            models.Index(fields=['role']),
             models.Index(fields=['is_active']),
             models.Index(fields=['email_verified']),
-            models.Index(fields=['created_at']),
-            models.Index(fields=['stripe_customer_id']),
         ]
     
     def __str__(self):
         return self.email
-    
-    def save(self, *args, **kwargs):
-        """Override save to set timestamps for existing records"""
-        if not self.created_at:
-            self.created_at = timezone.now()
-        super().save(*args, **kwargs)
     
     @property
     def full_name(self):
@@ -148,244 +101,118 @@ class User(AbstractBaseUser, PermissionsMixin):
         """Get user's display name (full name or email)"""
         return self.full_name if self.full_name else self.email
     
-    @property
-    def is_verified(self):
-        """Check if user's email is verified"""
-        return self.email_verified
+    def clean(self):
+        """Validate user data"""
+        super().clean()
+        if self.role not in [choice[0] for choice in self.Roles.choices]:
+            raise ValidationError({'role': 'Invalid role choice'})
     
-    def verify_email(self):
-        """Mark user's email as verified"""
-        self.email_verified = True
-        self.email_verified_at = timezone.now()
-        self.save(update_fields=['email_verified', 'email_verified_at'])
-    
-    def primary_role_display(self):
-        """Get the display label for the user's primary role.
-        Uses legacy `role` field first; falls back to `UserRole` entries.
-        """
-        if self.role:
-            # Use Django auto-generated display for the legacy choice field
-            return self.get_role_display()
-        primary_role = self.roles.filter(is_primary=True, is_active=True).first()
-        if primary_role:
-            return primary_role.get_display_name()
-        return "User"
+    def save(self, *args, **kwargs):
+        """Override save to ensure role is always valid"""
+        self.clean()
+        super().save(*args, **kwargs)
 
 
-class UserRole(models.Model):
-    """User role model for RBAC implementation"""
-    
-    class RoleType(models.TextChoices):
-        ADMIN = "ADMIN", "Administrator"
-        ORGANIZER = "ORGANIZER", "Event Organizer"
-        COACH = "COACH", "Coach"
-        ATHLETE = "ATHLETE", "Athlete"
-        SPECTATOR = "SPECTATOR", "Spectator"
-    
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='roles')
-    role_type = models.CharField(max_length=20, choices=RoleType.choices)
-    is_primary = models.BooleanField(default=False, help_text="Primary role for this user")
-    
-    # Role-specific permissions
-    can_manage_events = models.BooleanField(default=False)
-    can_manage_teams = models.BooleanField(default=False)
-    can_manage_users = models.BooleanField(default=False)
-    can_manage_fixtures = models.BooleanField(default=False)
-    can_manage_results = models.BooleanField(default=False)
-    can_manage_payments = models.BooleanField(default=False)
-    can_manage_content = models.BooleanField(default=False)
-    can_view_reports = models.BooleanField(default=False)
-    
-    # Role context (e.g., specific event, team, or organization)
-    context_type = models.CharField(max_length=50, blank=True, help_text="Type of context (event, team, organization)")
-    context_id = models.PositiveIntegerField(null=True, blank=True, help_text="ID of the context object")
-    
-    # Role metadata - temporarily removed for migration compatibility
-    # assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_roles')
-    assigned_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-    
-    # Audit fields
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        db_table = 'accounts_user_role'
-        unique_together = [['user', 'role_type', 'context_type', 'context_id']]
-        verbose_name = 'User Role'
-        verbose_name_plural = 'User Roles'
-        indexes = [
-            models.Index(fields=['user', 'is_active']),
-            models.Index(fields=['role_type', 'is_active']),
-            models.Index(fields=['context_type', 'context_id']),
-            models.Index(fields=['assigned_at']),
-        ]
-    
-    def __str__(self):
-        context = f" ({self.context_type}:{self.context_id})" if self.context_type and self.context_id else ""
-        return f"{self.user.email} - {self.get_role_type_display()}{context}"
-    
-    def get_display_name(self):
-        """Get role display name with context"""
-        role_name = self.get_role_type_display()
-        if self.context_type and self.context_id:
-            return f"{role_name} ({self.context_type}:{self.context_id})"
-        return role_name
-    
-    @property
-    def is_expired(self):
-        """Check if role has expired"""
-        if self.expires_at:
-            return timezone.now() > self.expires_at
-        return False
-    
-    def deactivate(self):
-        """Deactivate this role"""
-        self.is_active = False
-        self.save(update_fields=['is_active', 'updated_at'])
-
-
-class EmailVerificationToken(models.Model):
-    """Email verification token model"""
-    token = models.CharField(max_length=100, unique=True, db_index=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_verification_tokens')
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    is_used = models.BooleanField(default=False)
-    
-    class Meta:
-        db_table = 'accounts_email_verification_token'
-        indexes = [
-            models.Index(fields=['token']),
-            models.Index(fields=['user', 'is_used']),
-            models.Index(fields=['expires_at']),
-        ]
-    
-    def __str__(self):
-        return f"Email verification for {self.user.email}"
-    
-    @property
-    def is_expired(self):
-        """Check if token has expired"""
-        return timezone.now() > self.expires_at
-    
-    def use_token(self):
-        """Mark token as used"""
-        self.is_used = True
-        self.save(update_fields=['is_used'])
-
-
-class PasswordResetToken(models.Model):
-    """Password reset token model"""
-    token = models.CharField(max_length=100, unique=True, db_index=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_tokens')
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    is_used = models.BooleanField(default=False)
-    
-    class Meta:
-        db_table = 'accounts_password_reset_token'
-        indexes = [
-            models.Index(fields=['token']),
-            models.Index(fields=['user', 'is_used']),
-            models.Index(fields=['expires_at']),
-        ]
-    
-    def __str__(self):
-        return f"Password reset for {self.user.email}"
-    
-    @property
-    def is_expired(self):
-        """Check if token has expired"""
-        return timezone.now() > self.expires_at
-    
-    def use_token(self):
-        """Mark token as used"""
-        self.is_used = True
-        self.save(update_fields=['is_used'])
-
-
-class RoleRequest(models.Model):
-    """Role request model for users to request role upgrades"""
-    
-    class RequestedRole(models.TextChoices):
-        ORGANIZER = "ORGANIZER", "Event Organizer"
-        COACH = "COACH", "Coach"
-        ATHLETE = "ATHLETE", "Athlete"
-        # Note: ADMIN is intentionally excluded - only backend superusers can be admins
+class OrganizerApplication(models.Model):
+    """Model for organizer role applications"""
     
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending Review"
-        APPROVED = "approved", "Approved"
-        REJECTED = "rejected", "Rejected"
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='role_requests')
-    requested_role = models.CharField(max_length=20, choices=RequestedRole.choices)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
-    
-    # Request details
-    note = models.TextField(blank=True, help_text="User's reason for requesting this role")
-    
-    # Role-specific information
-    organization_name = models.CharField(max_length=200, blank=True, help_text="For Organizer role")
-    organization_website = models.URLField(blank=True, help_text="For Organizer role")
-    coaching_experience = models.TextField(blank=True, help_text="For Coach role")
-    sport_discipline = models.CharField(max_length=100, blank=True, help_text="For Athlete role")
-    
-    # Review information
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='organizer_applications',
+        unique=True  # One active application per user
+    )
+    status = models.CharField(
+        max_length=20, 
+        choices=Status.choices, 
+        default=Status.PENDING,
+        db_index=True
+    )
+    reason = models.TextField(blank=True, help_text="Reason for application")
     reviewed_by = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True,
-        related_name='reviewed_role_requests'
+        related_name='reviewed_applications',
+        limit_choices_to={'is_staff': True}
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
-    review_notes = models.TextField(blank=True)
-    rejection_reason = models.TextField(blank=True)
-    
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'accounts_role_request'
-        verbose_name = 'Role Request'
-        verbose_name_plural = 'Role Requests'
+        db_table = 'accounts_organizer_application'
+        verbose_name = 'Organizer Application'
+        verbose_name_plural = 'Organizer Applications'
         indexes = [
+            models.Index(fields=['status']),
             models.Index(fields=['user', 'status']),
-            models.Index(fields=['requested_role', 'status']),
-            models.Index(fields=['status', 'created_at']),
             models.Index(fields=['created_at']),
         ]
     
     def __str__(self):
-        return f"{self.user.email} requests {self.get_requested_role_display()} - {self.get_status_display()}"
+        return f"{self.user.email} - {self.get_status_display()}"
     
-    def approve(self, reviewer, notes=""):
-        """Approve role request and assign role to user"""
+    def approve(self, reviewer):
+        """Approve the application and upgrade user role"""
+        if self.status == self.Status.APPROVED:
+            return self  # Idempotent - already approved
+        
         self.status = self.Status.APPROVED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
-        self.review_notes = notes
-        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'review_notes', 'updated_at'])
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
         
-        # Assign the role to the user
-        self.user.role = self.requested_role
-        self.user.save(update_fields=['role', 'updated_at'])
+        # Upgrade user role to ORGANIZER
+        self.user.role = User.Roles.ORGANIZER
+        self.user.is_staff = False  # Organizer is not admin
+        self.user.save(update_fields=['role', 'is_staff', 'updated_at'])
+        
+        # Send email notification
+        try:
+            from .emails import send_organizer_application_status
+            send_organizer_application_status(self.user, 'APPROVED')
+        except Exception:
+            # Don't fail the approval if email fails
+            pass
         
         return self
     
     def reject(self, reviewer, reason=""):
-        """Reject role request"""
+        """Reject the application"""
+        if self.status == self.Status.REJECTED:
+            return self  # Idempotent - already rejected
+        
         self.status = self.Status.REJECTED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
-        self.rejection_reason = reason
-        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'updated_at'])
+        if reason:
+            self.reason = reason
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'reason', 'updated_at'])
+        
+        # Send email notification
+        try:
+            from .emails import send_organizer_application_status
+            send_organizer_application_status(self.user, 'REJECTED', reason)
+        except Exception:
+            # Don't fail the rejection if email fails
+            pass
         
         return self
-
-
-# AuditLog model is defined in common/models.py to avoid conflicts
+    
+    def clean(self):
+        """Validate application data"""
+        super().clean()
+        if self.status not in [choice[0] for choice in self.Status.choices]:
+            raise ValidationError({'status': 'Invalid status choice'})
+    
+    def save(self, *args, **kwargs):
+        """Override save to ensure data integrity"""
+        self.clean()
+        super().save(*args, **kwargs)

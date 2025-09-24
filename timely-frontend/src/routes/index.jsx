@@ -1,4 +1,3 @@
-// src/routes/index.jsx
 import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout.jsx';
@@ -7,10 +6,7 @@ import Login from '../pages/Login.jsx';
 import Register from '../pages/Register.jsx';
 import Events from '../pages/public/Events.jsx';
 import EventDetail from '../pages/public/EventDetail.jsx';
-import Media from '../pages/public/Media.jsx';
-import News from '../pages/public/News.jsx';
 import Tickets from '../pages/public/Tickets.jsx';
-import VerifyTicket from '../pages/public/VerifyTicket.jsx';
 import NotFound from '../pages/NotFound.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import AdminDashboard from '../pages/admin/Dashboard.jsx';
@@ -18,15 +14,6 @@ import AdminEvents from '../pages/admin/Events.jsx';
 import AdminRegistrations from '../pages/admin/Registrations.jsx';
 import AdminFixtures from '../pages/admin/Fixtures.jsx';
 import AdminResults from '../pages/admin/Results.jsx';
-import AdminVenues from '../pages/admin/Venues.jsx';
-import AdminUsers from '../pages/admin/Users.jsx';
-import AdminAnnouncements from '../pages/admin/Announcements.jsx';
-import AdminReports from '../pages/admin/Reports.jsx';
-import AdminSettings from '../pages/admin/Settings.jsx';
-import CoachDashboard from '../pages/coach/Dashboard.jsx';
-import CoachTeam from '../pages/coach/Team.jsx';
-import CoachEvent from '../pages/coach/Event.jsx';
-import AthleteDashboard from '../pages/athlete/Dashboard.jsx';
 
 /**
  * SkipLink component for accessibility
@@ -66,7 +53,7 @@ const AdminAccessDenied = () => (
 );
 
 /**
- * Main App Routes Component - Updated
+ * Main App Routes Component
  */
 export default function AppRoutes() {
   const { user, loading } = useAuth();
@@ -111,16 +98,23 @@ export default function AppRoutes() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        
         {/* Public routes */}
         <Route path="/events" element={<Events />} />
         <Route path="/events/:id" element={<EventDetail />} />
-        <Route path="/media" element={<Media />} />
-        <Route path="/news" element={<News />} />
         <Route path="/tickets" element={<Tickets />} />
-        <Route path="/verify" element={<RequireAuth><VerifyTicket /></RequireAuth>} />
 
-        {/* Admin/Organizer dashboard */}
-        <Route path="/admin" element={<RequireAuth><RequireRole roles={["ADMIN", "ORGANIZER"]}><AdminDashboard /></RequireRole></RequireAuth>} />
+        {/* Admin/Organizer routes */}
+        <Route 
+          path="/admin" 
+          element={
+            <RequireAuth>
+              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
+                <AdminDashboard />
+              </RequireRole>
+            </RequireAuth>
+          } 
+        />
         <Route
           path="/admin/events"
           element={
@@ -161,94 +155,6 @@ export default function AppRoutes() {
             </RequireAuth>
           }
         />
-        <Route
-          path="/admin/venues"
-          element={
-            <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
-                <AdminVenues />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/admin/users"
-          element={
-            <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
-                <AdminUsers />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/admin/announcements"
-          element={
-            <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
-                <AdminAnnouncements />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/admin/reports"
-          element={
-            <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
-                <AdminReports />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/admin/settings"
-          element={
-            <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
-                <AdminSettings />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-
-        {/* Coach */}
-        <Route path="/coach" element={<RequireAuth><RequireRole roles={["COACH"]}><CoachDashboard /></RequireRole></RequireAuth>} />
-        <Route
-          path="/coach/teams/:id"
-          element={
-            <RequireAuth>
-              <RequireRole roles={["COACH"]}>
-                <CoachTeam />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/coach/events/:eventId"
-          element={
-            <RequireAuth>
-              <RequireRole roles={["COACH"]}>
-                <CoachEvent />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-
-        {/* Athlete */}
-        <Route path="/athlete" element={<RequireAuth><RequireRole roles={["ATHLETE"]}><AthleteDashboard /></RequireRole></RequireAuth>} />
-        <Route
-          path="/teams/:id"
-          element={
-            <RequireAuth>
-              <RequireRole roles={["ATHLETE"]}>
-                <div className="p-6">Athlete Team</div>
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-
-        {/* Duplicate tickets path already defined above for public */}
 
         <Route path="*" element={<NotFound />} />
       </Routes>

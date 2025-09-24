@@ -11,15 +11,15 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunSQL(
-            sql="CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_status_start_date ON events_event (status, start_datetime);",
+            sql="CREATE INDEX IF NOT EXISTS idx_event_status_start_date ON events_event (status, start_date);",
             reverse_sql="DROP INDEX IF EXISTS idx_event_status_start_date;"
         ),
         migrations.RunSQL(
-            sql="CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_visibility_status ON events_event (visibility, status);",
+            sql="CREATE INDEX IF NOT EXISTS idx_event_visibility_status ON events_event (visibility, status);",
             reverse_sql="DROP INDEX IF EXISTS idx_event_visibility_status;"
         ),
         migrations.RunSQL(
-            sql="CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_created_by_status ON events_event (created_by_id, status);",
+            sql="CREATE INDEX IF NOT EXISTS idx_event_created_by_status ON events_event (created_by_id, status);",
             reverse_sql="DROP INDEX IF EXISTS idx_event_created_by_status;"
         ),
     ]

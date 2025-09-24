@@ -16,7 +16,7 @@ router.register(r'teams', views.TeamViewSet, basename='team')
 router.register(r'registrations', views.RegistrationViewSet, basename='registration')
 router.register(r'fixtures', views.FixtureViewSet, basename='fixture')
 router.register(r'results', views.ResultViewSet, basename='result')
-router.register(r'notifications', views.NotificationViewSet, basename='notification')
+# router.register(r'notifications', views.NotificationViewSet, basename='notification')  # Disabled for minimal boot profile
 router.register(r'announcements', views.AnnouncementViewSet, basename='announcement')
 router.register(r'reports', views.ReportViewSet, basename='report')
 
@@ -35,17 +35,17 @@ urlpatterns = [
     path('', include(router.urls)),
     
     # Include app-specific endpoints
-    path('tickets/', include('tickets.urls')),
-    path('reports/', include('reports.urls')),
-    path('gallery/', include('gallery.urls')),
-    path('content/', include('content.urls')),
-    path('', include('accounts.urls')),
-    path('venues/', include('venues.urls')),
+    # path('tickets/', include('tickets.urls')),  # COMMENTED OUT - will re-add after core flows are green
+    # path('reports/', include('reports.urls')),  # COMMENTED OUT - depends on tickets, will re-add after core flows are green
+    # path('gallery/', include('gallery.urls')),  # COMMENTED OUT - may have import issues, will re-add after core flows are green
+    # path('content/', include('content.urls')),  # COMMENTED OUT - will re-add after core flows are green
+    # path('', include('accounts.urls')),  # COMMENTED OUT - has UserRole import issues, will re-add after core flows are green
+    # path('venues/', include('venues.urls')),  # COMMENTED OUT - may have import issues, will re-add after core flows are green
     path('events/', include('events.urls')),
-    path('teams/', include('teams.urls')),
-    path('registrations/', include('registrations.urls')),
-    path('', include('fixtures.urls')),
-    path('results/', include('results.urls')),
+    # path('teams/', include('teams.urls')),  # COMMENTED OUT - has import issues, will re-add after core flows are green
+    # path('registrations/', include('registrations.urls')),  # COMMENTED OUT - may have import issues, will re-add after core flows are green
+    # path('', include('fixtures.urls')),  # COMMENTED OUT - may have import issues, will re-add after core flows are green
+    # path('results/', include('results.urls')),  # COMMENTED OUT - may have import issues, will re-add after core flows are green
     
     # Additional endpoints not covered by viewsets
     path('events/<int:event_id>/registrations/', views.EventRegistrationsView.as_view(), name='event-registrations'),

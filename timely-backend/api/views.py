@@ -25,7 +25,8 @@ from .filters import (
 from .serializers import (
     EventSerializer, VenueSerializer, SportSerializer, TeamSerializer,
     RegistrationSerializer, FixtureSerializer, ResultSerializer,
-    NotificationSerializer, AnnouncementSerializer, ReportSerializer,
+    # NotificationSerializer,  # Disabled for minimal boot profile
+    AnnouncementSerializer, ReportSerializer,
     UserSerializer
 )
 
@@ -37,7 +38,7 @@ from teams.models import Team, TeamMember
 from registrations.models import Registration
 from fixtures.models import Fixture
 from results.models import Result, LeaderboardEntry
-from notifications.models import Notification
+# from notifications.models import Notification  # Disabled for minimal boot profile
 from accounts.models import User
 from events.models import Announcement
 
@@ -540,21 +541,22 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 
 
 # ===== NOTIFICATIONS =====
+# Disabled for minimal boot profile
 
-class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
-    """Notification viewing endpoints"""
-    queryset = Notification.objects.all()
-    serializer_class = NotificationSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    search_fields = ['title', 'message']
-    filterset_fields = ['kind', 'is_read']
-    ordering_fields = ['created_at']
-    ordering = ['-created_at']
-    
-    def get_queryset(self):
-        """Filter notifications for current user"""
-        return Notification.objects.filter(user=self.request.user)
+# class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+#     """Notification viewing endpoints - disabled for minimal boot profile"""
+#     queryset = Notification.objects.all()
+#     serializer_class = NotificationSerializer
+#     permission_classes = [IsAuthenticated]
+#     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+#     search_fields = ['title', 'message']
+#     filterset_fields = ['kind', 'is_read']
+#     ordering_fields = ['created_at']
+#     ordering = ['-created_at']
+#     
+#     def get_queryset(self):
+#         """Filter notifications for current user"""
+#         return Notification.objects.filter(user=self.request.user)
 
 
 # ===== REPORTS =====

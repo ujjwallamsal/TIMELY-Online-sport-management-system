@@ -1,710 +1,240 @@
-# accounts/views.py
-from __future__ import annotations
-
-from rest_framework import viewsets, status, filters
+# accounts/views.py - Simplified for minimal boot profile
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
-from rest_framework.views import APIView
-from django_filters.rest_framework import DjangoFilterBackend
-from django.contrib.auth import login, logout, authenticate
-from django.utils import timezone
-from django.db.models import Q
-from django.core.mail import send_mail
-from django.conf import settings
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.contrib.auth import authenticate
 from django.utils.crypto import get_random_string
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.db import models, transaction
 
-from .models import User, UserRole, EmailVerificationToken, PasswordResetToken, RoleRequest
+from .models import User, OrganizerApplication
 from common.models import AuditLog
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from accounts.auth import set_jwt_cookies, clear_jwt_cookies, CookieJWTAuthentication
 from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserProfileSerializer,
-    UserRoleSerializer, UserRoleAssignmentSerializer, PasswordChangeSerializer,
-    PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    EmailVerificationSerializer, UserListSerializer, AuditLogSerializer,
-    UserProfileUpdateSerializer, UserRoleUpdateSerializer,
-    RoleRequestSerializer, RoleRequestCreateSerializer, RoleRequestReviewSerializer,
-    UserProfileWithKycSerializer
+    PasswordChangeSerializer,
+    UserListSerializer, AuditLogSerializer,
+    UserProfileUpdateSerializer,
+    UserProfileWithKycSerializer,
+    OrganizerApplicationSerializer,
+    OrganizerApplicationCreateSerializer
 )
 from .permissions import IsUserManager, IsSelfOrAdmin
-from .utils import get_client_ip, get_user_agent
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.utils.decorators import method_decorator
-from common.security import rate_limit, log_auth_attempt, log_role_change
+from .auth import set_jwt_cookies, clear_jwt_cookies, CookieJWTAuthentication
 
 
-class AuthViewSet(viewsets.ViewSet):
-    """Authentication endpoints"""
+class UserRegistrationViewSet(viewsets.ViewSet):
+    """User registration endpoints"""
     permission_classes = [AllowAny]
-    authentication_classes = []  # avoid SessionAuthentication CSRF on login/register
     
-    @action(detail=False, methods=['post'])
-    def register(self, request):
-        """User registration endpoint"""
+    def create(self, request):
+        """Register a new user"""
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
             
-            # Create email verification token
-            token = EmailVerificationToken.objects.create(
+            # Create audit log
+            AuditLog.objects.create(
                 user=user,
-                token=get_random_string(64),
-                expires_at=timezone.now() + timezone.timedelta(hours=24)
-            )
-            
-            # Send verification email (stub for now)
-            # send_verification_email(user, token.token)
-            
-            # Log user creation
-            AuditLog.log_action(
-                user=user,
-                action=AuditLog.ActionType.CREATE,
+                action=AuditLog.ActionType.USER_REGISTRATION,
                 resource_type='User',
                 resource_id=str(user.id),
-                details={'email': user.email, 'method': 'registration', 'role': user.role},
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
+                details={'email': user.email}
             )
             
-            return Response({
-                'message': 'User registered successfully. Please check your email for verification.',
-                'user_id': user.id,
-                'email': user.email
-            }, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['post'])
-    @rate_limit(max_attempts=5, window_minutes=5)
-    def login(self, request):
-        """User login endpoint with rate limiting"""
-        # Accept email and password directly from frontend
-        serializer = UserLoginSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            login(request, user)
-
-            # Issue JWT tokens and set HttpOnly cookies
+            # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
             refresh_token = str(refresh)
-
-            # Update last login
-            user.last_login = timezone.now()
-            user.save(update_fields=['last_login'])
-
-            # Log successful login
-            log_auth_attempt(request, success=True, user=user, details={
-                'email': user.email, 
-                'method': 'email_password'
-            })
-
-            resp = Response({
-                'message': 'Login successful',
+            
+            # Set cookies
+            response = Response({
+                'user': UserProfileSerializer(user).data,
                 'access': access_token,
                 'refresh': refresh_token,
-                'user': UserProfileSerializer(user, context={'request': request}).data
-            })
-
-            set_jwt_cookies(resp, access_token, refresh_token)
-
-            return resp
-        
-        # Log failed login attempt
-        log_auth_attempt(request, success=False, details={
-            'email': request.data.get('email', ''),
-            'method': 'email_password',
-            'errors': serializer.errors
-        })
+                'message': 'User registered successfully'
+            }, status=status.HTTP_201_CREATED)
+            
+            set_jwt_cookies(response, access_token, refresh_token)
+            return response
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserLoginViewSet(viewsets.ViewSet):
+    """User authentication endpoints"""
+    permission_classes = [AllowAny]
     
-    @action(detail=False, methods=['post'])
-    def logout(self, request):
-        """User logout endpoint"""
-        if request.user.is_authenticated:
-            # Log logout
-            AuditLog.log_action(
-                user=request.user,
-                action=AuditLog.ActionType.LOGOUT,
-                resource_type='User',
-                resource_id=str(request.user.id),
-                details={'email': request.user.email},
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
-            
-            logout(request)
-        
-        resp = Response({'message': 'Logout successful'})
-        clear_jwt_cookies(resp)
-        return resp
-    
-    @action(detail=False, methods=['post'])
-    def refresh(self, request):
-        """Refresh JWT token endpoint"""
-        refresh_token = request.COOKIES.get('refresh')
-        if not refresh_token:
-            return Response({'error': 'No refresh token provided'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            refresh = RefreshToken(refresh_token)
-            access_token = str(refresh.access_token)
-            
-            resp = Response({'message': 'Token refreshed successfully'})
-            set_jwt_cookies(resp, access_token)
-            return resp
-        except Exception as e:
-            return Response({'error': 'Invalid refresh token'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['post'])
-    @rate_limit(max_attempts=3, window_minutes=15)
-    def password_reset_request(self, request):
-        """Request password reset endpoint with rate limiting"""
-        serializer = PasswordResetRequestSerializer(data=request.data)
+    def create(self, request):
+        """Login user"""
+        serializer = UserLoginSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
-            try:
-                user = User.objects.get(email=email, is_active=True)
-                
-                # Create password reset token
-                token = PasswordResetToken.objects.create(
-                    user=user,
-                    token=get_random_string(64),
-                    expires_at=timezone.now() + timezone.timedelta(hours=24)
-                )
-                
-                # Log password reset request
-                log_auth_attempt(request, success=True, user=user, details={
-                    'email': email,
-                    'method': 'password_reset_request'
-                })
-                
-                # Send reset email (stub for now)
-                # send_password_reset_email(user, token.token)
-                
-                return Response({
-                    'message': 'Password reset email sent. Please check your email.'
-                })
-            except User.DoesNotExist:
-                # Log failed password reset attempt (but don't reveal user existence)
-                log_auth_attempt(request, success=False, details={
-                    'email': email,
-                    'method': 'password_reset_request',
-                    'error': 'user_not_found'
-                })
-                
-                return Response({
-                    'message': 'If an account with this email exists, a password reset email has been sent.'
-                })
-        
-        # Log invalid request
-        log_auth_attempt(request, success=False, details={
-            'email': request.data.get('email', ''),
-            'method': 'password_reset_request',
-            'errors': serializer.errors
-        })
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['post'])
-    def password_reset_confirm(self, request):
-        """Confirm password reset endpoint"""
-        serializer = PasswordResetConfirmSerializer(data=request.data)
-        if serializer.is_valid():
-            token = serializer.validated_data['token']
-            new_password = serializer.validated_data['new_password']
+            password = serializer.validated_data['password']
             
-            try:
-                reset_token = PasswordResetToken.objects.get(
-                    token=token,
-                    is_used=False,
-                    expires_at__gt=timezone.now()
-                )
+            # Authenticate user
+            user = authenticate(request, email=email, password=password)
+            if user and user.is_active:
+                # Generate JWT tokens
+                refresh = RefreshToken.for_user(user)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
                 
-                user = reset_token.user
-                user.set_password(new_password)
-                user.save()
-                
-                reset_token.use_token()
-                
-                # Log password change
-                AuditLog.log_action(
+                # Create audit log
+                AuditLog.objects.create(
                     user=user,
-                    action=AuditLog.ActionType.PASSWORD_CHANGE,
+                    action=AuditLog.ActionType.USER_LOGIN,
                     resource_type='User',
                     resource_id=str(user.id),
-                    details={'method': 'reset_token'},
-                    ip_address=get_client_ip(request),
-                    user_agent=get_user_agent(request)
+                    details={'email': user.email}
                 )
                 
-                return Response({'message': 'Password reset successful'})
-            except PasswordResetToken.DoesNotExist:
-                return Response({'error': 'Invalid or expired reset token'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['post'])
-    def verify_email(self, request):
-        """Email verification endpoint"""
-        serializer = EmailVerificationSerializer(data=request.data)
-        if serializer.is_valid():
-            token = serializer.validated_data['token']
-            
-            try:
-                verification_token = EmailVerificationToken.objects.get(
-                    token=token,
-                    is_used=False,
-                    expires_at__gt=timezone.now()
+                # Set cookies
+                response = Response({
+                    'user': UserProfileSerializer(user).data,
+                    'access': access_token,
+                    'refresh': refresh_token,
+                    'message': 'Login successful'
+                })
+                
+                set_jwt_cookies(response, access_token, refresh_token)
+                return response
+            else:
+                return Response(
+                    {'error': 'Invalid credentials or inactive account'},
+                    status=status.HTTP_401_UNAUTHORIZED
                 )
-                
-                user = verification_token.user
-                user.verify_email()
-                verification_token.use_token()
-                
-                # Log email verification
-                AuditLog.log_action(
-                    user=user,
-                    action=AuditLog.ActionType.EMAIL_VERIFICATION,
-                    resource_type='User',
-                    resource_id=str(user.id),
-                    details={'method': 'verification_token'},
-                    ip_address=get_client_ip(request),
-                    user_agent=get_user_agent(request)
-                )
-                
-                return Response({'message': 'Email verified successfully'})
-            except EmailVerificationToken.DoesNotExist:
-                return Response({'error': 'Invalid or expired verification token'}, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class UserViewSet(viewsets.ModelViewSet):
-    """User management endpoints"""
-    queryset = User.objects.all()
-    serializer_class = UserProfileSerializer
+class UserLogoutViewSet(viewsets.ViewSet):
+    """User logout endpoints"""
     permission_classes = [IsAuthenticated]
-    authentication_classes = [CookieJWTAuthentication, JWTAuthentication]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'email_verified', 'role']
-    search_fields = ['email', 'first_name', 'last_name']
-    ordering_fields = ['date_joined', 'last_login', 'email']
-    ordering = ['-date_joined']
     
-    def get_queryset(self):
-        """Filter queryset based on user permissions"""
-        if self.request.user.is_superuser or self.request.user.role == User.Role.ADMIN:
-            return User.objects.all()
+    def create(self, request):
+        """Logout user"""
+        # Create audit log
+        AuditLog.objects.create(
+            user=request.user,
+            action=AuditLog.ActionType.USER_LOGOUT,
+            resource_type='User',
+            resource_id=str(request.user.id),
+            details={'email': request.user.email}
+        )
         
-        # Regular users can only see themselves
-        return User.objects.filter(id=self.request.user.id)
+        # Clear cookies
+        response = Response({'message': 'Logout successful'})
+        clear_jwt_cookies(response)
+        return response
+
+
+class UserProfileViewSet(viewsets.ModelViewSet):
+    """User profile management"""
+    queryset = User.objects.all()
+    permission_classes = [IsAuthenticated]
     
     def get_serializer_class(self):
-        """Return appropriate serializer based on action"""
-        if self.action == 'me':
-            return UserProfileWithKycSerializer
-        elif self.action == 'update' or self.action == 'partial_update':
+        if self.action == 'list':
+            return UserListSerializer
+        elif self.action in ['update', 'partial_update']:
             return UserProfileUpdateSerializer
         return UserProfileSerializer
     
-    @action(detail=False, methods=['get', 'patch'])
-    def me(self, request):
-        """Get or update current user profile"""
-        if request.method == 'GET':
-            serializer = self.get_serializer(request.user)
-            return Response(serializer.data)
-        
-        # PATCH method for updates
-        serializer = UserProfileUpdateSerializer(request.user, data=request.data, partial=True)
-        if serializer.is_valid():
-            # Log profile update
-            old_data = {
-                'first_name': request.user.first_name,
-                'last_name': request.user.last_name,
-                'phone_number': request.user.phone_number,
-                'address': request.user.address,
-                'city': request.user.city,
-                'state': request.user.state,
-                'postal_code': request.user.postal_code,
-                'country': request.user.country,
-                'bio': request.user.bio,
-                'website': request.user.website,
-            }
-            
-            user = serializer.save()
-            
-            AuditLog.log_action(
-                user=request.user,
-                action=AuditLog.ActionType.UPDATE,
-                resource_type='UserProfile',
-                resource_id=str(user.id),
-                details={
-                    'old_data': old_data,
-                    'new_data': serializer.validated_data,
-                    'updated_fields': list(serializer.validated_data.keys())
-                },
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
-            
-            return Response(UserProfileSerializer(user).data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def get_queryset(self):
+        """Filter queryset based on user permissions"""
+        if self.request.user.is_superuser:
+            return User.objects.all()
+        return User.objects.filter(id=self.request.user.id)
     
-    @action(detail=True, methods=['post'])
-    def change_password(self, request, pk=None):
+    def get_object(self):
+        """Get user object"""
+        if self.kwargs.get('pk') == 'me':
+            return self.request.user
+        return super().get_object()
+    
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """Get current user profile"""
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def change_password(self, request):
         """Change user password"""
-        user = self.get_object()
-        
-        # Check if user can change their own password or is admin
-        if user != request.user and not (request.user.is_superuser or request.user.role == User.Role.ADMIN):
-            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-        
-        serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
+        serializer = PasswordChangeSerializer(data=request.data, context={'user': request.user})
         if serializer.is_valid():
-            user.set_password(serializer.validated_data['new_password'])
-            user.save()
+            request.user.set_password(serializer.validated_data['new_password'])
+            request.user.save()
             
-            # Log password change
-            AuditLog.log_action(
+            # Create audit log
+            AuditLog.objects.create(
                 user=request.user,
                 action=AuditLog.ActionType.PASSWORD_CHANGE,
                 resource_type='User',
-                resource_id=str(user.id),
-                details={'method': 'change_password'},
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
+                resource_id=str(request.user.id),
+                details={'email': request.user.email}
             )
             
             return Response({'message': 'Password changed successfully'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=True, methods=['patch'])
-    def update_role(self, request, pk=None):
-        """Update user role (admin only)"""
-        if not (request.user.is_superuser or request.user.role == User.Role.ADMIN):
-            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-        
-        user = self.get_object()
-        serializer = UserRoleUpdateSerializer(data=request.data)
-        if serializer.is_valid():
-            old_role = user.role
-            user.role = serializer.validated_data['role']
-            user.save()
-            
-            # Log role change
-            log_role_change(request, user, [old_role], [user.role], {
-                'assigned_user': user.email,
-                'method': 'admin_update'
-            })
-            
-            return Response({'message': 'Role updated successfully'})
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class AdminUserViewSet(viewsets.ModelViewSet):
-    """Admin user management endpoints"""
-    queryset = User.objects.all()
-    serializer_class = UserListSerializer
-    permission_classes = [IsUserManager]
-    authentication_classes = [CookieJWTAuthentication, JWTAuthentication]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'email_verified', 'role']
-    search_fields = ['email', 'first_name', 'last_name']
-    ordering_fields = ['date_joined', 'last_login', 'email']
-    ordering = ['-date_joined']
-    
-    def get_queryset(self):
-        """Admin can see all users"""
-        return User.objects.all()
-    
-    @action(detail=True, methods=['post'])
-    def assign_role(self, request, pk=None):
-        """Assign role to user"""
-        user = self.get_object()
-        serializer = UserRoleAssignmentSerializer(data=request.data, context={'user': user})
-        if serializer.is_valid():
-            # If setting as primary, remove other primary roles
-            if serializer.validated_data.get('is_primary', False):
-                UserRole.objects.filter(user=user, is_primary=True).update(is_primary=False)
-            
-            role = UserRole.objects.create(
-                user=user,
-                assigned_by=request.user,
-                **serializer.validated_data
-            )
-            
-            # Log role assignment
-            AuditLog.log_action(
-                user=request.user,
-                action=AuditLog.ActionType.ROLE_ASSIGNMENT,
-                resource_type='UserRole',
-                resource_id=str(role.id),
-                details={
-                    'assigned_user': user.email,
-                    'role_type': role.role_type,
-                    'context_type': role.context_type,
-                    'context_id': role.context_id,
-                    'permissions': {
-                        'can_manage_events': role.can_manage_events,
-                        'can_manage_teams': role.can_manage_teams,
-                        'can_manage_users': role.can_manage_users,
-                        'can_manage_fixtures': role.can_manage_fixtures,
-                        'can_manage_results': role.can_manage_results,
-                        'can_manage_payments': role.can_manage_payments,
-                        'can_manage_content': role.can_manage_content,
-                        'can_view_reports': role.can_view_reports,
-                    }
-                },
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
-            
-            return Response(UserRoleSerializer(role).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=True, methods=['delete'])
-    def delete_user(self, request, pk=None):
-        """Delete user (admin only)"""
-        if not request.user.is_superuser:
-            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-        
-        user = self.get_object()
-        
-        # Log user deletion
-        AuditLog.log_action(
-            user=request.user,
-            action=AuditLog.ActionType.DELETE,
-            resource_type='User',
-            resource_id=str(user.id),
-            details={'deleted_user': user.email},
-            ip_address=get_client_ip(request),
-            user_agent=get_user_agent(request)
-        )
-        
-        user.delete()
-        return Response({'message': 'User deleted successfully'})
-
-
-class UserRoleViewSet(viewsets.ModelViewSet):
-    """User role management endpoints"""
-    queryset = UserRole.objects.all()
-    serializer_class = UserRoleSerializer
-    permission_classes = [IsUserManager]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['role_type', 'is_active', 'is_primary', 'user']
-    search_fields = ['user__email', 'user__first_name', 'user__last_name']
-    ordering_fields = ['assigned_at', 'created_at']
-    ordering = ['-assigned_at']
+class OrganizerApplicationViewSet(viewsets.ModelViewSet):
+    """Organizer application management"""
+    queryset = OrganizerApplication.objects.all()
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         """Filter queryset based on user permissions"""
-        if self.request.user.is_superuser or self.request.user.role == User.Role.ADMIN:
-            return UserRole.objects.all()
-        
-        # Regular users can only see their own roles
-        return UserRole.objects.filter(user=self.request.user)
-
-
-class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
-    """Audit log viewing endpoints (admin only)"""
-    queryset = AuditLog.objects.all()
-    serializer_class = AuditLogSerializer
-    permission_classes = [IsUserManager]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['action', 'resource_type', 'user']
-    search_fields = ['user__email', 'resource_type', 'details']
-    ordering_fields = ['created_at']
-    ordering = ['-created_at']
-    
-    def get_queryset(self):
-        """Admin can see all audit logs"""
-        return AuditLog.objects.all()
-
-
-# ===== ROLE REQUEST VIEWS =====
-
-class RoleRequestViewSet(viewsets.ModelViewSet):
-    """Role request management"""
-    serializer_class = RoleRequestSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'requested_role']
-    search_fields = ['user__email', 'user__first_name', 'user__last_name', 'note']
-    ordering_fields = ['created_at', 'updated_at']
-    ordering = ['-created_at']
-    
-    def get_queryset(self):
-        """Get role requests based on user permissions"""
         if self.request.user.is_superuser:
-            # Admin can see all role requests
-            return RoleRequest.objects.all().select_related('user', 'reviewed_by')
-        else:
-            # Users can only see their own role requests
-            return RoleRequest.objects.filter(user=self.request.user)
-    
-    def get_serializer_class(self):
-        """Return appropriate serializer based on action"""
-        if self.action == 'create':
-            return RoleRequestCreateSerializer
-        elif self.action in ['approve', 'reject']:
-            return RoleRequestReviewSerializer
-        return RoleRequestSerializer
+            return OrganizerApplication.objects.all()
+        return OrganizerApplication.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
-        """Create role request for current user"""
-        # Check if user already has a pending request
-        existing_request = RoleRequest.objects.filter(
+        """Create organizer application for current user"""
+        # Check if user already has a pending application
+        existing_application = OrganizerApplication.objects.filter(
             user=self.request.user,
-            status=RoleRequest.Status.PENDING
+            status=OrganizerApplication.Status.PENDING
         ).exists()
         
-        if existing_request:
-            raise serializers.ValidationError(
-                "You already have a pending role request. Please wait for it to be reviewed."
-            )
+        if existing_application:
+            raise serializers.ValidationError('You already have a pending organizer application')
         
         serializer.save(user=self.request.user)
-        
-        # Log audit event
-        AuditLog.log_action(
-            user=self.request.user,
-            action=AuditLog.ActionType.CREATE,
-            resource_type='Role Request',
-            resource_id=str(serializer.instance.pk),
-            details={
-                'requested_role': serializer.instance.requested_role,
-                'note': serializer.instance.note
-            },
-            ip_address=get_client_ip(self.request),
-            user_agent=get_user_agent(self.request)
-        )
     
-    @action(detail=False, methods=['get'])
-    def mine(self, request):
-        """Get current user's role requests"""
-        role_requests = RoleRequest.objects.filter(user=request.user).order_by('-created_at')
-        serializer = self.get_serializer(role_requests, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser])
+    @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """Approve role request (admin only)"""
-        role_request = self.get_object()
-        
-        if role_request.status != RoleRequest.Status.PENDING:
+        """Approve organizer application (admin only)"""
+        if not request.user.is_superuser:
             return Response(
-                {'error': 'Only pending role requests can be approved'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': 'Only administrators can approve applications'},
+                status=status.HTTP_403_FORBIDDEN
             )
         
-        serializer = RoleRequestReviewSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        application = self.get_object()
+        application.approve(request.user)
         
-        notes = serializer.validated_data.get('notes', '')
-        
-        with transaction.atomic():
-            # Approve the role request
-            role_request.approve(request.user, notes)
-            
-            # Log audit event
-            AuditLog.log_action(
-                user=request.user,
-                action=AuditLog.ActionType.ROLE_REQUEST_APPROVED,
-                resource_type='Role Request',
-                resource_id=str(role_request.pk),
-                details={
-                    'target_user': role_request.user.email,
-                    'approved_role': role_request.requested_role,
-                    'notes': notes
-                },
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
-            
-            # Send notification to user
-            from notifications.services import NotificationService
-            NotificationService.send_notification(
-                user=role_request.user,
-                title="Role Request Approved",
-                message=f"Your request for {role_request.get_requested_role_display()} role has been approved.",
-                notification_type="role_approved"
-            )
-            
-            # Broadcast user update via WebSocket
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f"user_{role_request.user.id}",
-                {
-                    'type': 'user.updated',
-                    'user_id': role_request.user.id,
-                    'role': role_request.user.role
-                }
-            )
-        
-        return Response(
-            {'message': 'Role request approved successfully'},
-            status=status.HTTP_200_OK
-        )
+        return Response({'message': 'Application approved successfully'})
     
-    @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser])
+    @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """Reject role request (admin only)"""
-        role_request = self.get_object()
-        
-        if role_request.status != RoleRequest.Status.PENDING:
+        """Reject organizer application (admin only)"""
+        if not request.user.is_superuser:
             return Response(
-                {'error': 'Only pending role requests can be rejected'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': 'Only administrators can reject applications'},
+                status=status.HTTP_403_FORBIDDEN
             )
         
-        serializer = RoleRequestReviewSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        application = self.get_object()
+        reason = request.data.get('reason', '')
+        application.reject(request.user, reason)
         
-        reason = serializer.validated_data.get('reason', '')
-        
-        with transaction.atomic():
-            # Reject the role request
-            role_request.reject(request.user, reason)
-            
-            # Log audit event
-            AuditLog.log_action(
-                user=request.user,
-                action=AuditLog.ActionType.ROLE_REQUEST_REJECTED,
-                resource_type='Role Request',
-                resource_id=str(role_request.pk),
-                details={
-                    'target_user': role_request.user.email,
-                    'rejected_role': role_request.requested_role,
-                    'reason': reason
-                },
-                ip_address=get_client_ip(request),
-                user_agent=get_user_agent(request)
-            )
-            
-            # Send notification to user
-            from notifications.services import NotificationService
-            NotificationService.send_notification(
-                user=role_request.user,
-                title="Role Request Rejected",
-                message=f"Your request for {role_request.get_requested_role_display()} role was rejected. Reason: {reason}",
-                notification_type="role_rejected"
-            )
-        
-        return Response(
-            {'message': 'Role request rejected successfully'},
-            status=status.HTTP_200_OK
-        )
+        return Response({'message': 'Application rejected successfully'})
 
 
-
+# Password reset and email verification disabled for minimal boot profile

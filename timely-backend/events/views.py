@@ -332,6 +332,61 @@ class EventViewSet(AuditLogMixin, viewsets.ModelViewSet):
                 )
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    @action(detail=True, methods=['post'])
+    def purchase(self, request, pk=None):
+        """Request a ticket for an event (stub for approval mode)"""
+        event = self.get_object()
+        
+        if not request.user.is_authenticated:
+            return Response(
+                {"detail": "Authentication required"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Check if event is open for registration
+        if event.status != Event.Status.UPCOMING:
+            return Response(
+                {"detail": "Event is not open for registration"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user already has a pending/approved registration
+        from registrations.models import Registration
+        existing_registration = Registration.objects.filter(
+            event=event,
+            applicant=request.user,
+            status__in=['PENDING', 'APPROVED']
+        ).first()
+        
+        if existing_registration:
+            return Response(
+                {"detail": "You already have a registration for this event"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create a pending registration (ticket request)
+        registration = Registration.objects.create(
+            event=event,
+            applicant=request.user,
+            type='ATHLETE',  # Default to athlete registration
+            status='PENDING',
+            notes='Ticket request submitted via purchase endpoint'
+        )
+        
+        # Send email confirmation
+        try:
+            from accounts.emails import send_ticket_request_confirmation
+            send_ticket_request_confirmation(request.user, event)
+        except Exception:
+            # Don't fail the request if email fails
+            pass
+        
+        return Response({
+            "status": "PENDING",
+            "message": "Ticket request submitted - awaiting approval",
+            "registration_id": registration.id
+        }, status=status.HTTP_201_CREATED)
+    
     
     def _send_realtime_update(self, event, action, extra_data=None):
         """Send realtime update via WebSocket (safe no-op if Channels not available)"""
