@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { publicAPI } from '../../services/api.js';
+import api from '../../services/api.js';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/ui/EmptyState.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
@@ -25,7 +25,7 @@ export default function News() {
     setLoading(true);
     
     try {
-      const data = await publicAPI.getNews({ page, page_size: 10 });
+      const data = await api.getNews({ page, page_size: 10 });
       if (!active) return;
       
       const list = Array.isArray(data?.results) ? data.results : (Array.isArray(data) ? data : []);

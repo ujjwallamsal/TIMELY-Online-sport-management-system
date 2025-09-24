@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { publicAPI } from '../../services/api.js';
+import api from '../../services/api.js';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/ui/EmptyState.jsx';
 import Select from '../../components/ui/Select.jsx';
@@ -49,7 +49,7 @@ export default function Media() {
     });
     
     try {
-      const data = await publicAPI.getMedia(params);
+      const data = await api.getMedia(params);
       if (!active) return;
       const list = Array.isArray(data?.results) ? data.results : (Array.isArray(data) ? data : []);
       setItems(list);

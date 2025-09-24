@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ticketsAPI } from '../../services/api.js';
+import api from '../../services/api.js';
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
@@ -28,7 +28,7 @@ export default function VerifyTicket() {
     setResult(null);
 
     try {
-      const response = await ticketsAPI.verify(code.trim());
+      const response = await api.verify(code.trim());
       
       if (response.valid) {
         setResult({

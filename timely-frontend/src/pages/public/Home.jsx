@@ -10,7 +10,7 @@ import {
   NewspaperIcon,
   ArrowRightIcon
 } from '@heroicons/react/24/outline';
-import { publicAPI } from '../../services/api.js';
+import api from '../../services/api.js';
 import RealtimeAnnouncements from '../../components/RealtimeAnnouncements.jsx';
 
 const Home = () => {
@@ -31,7 +31,7 @@ const Home = () => {
       // Home: featured events (limit 6) and published
       const limit = 6;
       const status = 'published';
-      const { data } = await publicAPI.getEvents({ limit, status });
+      const { data } = await api.getEvents({ limit, status });
       setEvents(Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []));
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -44,7 +44,7 @@ const Home = () => {
   const fetchNews = async () => {
     try {
       setNewsLoading(true);
-      const response = await publicAPI.getNews({ page: 1, limit: 3 });
+      const response = await api.getNews({ page: 1, limit: 3 });
       const items = response.results || response.data || [];
       setNews(Array.isArray(items) ? items : []);
     } catch (error) {

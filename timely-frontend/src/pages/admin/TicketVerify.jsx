@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
-import { ticketsAPI } from '../../services/api.js';
+import api from '../../services/api.js';
 import { 
   QrCodeIcon, 
   CheckCircleIcon, 
@@ -30,7 +30,7 @@ export default function TicketVerify() {
     setVerificationResult(null);
 
     try {
-      const result = await ticketsAPI.verify(ticketCode.trim());
+      const result = await api.verify(ticketCode.trim());
       setVerificationResult(result);
       
       if (result.valid) {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { publicAPI, ticketsAPI } from '../../services/api.js';
+import api from '../../services/api.js';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/ui/EmptyState.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -25,7 +25,7 @@ export default function AthleteDashboard() {
   useEffect(() => {
     // Fetch athlete's schedule (fixtures where they participate)
     setMySchedule(prev => ({ ...prev, loading: true }));
-    publicAPI.getEvents({ participant: user?.id, status: 'UPCOMING' })
+    api.getEvents({ participant: user?.id, status: 'UPCOMING' })
       .then(data => {
         const items = data.results || data.data || [];
         setMySchedule({ loading: false, items: items.slice(0, 5) });
@@ -37,7 +37,7 @@ export default function AthleteDashboard() {
 
     // Fetch athlete's results (completed events)
     setMyResults(prev => ({ ...prev, loading: true }));
-    publicAPI.getEvents({ participant: user?.id, status: 'COMPLETED' })
+    api.getEvents({ participant: user?.id, status: 'COMPLETED' })
       .then(data => {
         const items = data.results || data.data || [];
         setMyResults({ loading: false, items: items.slice(0, 5) });
@@ -49,7 +49,7 @@ export default function AthleteDashboard() {
 
     // Fetch athlete's tickets
     setMyTickets(prev => ({ ...prev, loading: true }));
-    ticketsAPI.myTickets()
+    api.myTickets()
       .then(data => {
         const items = data.results || data.data || [];
         setMyTickets({ loading: false, items: items.slice(0, 3) });

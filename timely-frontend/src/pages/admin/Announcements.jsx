@@ -3,7 +3,7 @@ import Select from '../../components/ui/Select.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Textarea from '../../components/ui/Textarea.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
-import api, { announcementsAPI } from '../../services/api.js';
+import api from '../../services/api.js';
 
 export default function AdminAnnouncements() {
   const { push } = useToast();
@@ -15,7 +15,7 @@ export default function AdminAnnouncements() {
   useEffect(() => {
     let active = true;
     api.getEvents({ page_size: 100 }).then(({ data }) => active && setEvents(data));
-    announcementsAPI.list().then((data) => {
+    api.list().then((data) => {
       const items = Array.isArray(data?.results) ? data.results : (Array.isArray(data) ? data : []);
       if (active) setList(items);
     }).catch(() => active && setList([]));
@@ -25,7 +25,7 @@ export default function AdminAnnouncements() {
   const send = async () => {
     if (!eventId || !message) return;
     try {
-      await announcementsAPI.announceEvent(eventId, { message });
+      await api.announceEvent(eventId, { message });
       push({ type: 'success', title: 'Announcement sent' });
       setMessage('');
     } catch (err) {

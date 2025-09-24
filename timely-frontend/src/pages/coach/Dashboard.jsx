@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { publicAPI, eventFixturesAPI } from '../../services/api.js';
+import api from '../../services/api.js';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/ui/EmptyState.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -34,7 +34,7 @@ export default function CoachDashboard() {
 
     // Fetch upcoming fixtures for coach's team
     setUpcomingFixtures(prev => ({ ...prev, loading: true }));
-    publicAPI.getEvents({ status: 'UPCOMING' })
+    api.getEvents({ status: 'UPCOMING' })
       .then(data => {
         const items = data.results || data.data || [];
         setUpcomingFixtures({ loading: false, items: items.slice(0, 5) });
@@ -46,7 +46,7 @@ export default function CoachDashboard() {
 
     // Fetch recent results
     setRecentResults(prev => ({ ...prev, loading: true }));
-    publicAPI.getEvents({ status: 'COMPLETED' })
+    api.getEvents({ status: 'COMPLETED' })
       .then(data => {
         const items = data.results || data.data || [];
         setRecentResults({ loading: false, items: items.slice(0, 5) });
@@ -61,7 +61,7 @@ export default function CoachDashboard() {
   useLiveChannel(`team_${user?.id}_schedule`, (msg) => {
     if (msg.type === 'schedule_update') {
       // Refresh upcoming fixtures
-      publicAPI.getEvents({ status: 'UPCOMING' })
+      api.getEvents({ status: 'UPCOMING' })
         .then(data => {
           const items = data.results || data.data || [];
           setUpcomingFixtures(prev => ({ ...prev, items: items.slice(0, 5) }));
@@ -73,7 +73,7 @@ export default function CoachDashboard() {
   useLiveChannel(`team_${user?.id}_results`, (msg) => {
     if (msg.type === 'results_update') {
       // Refresh recent results
-      publicAPI.getEvents({ status: 'COMPLETED' })
+      api.getEvents({ status: 'COMPLETED' })
         .then(data => {
           const items = data.results || data.data || [];
           setRecentResults(prev => ({ ...prev, items: items.slice(0, 5) }));
