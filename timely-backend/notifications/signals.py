@@ -220,7 +220,7 @@ def ticket_issued_notify(sender, instance, created, **kwargs):
 def notification_created_websocket(sender, instance, created, **kwargs):
     """Send WebSocket notification when new notification is created"""
     if created:
-        group_name = f"notify:user:{instance.user.id}"
+        group_name = f"user_{instance.user.id}"
         message = {
             'type': 'notify.new',
             'data': {

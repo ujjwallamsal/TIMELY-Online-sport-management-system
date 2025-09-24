@@ -16,7 +16,7 @@ export default function Register() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const { signup, getRoleBasedPath } = useAuth();
+  const { register: registerUser, getRoleBasedPath } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
 
@@ -45,7 +45,7 @@ export default function Register() {
     if (!validate()) return;
     setLoading(true);
     try {
-      await signup({ ...form });
+      await registerUser({ ...form });
       push({ type: 'success', title: 'Account created', message: 'Welcome to Timely!' });
       // After signup, user is logged in; route based on role via me
       navigate(getRoleBasedPath('SPECTATOR'), { replace: true });

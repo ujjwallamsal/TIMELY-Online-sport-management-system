@@ -26,8 +26,8 @@ class PageAdmin(admin.ModelAdmin):
 
 @admin.register(News)
 class NewsAdmin(admin.ModelAdmin):
-    list_display = ("title", "published", "publish_at", "author", "created_at")
-    list_filter = ("published", "publish_at", "author")
+    list_display = ("title", "is_published", "published_at", "author", "created_at")
+    list_filter = ("is_published", "published_at", "author")
     search_fields = ("title", "body", "seo_title", "seo_description")
     fieldsets = (
         (None, {

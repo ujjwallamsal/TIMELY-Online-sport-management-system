@@ -49,10 +49,9 @@ export default function Login() {
   const validateForm = () => {
     const newErrors = {};
 
+    // Accept either email or username; backend supports both
     if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = 'Email or username is required';
     }
 
     if (!formData.password) {
@@ -153,18 +152,18 @@ export default function Login() {
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email address
+                Email or username
               </label>
               <Input
                 id="email"
                 name="email"
-                type="email"
+                type="text"
                 autoComplete="email"
                 required
                 value={formData.email}
                 onChange={handleChange}
                 error={!!errors.email}
-                placeholder="Enter your email"
+                placeholder="Enter your email or username"
                 className="w-full"
               />
               {errors.email && (

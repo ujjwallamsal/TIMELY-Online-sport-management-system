@@ -16,10 +16,10 @@ messages_router.register(r"threads", MessageThreadViewSet, basename="message-thr
 messages_router.register(r"messages", MessageViewSet, basename="messages")
 
 urlpatterns = [
-    # Notifications endpoints
-    path("notify/", include(notifications_router.urls)),
-    path("notify/announce/", AnnouncementView.as_view(), name="announcement"),
+    # Notifications endpoints mounted at /api/notifications/
+    path("", include(notifications_router.urls)),
+    path("announce/", AnnouncementView.as_view(), name="announcement"),
     
-    # Messaging endpoints
+    # Messaging endpoints mounted at /api/notifications/messages/
     path("messages/", include(messages_router.urls)),
 ]

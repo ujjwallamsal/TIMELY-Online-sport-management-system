@@ -1,6 +1,5 @@
 from rest_framework import serializers
-from .models import Album, MediaAsset
-from .models import Media
+from .models import Album, MediaAsset, Media, GalleryAlbum, GalleryMedia
 
 class MediaAssetSerializer(serializers.ModelSerializer):
     share_url = serializers.SerializerMethodField()
@@ -133,3 +132,81 @@ class MediaSerializer(serializers.ModelSerializer):
         if request and hasattr(request, "user"):
             validated_data["uploaded_by"] = request.user
         return super().create(validated_data)
+
+
+class GalleryAlbumSerializer(serializers.ModelSerializer):
+    """Serializer for gallery albums"""
+    media_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = GalleryAlbum
+        fields = [
+            "id", "title", "description", "cover", "is_public", 
+            "created_by", "created_at", "media_count"
+        ]
+        read_only_fields = ["id", "created_by", "created_at", "media_count"]
+
+    def get_media_count(self, obj):
+        return obj.media_items.filter(is_public=True).count()
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            validated_data["created_by"] = request.user
+        return super().create(validated_data)
+
+
+class GalleryMediaSerializer(serializers.ModelSerializer):
+    """Serializer for gallery media"""
+    file_url = serializers.SerializerMethodField()
+    album_title = serializers.CharField(source='album.title', read_only=True)
+    
+    class Meta:
+        model = GalleryMedia
+        fields = [
+            "id", "album", "title", "media_type", "image", "video_url",
+            "is_public", "uploaded_by", "created_at", "file_url", "album_title"
+        ]
+        read_only_fields = ["id", "uploaded_by", "created_at", "file_url", "album_title"]
+
+    def get_file_url(self, obj):
+        return obj.file_url
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            validated_data["uploaded_by"] = request.user
+        return super().create(validated_data)
+
+
+class PublicGalleryAlbumSerializer(serializers.ModelSerializer):
+    """Public serializer for gallery albums (read-only, public only)"""
+    media_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = GalleryAlbum
+        fields = [
+            "id", "title", "description", "cover", "created_at", "media_count"
+        ]
+        read_only_fields = ["id", "title", "description", "cover", "created_at", "media_count"]
+
+    def get_media_count(self, obj):
+        return obj.media_items.filter(is_public=True).count()
+
+
+class PublicGalleryMediaSerializer(serializers.ModelSerializer):
+    """Public serializer for gallery media (read-only, public only)"""
+    file_url = serializers.SerializerMethodField()
+    album_title = serializers.CharField(source='album.title', read_only=True)
+    
+    class Meta:
+        model = GalleryMedia
+        fields = [
+            "id", "album", "title", "media_type", "image", "video_url",
+            "created_at", "file_url", "album_title"
+        ]
+        read_only_fields = ["id", "album", "title", "media_type", "image", "video_url",
+                           "created_at", "file_url", "album_title"]
+
+    def get_file_url(self, obj):
+        return obj.file_url

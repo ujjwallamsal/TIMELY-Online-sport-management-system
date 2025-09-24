@@ -25,6 +25,7 @@ class Registration(models.Model):
     class Type(models.TextChoices):
         TEAM = "TEAM", "Team"
         ATHLETE = "ATHLETE", "Athlete"
+        SPECTATOR = "SPECTATOR", "Spectator"
     
     # Basic Information
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='registrations')
@@ -124,10 +125,30 @@ class Registration(models.Model):
             models.Index(fields=['status', 'submitted_at']),  # Required index
         ]
         constraints = [
+            # Enforce exactly one applicant (user XOR team) for ATHLETE/TEAM types.
+            # For SPECTATOR, both must be NULL.
             models.CheckConstraint(
                 check=(
-                    (models.Q(applicant_user__isnull=False) & models.Q(applicant_team__isnull=True)) |
-                    (models.Q(applicant_user__isnull=True) & models.Q(applicant_team__isnull=False))
+                    # Athlete: must have user, not team
+                    (
+                        models.Q(type="ATHLETE")
+                        & models.Q(applicant_user__isnull=False)
+                        & models.Q(applicant_team__isnull=True)
+                    )
+                    |
+                    # Team: must have team, not user
+                    (
+                        models.Q(type="TEAM")
+                        & models.Q(applicant_user__isnull=True)
+                        & models.Q(applicant_team__isnull=False)
+                    )
+                    |
+                    # Spectator: neither user nor team
+                    (
+                        models.Q(type="SPECTATOR")
+                        & models.Q(applicant_user__isnull=True)
+                        & models.Q(applicant_team__isnull=True)
+                    )
                 ),
                 name='exactly_one_applicant'
             )

@@ -256,6 +256,10 @@ export class API {
     return this.post('/auth/refresh/');
   }
 
+  async applyOrganizer() {
+    return this.post('/auth/apply-organizer/');
+  }
+
   // Events endpoints
   async getEvents(params = {}) {
     return this.get('/events/', params);
@@ -358,16 +362,89 @@ export class API {
   }
 
   async approveRegistration(id) {
-    return this.patch(`/registrations/${id}/approve/`);
+    return this.post(`/registrations/${id}/approve/`);
   }
 
   async rejectRegistration(id, reason = '') {
-    return this.patch(`/registrations/${id}/reject/`, { reason });
+    return this.post(`/registrations/${id}/reject/`, { reason });
   }
 
-  // Stub purchase endpoint for tickets
-  async purchaseTicket(eventId) {
-    return this.post(`/events/${eventId}/purchase/`);
+  // Ticketing endpoints
+  async createCheckoutSession(eventId) {
+    return this.post(`/ticketing/checkout-session/`, { event_id: eventId });
+  }
+
+  async getOrders(params = {}) {
+    return this.get('/ticketing/orders/', params);
+  }
+
+  async getOrder(id) {
+    return this.get(`/ticketing/orders/${id}/`);
+  }
+
+  // News endpoints
+  async getNews(params = {}) {
+    return this.get('/news/public/news/', params);
+  }
+
+  async getNewsItem(slugOrId) {
+    return this.get(`/news/public/news/${slugOrId}/`);
+  }
+
+  // Gallery endpoints
+  async getAlbums(params = {}) {
+    return this.get('/gallery/public/albums/', params);
+  }
+
+  async getMedia(params = {}) {
+    return this.get('/gallery/public/media/', params);
+  }
+
+  // Notifications endpoints
+  async getNotifications(params = {}) {
+    return this.get('/notifications/', params);
+  }
+
+  async markNotificationRead(id) {
+    return this.patch(`/notifications/${id}/mark-read/`);
+  }
+
+  async markAllNotificationsRead() {
+    return this.post('/notifications/mark-all-read/');
+  }
+
+  // Venues endpoints
+  async getVenues(params = {}) {
+    return this.get('/venues/', params);
+  }
+
+  async getVenue(id) {
+    return this.get(`/venues/${id}/`);
+  }
+
+  async createVenue(data) {
+    return this.post('/venues/', data);
+  }
+
+  async updateVenue(id, data) {
+    return this.patch(`/venues/${id}/`, data);
+  }
+
+  async deleteVenue(id) {
+    return this.delete(`/venues/${id}/`);
+  }
+
+  // Users endpoints (admin only)
+  async getUsers(params = {}) {
+    return this.get('/admin/users/', params);
+  }
+
+  async getUser(id) {
+    return this.get(`/admin/users/${id}/`);
+  }
+
+  async updateUser(id, data) {
+    return this.patch(`/admin/users/${id}/`, data);
   }
 }
 

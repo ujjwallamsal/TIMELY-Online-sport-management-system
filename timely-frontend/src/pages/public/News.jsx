@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../services/api.js';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/ui/EmptyState.jsx';
@@ -6,7 +7,8 @@ import { useToast } from '../../components/ui/Toast.jsx';
 import { 
   NewspaperIcon,
   CalendarIcon,
-  UserIcon
+  UserIcon,
+  ArrowRightIcon
 } from '@heroicons/react/24/outline';
 
 export default function News() {
@@ -60,6 +62,16 @@ export default function News() {
     });
   };
 
+  const getImageUrl = (image) => {
+    if (!image) return null;
+    if (image.startsWith('http')) return image;
+    return `http://127.0.0.1:8000${image}`;
+  };
+
+  const handleImageError = (e) => {
+    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMDAgMTAwTDEyMCA4MEwxNDAgMTAwTDEyMCAxMjBMMTAwIDEwMFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4PSI4MCIgeT0iODAiPgo8cGF0aCBkPSJNMjAgMjBMMzAgMTBMMzAgMzBMMjAgMjBaIiBmaWxsPSIjNkI3MjgwIi8+Cjwvc3ZnPgo8L3N2Zz4K';
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
       <div className="mb-6">
@@ -81,35 +93,50 @@ export default function News() {
         <EmptyState title="No news found" description="Check back later for updates." />
       ) : (
         <>
-          <div className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {items.map((n) => (
-              <article key={n.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-3">
-                  <h2 className="text-xl font-semibold text-gray-900 line-clamp-2">
+              <article key={n.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                {n.image && (
+                  <div className="aspect-w-16 aspect-h-9">
+                    <img
+                      src={getImageUrl(n.image)}
+                      alt={n.title}
+                      className="w-full h-48 object-cover"
+                      onError={handleImageError}
+                    />
+                  </div>
+                )}
+                
+                <div className="p-6">
+                  <div className="flex items-center text-sm text-gray-500 mb-2">
+                    <CalendarIcon className="h-4 w-4 mr-1" />
+                    {formatDate(n.published_at || n.created_at)}
+                  </div>
+                  
+                  <h2 className="text-xl font-semibold text-gray-900 mb-3 line-clamp-2">
                     {n.title}
                   </h2>
-                  <div className="flex items-center text-sm text-gray-500 ml-4">
-                    <CalendarIcon className="h-4 w-4 mr-1" />
-                    {formatDate(n.created_at)}
+                  
+                  <div className="prose prose-sm max-w-none text-gray-700 mb-4">
+                    <p className="line-clamp-3">
+                      {n.excerpt || n.body}
+                    </p>
                   </div>
-                </div>
-                
-                <div className="prose prose-sm max-w-none text-gray-700 mb-4">
-                  <p className="line-clamp-3">
-                    {n.body}
-                  </p>
-                </div>
 
-                <div className="flex items-center justify-between text-sm text-gray-500">
-                  <div className="flex items-center">
-                    <UserIcon className="h-4 w-4 mr-1" />
-                    <span>Author #{n.author}</span>
-                  </div>
-                  {n.seo_title && (
-                    <div className="text-xs bg-gray-100 px-2 py-1 rounded">
-                      SEO: {n.seo_title}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center text-sm text-gray-500">
+                      <UserIcon className="h-4 w-4 mr-1" />
+                      <span>{n.author_name || 'Anonymous'}</span>
                     </div>
-                  )}
+                    
+                    <Link
+                      to={`/news/${n.slug}`}
+                      className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-500"
+                    >
+                      Read more
+                      <ArrowRightIcon className="h-4 w-4 ml-1" />
+                    </Link>
+                  </div>
                 </div>
               </article>
             ))}

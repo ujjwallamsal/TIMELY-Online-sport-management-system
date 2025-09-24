@@ -63,24 +63,119 @@ class AuthViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['post'])
     def register(self, request):
-        """User registration - delegates to accounts app"""
-        from accounts.views import AuthViewSet
-        auth_view = AuthViewSet()
-        return auth_view.register(request)
+        """User registration"""
+        from accounts.serializers import UserRegistrationSerializer
+        from rest_framework_simplejwt.tokens import RefreshToken
+        
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+            
+            return Response({
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'role': user.role
+                },
+                'access': access_token,
+                'refresh': refresh_token
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'])
     def login(self, request):
-        """User login - delegates to accounts app"""
-        from accounts.views import AuthViewSet
-        auth_view = AuthViewSet()
-        return auth_view.login(request)
+        """User login"""
+        from django.contrib.auth import authenticate
+        from rest_framework_simplejwt.tokens import RefreshToken
+        
+        email = request.data.get('email')
+        password = request.data.get('password')
+        
+        if not email or not password:
+            return Response(
+                {'error': 'Email and password are required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user = authenticate(request, email=email, password=password)
+        if user and user.is_active:
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+            
+            return Response({
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'role': user.role
+                },
+                'access': access_token,
+                'refresh': refresh_token
+            })
+        
+        return Response(
+            {'error': 'Invalid credentials'}, 
+            status=status.HTTP_401_UNAUTHORIZED
+        )
     
     @action(detail=False, methods=['post'])
     def refresh(self, request):
-        """Token refresh - delegates to accounts app"""
-        from accounts.views import AuthViewSet
-        auth_view = AuthViewSet()
-        return auth_view.refresh(request)
+        """Token refresh"""
+        from rest_framework_simplejwt.tokens import RefreshToken
+        
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response(
+                {'error': 'Refresh token is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            refresh = RefreshToken(refresh_token)
+            access_token = str(refresh.access_token)
+            return Response({'access': access_token})
+        except Exception:
+            return Response(
+                {'error': 'Invalid refresh token'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def logout(self, request):
+        """User logout"""
+        # For JWT, logout is handled client-side by removing the token
+        return Response({'message': 'Logged out successfully'})
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def apply_organizer(self, request):
+        """Apply to be an organizer"""
+        from accounts.models import OrganizerApplication
+        from django.utils import timezone
+        
+        user = request.user
+        app, created = OrganizerApplication.objects.get_or_create(
+            user=user, 
+            defaults={"status": "PENDING"}
+        )
+        
+        if not created and app.status == "REJECTED":
+            app.status = "PENDING"
+            app.reviewed_by = None
+            app.reviewed_at = None
+            app.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+        
+        return Response({"status": app.status}, status=status.HTTP_200_OK)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -1187,21 +1282,15 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Try to authenticate with email first, then username
+        # Try to authenticate with case-insensitive email/username
+        from django.db.models import Q
         user = None
-        try:
-            # Try email authentication
-            user = User.objects.get(email=email_or_username)
-            if not user.check_password(password):
-                user = None
-        except User.DoesNotExist:
-            try:
-                # Try username authentication
-                user = User.objects.get(username=email_or_username)
-                if not user.check_password(password):
-                    user = None
-            except User.DoesNotExist:
-                pass
+        if email_or_username and password:
+            candidate = User.objects.filter(
+                Q(email__iexact=email_or_username) | Q(username__iexact=email_or_username)
+            ).first()
+            if candidate and candidate.check_password(password):
+                user = candidate
         
         if user is None or not user.is_active:
             return Response(

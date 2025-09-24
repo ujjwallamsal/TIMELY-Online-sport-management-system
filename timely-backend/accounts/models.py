@@ -173,6 +173,24 @@ class OrganizerApplication(models.Model):
         self.user.is_staff = False  # Organizer is not admin
         self.user.save(update_fields=['role', 'is_staff', 'updated_at'])
         
+        # Send realtime notification
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f"user_{self.user.id}",
+                    {
+                        "type": "role_update",
+                        "role": "ORGANIZER"
+                    }
+                )
+        except Exception:
+            # Don't fail the approval if realtime fails
+            pass
+        
         # Send email notification
         try:
             from .emails import send_organizer_application_status

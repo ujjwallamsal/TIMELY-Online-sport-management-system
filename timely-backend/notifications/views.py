@@ -71,7 +71,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
         
         return qs.select_related('user').order_by('-created_at')
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post', 'patch'])
     def mark_all_read(self, request, *args: Any, **kwargs: Any) -> Response:
         """Mark all notifications as read"""
         count = self.get_queryset().filter(read_at__isnull=True).update(
@@ -79,12 +79,21 @@ class NotificationViewSet(viewsets.ModelViewSet):
         )
         return Response({"updated": count}, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post', 'patch'])
     def mark_read(self, request, pk=None, *args: Any, **kwargs: Any) -> Response:
         """Mark a specific notification as read"""
         notification = self.get_object()
         notification.mark_read()
         return Response(NotificationSerializer(notification).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'])
+    def mark_read_bulk(self, request, *args: Any, **kwargs: Any) -> Response:
+        """Mark a list of notification ids as read: {"ids": [uuid,...]}"""
+        ids = request.data.get('ids') or []
+        if not isinstance(ids, list) or not ids:
+            return Response({"detail": "ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+        updated = Notification.objects.filter(user=request.user, id__in=ids, read_at__isnull=True).update(read_at=timezone.now())
+        return Response({"updated": updated}, status=status.HTTP_200_OK)
 
 
 class AnnouncementView(APIView):

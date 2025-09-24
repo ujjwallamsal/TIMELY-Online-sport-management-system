@@ -103,12 +103,20 @@ export default function Events() {
                 <span className="text-sm text-gray-600">Live</span>
               </div>
             )}
-            {user && (user.role === 'ADMIN' || user.role === 'ORGANIZER') && (
+            {user && user.role === 'ADMIN' && (
               <Link
                 to="/admin/events"
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                Manage Events
+                Manage All Events
+              </Link>
+            )}
+            {user && user.role === 'ORGANIZER' && (
+              <Link
+                to="/organizer/events"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                Manage My Events
               </Link>
             )}
           </div>

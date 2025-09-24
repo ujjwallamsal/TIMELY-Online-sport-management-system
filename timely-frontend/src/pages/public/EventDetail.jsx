@@ -64,10 +64,27 @@ export default function EventDetail() {
 
     try {
       setPurchaseStatus('pending');
-      const result = await api.purchaseTicket(id);
-      setPurchaseStatus(result.status);
+      
+      if (event.fee_cents > 0) {
+        // Paid event - use Stripe checkout
+        const result = await api.createCheckoutSession(id);
+        if (result.session_id) {
+          // Load Stripe and redirect to checkout
+          const stripe = window.Stripe || (await import('@stripe/stripe-js')).loadStripe(import.meta.env.VITE_STRIPE_PK);
+          const { error } = await stripe.redirectToCheckout({
+            sessionId: result.session_id
+          });
+          if (error) {
+            throw new Error(error.message);
+          }
+        }
+      } else {
+        // Free event - direct registration
+        const result = await api.createRegistration({ event: id });
+        setPurchaseStatus(result.status);
+      }
     } catch (err) {
-      setError(err.message || 'Failed to request ticket');
+      setError(err.message || 'Failed to process ticket request');
       setPurchaseStatus(null);
     }
   };
@@ -315,7 +332,7 @@ export default function EventDetail() {
                       onClick={handlePurchaseTicket}
                       className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200"
                     >
-                      {user ? 'Request Ticket' : 'Login to Request Ticket'}
+                      {user ? (event.fee_cents > 0 ? 'Buy Ticket' : 'Get Free Ticket') : 'Login to Get Ticket'}
                     </button>
                   )}
                 </div>

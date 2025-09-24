@@ -127,6 +127,11 @@ class RegistrationCreateSerializer(serializers.ModelSerializer):
             except User.DoesNotExist:
                 raise serializers.ValidationError("User not found")
         
+        elif reg_type == Registration.Type.SPECTATOR:
+            # Spectator creates a placeholder registration without applicant entities.
+            data['applicant_user'] = None
+            data['applicant_team'] = None
+
         return data
     
     def create(self, validated_data):

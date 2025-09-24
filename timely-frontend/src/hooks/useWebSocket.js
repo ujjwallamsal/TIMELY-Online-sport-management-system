@@ -14,6 +14,7 @@ const useWebSocket = (url, options = {}) => {
     onError,
     reconnectInterval = 30000, // Reduced reconnection frequency to prevent spam
     pingInterval = 30000,
+    protocols,
     ...wsOptions
   } = options;
 
@@ -36,7 +37,10 @@ const useWebSocket = (url, options = {}) => {
         wsUrl = `${proto}://${backendHost}${url}`;
       }
       
-      wsRef.current = new WebSocket(wsUrl, ...wsOptions);
+      const protos = Array.isArray(protocols)
+        ? protocols
+        : (protocols ? [protocols] : undefined);
+      wsRef.current = new WebSocket(wsUrl, protos);
       
       wsRef.current.onopen = (event) => {
         setWsConnected(true);

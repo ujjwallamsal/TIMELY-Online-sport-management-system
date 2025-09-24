@@ -33,36 +33,15 @@ def mark_completed(modeladmin, request, queryset):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = [
-        "name", "sport", "venue", "start_datetime", "end_datetime", 
-        "status", "created_by"
-    ]
-    search_fields = ["name", "sport", "venue__name", "created_by__email"]
-    list_filter = ["sport", "status", "start_datetime", "end_datetime"]
+    # Minimal, safe configuration using only valid fields
+    list_display = ("name", "sport", "venue", "start_datetime", "status")
+    search_fields = ("name",)
+    list_filter = ("sport", "status", "start_datetime")
+    ordering = ("-start_datetime",)
     date_hierarchy = "start_datetime"
-    ordering = ["-start_datetime"]
     actions = [mark_ongoing, mark_completed]
     inlines = [DivisionInline]
-    readonly_fields = ["created_at", "updated_at"]
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('name', 'sport', 'description')
-        }),
-        ('Date and Time', {
-            'fields': ('start_datetime', 'end_datetime')
-        }),
-        ('Location and Venue', {
-            'fields': ('venue', 'eligibility')
-        }),
-        ('Status', {
-            'fields': ('status',)
-        }),
-        ('Metadata', {
-            'fields': ('created_by',),
-            'classes': ('collapse',)
-        })
-    )
+    readonly_fields = ("created_at", "updated_at")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

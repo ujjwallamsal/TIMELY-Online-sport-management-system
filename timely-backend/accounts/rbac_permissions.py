@@ -8,12 +8,18 @@ Comprehensive RBAC permissions for DRF implementing the specific requirements:
 """
 from rest_framework import permissions
 from django.contrib.auth import get_user_model
-from .models import UserRole
 from events.models import Event
 from teams.models import Team, TeamMember
 from fixtures.models import Fixture
 from results.models import Result
-from tickets.models import Ticket, TicketOrder
+try:
+    from tickets.models import Ticket, TicketOrder
+except Exception:
+    # Tickets app may be disabled in minimal boot profile; use placeholders
+    class _NoModel:  # simple placeholder class for isinstance checks to fail cleanly
+        pass
+    Ticket = _NoModel
+    TicketOrder = _NoModel
 from venues.models import Venue
 
 User = get_user_model()
@@ -34,14 +40,8 @@ class BaseRBACPermission(permissions.BasePermission):
         return user and user.is_authenticated and getattr(user, 'role', '').upper() == role.upper()
     
     def has_rbac_role(self, user, role_type):
-        """Check if user has RBAC role via UserRole model"""
-        if not user or not user.is_authenticated:
-            return False
-        return UserRole.objects.filter(
-            user=user,
-            is_active=True,
-            role_type=role_type
-        ).exists()
+        """RBAC roles via UserRole model are not used in current schema."""
+        return False
     
     def has_role(self, user, role_type):
         """Check if user has role via legacy field or RBAC"""
@@ -64,7 +64,7 @@ class OrganizerPermissions(BaseRBACPermission):
             return False
         
         # Must be organizer
-        return self.has_role(request.user, UserRole.RoleType.ORGANIZER)
+        return self.has_role(request.user, User.Roles.ORGANIZER)
     
     def has_object_permission(self, request, view, obj):
         # Admin/staff can do anything
@@ -110,7 +110,7 @@ class CoachPermissions(BaseRBACPermission):
             return False
         
         # Must be coach
-        return self.has_role(request.user, UserRole.RoleType.COACH)
+        return self.has_role(request.user, User.Roles.COACH)
     
     def has_object_permission(self, request, view, obj):
         # Admin/staff can do anything
@@ -168,7 +168,7 @@ class AthletePermissions(BaseRBACPermission):
             return False
         
         # Must be athlete
-        return self.has_role(request.user, UserRole.RoleType.ATHLETE)
+        return self.has_role(request.user, User.Roles.ATHLETE)
     
     def has_object_permission(self, request, view, obj):
         # Admin/staff can do anything
@@ -258,7 +258,7 @@ class SpectatorPermissions(BaseRBACPermission):
             return False
         
         # Must be spectator
-        return self.has_role(request.user, UserRole.RoleType.SPECTATOR)
+        return self.has_role(request.user, User.Roles.SPECTATOR)
     
     def has_object_permission(self, request, view, obj):
         # Admin/staff can do anything
@@ -414,12 +414,12 @@ class PublicOrAuthenticatedPermission(PublicReadOnlyPermission):
 class MultiRoleWithOrganizerPermission(MultiRolePermissions):
     """Multi-role permission that includes organizer with full access"""
     def __init__(self, additional_roles=None, read_only_roles=None):
-        allowed_roles = [UserRole.RoleType.ORGANIZER] + (additional_roles or [])
+        allowed_roles = [User.Roles.ORGANIZER] + (additional_roles or [])
         super().__init__(allowed_roles=allowed_roles, read_only_roles=read_only_roles)
 
 
 class MultiRoleWithCoachPermission(MultiRolePermissions):
     """Multi-role permission that includes coach with full access"""
     def __init__(self, additional_roles=None, read_only_roles=None):
-        allowed_roles = [UserRole.RoleType.COACH] + (additional_roles or [])
+        allowed_roles = [User.Roles.COACH] + (additional_roles or [])
         super().__init__(allowed_roles=allowed_roles, read_only_roles=read_only_roles)

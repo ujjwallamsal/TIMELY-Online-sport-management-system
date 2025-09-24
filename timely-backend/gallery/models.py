@@ -128,3 +128,92 @@ class Media(models.Model):
         if self.file:
             return self.file.url
         return None
+
+
+class GalleryAlbum(models.Model):
+    """Simple album model for general gallery use (not tied to events)"""
+    title = models.CharField(max_length=200, help_text="Album title")
+    description = models.TextField(blank=True, help_text="Album description")
+    cover = models.ImageField(
+        upload_to='gallery/albums/covers/',
+        blank=True,
+        null=True,
+        help_text="Album cover image"
+    )
+    is_public = models.BooleanField(default=True, help_text="Whether album is public")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name="created_gallery_albums"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Gallery Album'
+        verbose_name_plural = 'Gallery Albums'
+
+    def __str__(self):
+        return self.title
+
+
+class GalleryMedia(models.Model):
+    """Simple media model for general gallery use (not tied to events)"""
+    
+    class MediaType(models.TextChoices):
+        IMAGE = "image", "Image"
+        VIDEO = "video", "Video"
+
+    def gallery_media_upload_path(instance, filename):
+        """Generate upload path for gallery media files"""
+        return f"gallery/media/{filename}"
+
+    album = models.ForeignKey(
+        GalleryAlbum, 
+        on_delete=models.CASCADE, 
+        related_name="media_items",
+        help_text="Associated album"
+    )
+    title = models.CharField(max_length=200, help_text="Media title")
+    media_type = models.CharField(
+        max_length=20, 
+        choices=MediaType.choices, 
+        default=MediaType.IMAGE,
+        help_text="Type of media"
+    )
+    image = models.ImageField(
+        upload_to=gallery_media_upload_path,
+        blank=True,
+        null=True,
+        help_text="Image file"
+    )
+    video_url = models.URLField(
+        blank=True,
+        help_text="Video URL (for external videos)"
+    )
+    is_public = models.BooleanField(default=True, help_text="Whether media is public")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name="uploaded_gallery_media"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Gallery Media'
+        verbose_name_plural = 'Gallery Media'
+
+    def __str__(self):
+        return f"{self.title} ({self.media_type})"
+
+    @property
+    def file_url(self):
+        """Get the URL for the media file"""
+        if self.image:
+            return self.image.url
+        return self.video_url

@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.db import models
 from accounts.rbac_permissions import OrganizerOrAdminPermission
 from .models import Page, News, Banner, Announcement
-from .serializers import PageSerializer, NewsSerializer, BannerSerializer, AnnouncementSerializer
+from .serializers import PageSerializer, NewsSerializer, NewsPublicSerializer, BannerSerializer, AnnouncementSerializer
 
 
 class PageViewSet(viewsets.ModelViewSet):
@@ -45,11 +45,11 @@ class NewsViewSet(viewsets.ModelViewSet):
     def published(self, request):
         """Get all published news articles."""
         queryset = News.objects.filter(
-            published=True,
+            is_published=True,
             publish_at__lte=timezone.now()
         ).union(
-            News.objects.filter(published=True, publish_at__isnull=True)
-        ).order_by('-publish_at', '-created_at')
+            News.objects.filter(is_published=True, publish_at__isnull=True)
+        ).order_by('-published_at', '-created_at')
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -111,18 +111,19 @@ class PublicPageViewSet(viewsets.ReadOnlyModelViewSet):
 
 class PublicNewsViewSet(viewsets.ReadOnlyModelViewSet):
     """Public read-only access to published news."""
-    queryset = News.objects.filter(published=True)
-    serializer_class = NewsSerializer
+    queryset = News.objects.filter(is_published=True)
+    serializer_class = NewsPublicSerializer
     permission_classes = [permissions.AllowAny]
+    lookup_field = 'slug'
 
     def get_queryset(self):
         """Filter by published status and publish_at."""
         now = timezone.now()
         return News.objects.filter(
-            published=True
+            is_published=True
         ).filter(
             models.Q(publish_at__isnull=True) | models.Q(publish_at__lte=now)
-        ).order_by('-publish_at', '-created_at')
+        ).order_by('-published_at', '-created_at')
 
 
 class PublicBannerViewSet(viewsets.ReadOnlyModelViewSet):

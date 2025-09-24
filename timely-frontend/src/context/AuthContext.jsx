@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../services/api.js";
+import useWebSocket from "../hooks/useWebSocket.js";
 
 const AuthContext = createContext();
 
@@ -7,8 +9,9 @@ const AuthContext = createContext();
 const getRoleBasedPath = (role) => {
   switch (role) {
     case 'ADMIN':
-    case 'ORGANIZER':
       return '/admin';
+    case 'ORGANIZER':
+      return '/organizer';
     case 'COACH':
       return '/coach';
     case 'ATHLETE':
@@ -22,6 +25,34 @@ const getRoleBasedPath = (role) => {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  // WebSocket for real-time role updates and notifications
+  const { lastMessage, wsConnected } = useWebSocket(
+    user ? `/ws/user/${user.id}/` : null,
+    {
+      onMessage: (data) => {
+        if (data.type === 'role_update') {
+          // Update user role and refresh user data
+          setUser(prev => prev ? { ...prev, role: data.role } : null);
+          // Navigate to appropriate dashboard based on new role
+          const newPath = getRoleBasedPath(data.role);
+          navigate(newPath, { replace: true });
+          // Optionally refresh full user data
+          refreshUser();
+        } else if (data.type === 'notification') {
+          // Handle notifications (will be implemented with notification system)
+          console.log('Received notification:', data);
+        } else if (data.type === 'pong') {
+          // Handle ping response
+          console.log('WebSocket ping response received');
+        }
+      },
+      onError: (error) => {
+        console.log('WebSocket connection failed, will fallback to polling');
+      }
+    }
+  );
 
   useEffect(() => {
     checkAuthStatus();

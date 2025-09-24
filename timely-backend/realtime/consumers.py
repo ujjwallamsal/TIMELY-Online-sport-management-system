@@ -15,14 +15,26 @@ class EventConsumer(AsyncWebsocketConsumer):
         self.event_id = self.scope['url_route']['kwargs']['event_id']
         self.user = self.scope["user"]
         
-        # Join event-specific groups
-        self.results_group = f"event_{self.event_id}_results"
-        self.schedule_group = f"event_{self.event_id}_schedule"
-        self.announcements_group = f"event_{self.event_id}_announcements"
+        # Handle general events stream
+        if self.event_id == 'general':
+            # Join general event groups for all events
+            self.results_group = "general_results"
+            self.schedule_group = "general_schedule"
+            self.announcements_group = "general_announcements"
+            self.events_group = "general_events"
+        else:
+            # Join event-specific groups
+            self.results_group = f"event_{self.event_id}_results"
+            self.schedule_group = f"event_{self.event_id}_schedule"
+            self.announcements_group = f"event_{self.event_id}_announcements"
+            self.events_group = None
         
         await self.channel_layer.group_add(self.results_group, self.channel_name)
         await self.channel_layer.group_add(self.schedule_group, self.channel_name)
         await self.channel_layer.group_add(self.announcements_group, self.channel_name)
+        
+        if self.events_group:
+            await self.channel_layer.group_add(self.events_group, self.channel_name)
         
         await self.accept()
         
@@ -31,7 +43,7 @@ class EventConsumer(AsyncWebsocketConsumer):
             'type': 'connection_established',
             'message': f'Connected to event {self.event_id} updates',
             'event_id': self.event_id,
-            'topics': ['results', 'schedule', 'announcements']
+            'topics': ['results', 'schedule', 'announcements'] + (['events'] if self.events_group else [])
         }))
     
     async def disconnect(self, close_code):
@@ -39,6 +51,8 @@ class EventConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_discard(self.results_group, self.channel_name)
         await self.channel_layer.group_discard(self.schedule_group, self.channel_name)
         await self.channel_layer.group_discard(self.announcements_group, self.channel_name)
+        if hasattr(self, 'events_group') and self.events_group:
+            await self.channel_layer.group_discard(self.events_group, self.channel_name)
     
     async def receive(self, text_data):
         """Handle incoming messages"""
@@ -66,6 +80,12 @@ class EventConsumer(AsyncWebsocketConsumer):
             'type': 'results_update',
             'data': event['data']
         }))
+
+    # Aliases for upstream message types
+    async def result_update(self, event):
+        await self.results_update(event)
+    async def leaderboard_update(self, event):
+        await self.results_update(event)
     
     async def schedule_update(self, event):
         """Handle schedule updates"""
@@ -73,6 +93,10 @@ class EventConsumer(AsyncWebsocketConsumer):
             'type': 'schedule_update',
             'data': event['data']
         }))
+
+    # Alias for single-fixture schedule updates
+    async def fixture_update(self, event):
+        await self.schedule_update(event)
     
     async def announcements_update(self, event):
         """Handle announcements updates"""
@@ -555,4 +579,56 @@ class SpectatorConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'results_update',
             'data': event['data']
+        }))
+
+
+class UserConsumer(AsyncWebsocketConsumer):
+    """WebSocket consumer for per-user real-time updates"""
+    
+    async def connect(self):
+        """Connect to user-specific WebSocket groups"""
+        self.user = self.scope["user"]
+        
+        # Only allow authenticated users
+        if not self.user.is_authenticated:
+            await self.close()
+            return
+        
+        # Join user-specific group
+        self.user_group = f"user_{self.user.id}"
+        await self.channel_layer.group_add(self.user_group, self.channel_name)
+        
+        await self.accept()
+        
+        # Send connection confirmation
+        await self.send(text_data=json.dumps({
+            'type': 'connection_established',
+            'message': f'Connected to user updates for {self.user.email}',
+            'user_id': self.user.id,
+            'role': self.user.role
+        }))
+    
+    async def disconnect(self, close_code):
+        """Leave all groups on disconnect"""
+        await self.channel_layer.group_discard(self.user_group, self.channel_name)
+    
+    async def receive(self, text_data):
+        """Handle incoming messages"""
+        try:
+            data = json.loads(text_data)
+            message_type = data.get('type')
+            
+            if message_type == 'ping':
+                await self.send(text_data=json.dumps({
+                    'type': 'pong',
+                    'timestamp': data.get('timestamp')
+                }))
+        except json.JSONDecodeError:
+            pass
+    
+    async def role_update(self, event):
+        """Handle role update messages"""
+        await self.send(text_data=json.dumps({
+            'type': 'role_update',
+            'role': event['role']
         }))

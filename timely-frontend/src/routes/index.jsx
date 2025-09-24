@@ -7,13 +7,38 @@ import Register from '../pages/Register.jsx';
 import Events from '../pages/public/Events.jsx';
 import EventDetail from '../pages/public/EventDetail.jsx';
 import Tickets from '../pages/public/Tickets.jsx';
+import News from '../pages/public/News.jsx';
+import NewsItem from '../pages/public/NewsItem.jsx';
+import Media from '../pages/public/Media.jsx';
 import NotFound from '../pages/NotFound.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+
+// Helper function to get role-based redirect path
+const getRoleBasedPath = (role) => {
+  switch (role) {
+    case 'ADMIN':
+      return '/admin';
+    case 'ORGANIZER':
+      return '/organizer';
+    case 'COACH':
+      return '/coach';
+    case 'ATHLETE':
+      return '/athlete';
+    case 'SPECTATOR':
+    default:
+      return '/';
+  }
+};
 import AdminDashboard from '../pages/admin/Dashboard.jsx';
 import AdminEvents from '../pages/admin/Events.jsx';
 import AdminRegistrations from '../pages/admin/Registrations.jsx';
 import AdminFixtures from '../pages/admin/Fixtures.jsx';
 import AdminResults from '../pages/admin/Results.jsx';
+import OrganizerDashboard from '../pages/organizer/Dashboard.jsx';
+import AthleteDashboard from '../pages/athlete/Dashboard.jsx';
+import AthleteProfile from '../pages/athlete/Profile.jsx';
+import Profile from '../pages/Profile.jsx';
+import CoachDashboard from '../pages/coach/Dashboard.jsx';
 
 /**
  * SkipLink component for accessibility
@@ -103,13 +128,16 @@ export default function AppRoutes() {
         <Route path="/events" element={<Events />} />
         <Route path="/events/:id" element={<EventDetail />} />
         <Route path="/tickets" element={<Tickets />} />
+        <Route path="/news" element={<News />} />
+        <Route path="/news/:slug" element={<NewsItem />} />
+        <Route path="/media" element={<Media />} />
 
-        {/* Admin/Organizer routes */}
+        {/* Admin routes - ADMIN only */}
         <Route 
           path="/admin" 
           element={
             <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
+              <RequireRole roles={["ADMIN"]}>
                 <AdminDashboard />
               </RequireRole>
             </RequireAuth>
@@ -119,7 +147,7 @@ export default function AppRoutes() {
           path="/admin/events"
           element={
             <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
+              <RequireRole roles={["ADMIN"]}>
                 <AdminEvents />
               </RequireRole>
             </RequireAuth>
@@ -129,7 +157,7 @@ export default function AppRoutes() {
           path="/admin/registrations"
           element={
             <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
+              <RequireRole roles={["ADMIN"]}>
                 <AdminRegistrations />
               </RequireRole>
             </RequireAuth>
@@ -139,7 +167,7 @@ export default function AppRoutes() {
           path="/admin/fixtures"
           element={
             <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
+              <RequireRole roles={["ADMIN"]}>
                 <AdminFixtures />
               </RequireRole>
             </RequireAuth>
@@ -149,8 +177,128 @@ export default function AppRoutes() {
           path="/admin/results"
           element={
             <RequireAuth>
-              <RequireRole roles={["ADMIN", "ORGANIZER"]}>
+              <RequireRole roles={["ADMIN"]}>
                 <AdminResults />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        {/* Dashboard redirect based on role */}
+        <Route
+          path="/dashboard"
+          element={
+            <RequireAuth>
+              <Navigate to={user ? getRoleBasedPath(user.role) : '/login'} replace />
+            </RequireAuth>
+          }
+        />
+
+        {/* Organizer routes - ORGANIZER only */}
+        <Route
+          path="/organizer"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["ORGANIZER"]}>
+                <OrganizerDashboard />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/organizer/events"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["ORGANIZER"]}>
+                <AdminEvents />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/organizer/registrations"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["ORGANIZER"]}>
+                <AdminRegistrations />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/organizer/fixtures"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["ORGANIZER"]}>
+                <AdminFixtures />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/organizer/results"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["ORGANIZER"]}>
+                <AdminResults />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        {/* Athlete routes */}
+        <Route
+          path="/athlete"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["ATHLETE"]}>
+                <AthleteDashboard />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/athlete/profile"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["ATHLETE"]}>
+                <AthleteProfile />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        {/* Coach routes */}
+        <Route
+          path="/coach"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["COACH"]}>
+                <CoachDashboard />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        {/* Spectator route - generic logged-in home */}
+        <Route
+          path="/spectator"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["SPECTATOR", "ATHLETE", "COACH", "ORGANIZER", "ADMIN"]}>
+                <Home />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        {/* Generic profile - role-aware */}
+        <Route
+          path="/profile"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["SPECTATOR", "ATHLETE", "COACH", "ORGANIZER", "ADMIN"]}>
+                <Profile />
               </RequireRole>
             </RequireAuth>
           }

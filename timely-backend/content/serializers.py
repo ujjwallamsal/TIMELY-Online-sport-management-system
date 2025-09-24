@@ -31,11 +31,12 @@ class NewsSerializer(serializers.ModelSerializer):
     class Meta:
         model = News
         fields = [
-            "id", "title", "body", "published", "publish_at",
+            "id", "title", "slug", "excerpt", "body", "image", 
+            "is_published", "published_at", "publish_at",
             "seo_title", "seo_description", "author", "author_name",
             "created_at", "updated_at"
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "author_name", "author"]
+        read_only_fields = ["id", "created_at", "updated_at", "author_name", "author", "published_at"]
     
     def create(self, validated_data):
         """Override create to set author from authenticated user"""
@@ -77,6 +78,20 @@ class BannerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("End time must be after start time.")
         
         return data
+
+
+class NewsPublicSerializer(serializers.ModelSerializer):
+    """Public serializer for news articles (read-only, published only)"""
+    author_name = serializers.CharField(source='author.get_full_name', read_only=True)
+    
+    class Meta:
+        model = News
+        fields = [
+            "id", "title", "slug", "excerpt", "body", "image", 
+            "published_at", "author_name", "created_at"
+        ]
+        read_only_fields = ["id", "title", "slug", "excerpt", "body", "image", 
+                           "published_at", "author_name", "created_at"]
 
 
 # Keep AnnouncementSerializer for backward compatibility

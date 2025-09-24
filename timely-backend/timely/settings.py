@@ -51,6 +51,9 @@ INSTALLED_APPS = [
     "fixtures",
     "results",
     "gallery",
+    "content",
+    "notifications",
+    "tickets",
     "reports",
 ]
 
@@ -155,7 +158,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        # Remove global permission requirement - let each view handle its own
+        "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_PAGINATION_CLASS": "common.pagination.TimelyPageNumberPagination",
     "PAGE_SIZE": 12,

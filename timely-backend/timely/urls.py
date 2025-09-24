@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.shortcuts import redirect
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from common.views import HealthView
@@ -12,7 +13,13 @@ admin.site.site_header = "Timely Sports Management"
 admin.site.site_title = "Timely Admin"
 admin.site.index_title = "Operations Dashboard"
 
+def redirect_to_docs(request):
+    return redirect('/api/docs/')
+
 urlpatterns = [
+    # Root redirect to API docs
+    path("", redirect_to_docs, name="root"),
+    
     # Health check
     path("health/", HealthView.as_view(), name="health"),
 

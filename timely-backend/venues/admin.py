@@ -24,6 +24,12 @@ class VenueAdmin(admin.ModelAdmin):
         }),
     )
 
+    def save_model(self, request, obj, form, change):
+        if obj.created_by_id is None:
+            obj.created_by = request.user
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
+
 @admin.register(VenueSlot)
 class VenueSlotAdmin(admin.ModelAdmin):
     list_display = ["venue", "starts_at", "ends_at", "status", "reason"]

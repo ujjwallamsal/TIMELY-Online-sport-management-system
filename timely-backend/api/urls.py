@@ -16,7 +16,7 @@ router.register(r'teams', views.TeamViewSet, basename='team')
 router.register(r'registrations', views.RegistrationViewSet, basename='registration')
 router.register(r'fixtures', views.FixtureViewSet, basename='fixture')
 router.register(r'results', views.ResultViewSet, basename='result')
-# router.register(r'notifications', views.NotificationViewSet, basename='notification')  # Disabled for minimal boot profile
+## Notifications are exposed via notifications.urls; keep router clean here
 router.register(r'announcements', views.AnnouncementViewSet, basename='announcement')
 router.register(r'reports', views.ReportViewSet, basename='report')
 
@@ -35,12 +35,10 @@ urlpatterns = [
     path('', include(router.urls)),
     
     # Include app-specific endpoints
-    # path('tickets/', include('tickets.urls')),  # COMMENTED OUT - will re-add after core flows are green
-    # path('reports/', include('reports.urls')),  # COMMENTED OUT - depends on tickets, will re-add after core flows are green
-    # path('gallery/', include('gallery.urls')),  # COMMENTED OUT - may have import issues, will re-add after core flows are green
-    # path('content/', include('content.urls')),  # COMMENTED OUT - will re-add after core flows are green
-    # path('', include('accounts.urls')),  # COMMENTED OUT - has UserRole import issues, will re-add after core flows are green
-    # path('venues/', include('venues.urls')),  # COMMENTED OUT - may have import issues, will re-add after core flows are green
+    path('tickets/', include('tickets.urls')),
+    path('notifications/', include('notifications.urls')),
+    # path('', include('accounts.urls')),
+    # path('venues/', include('venues.urls')),
     path('events/', include('events.urls')),
     # path('teams/', include('teams.urls')),  # COMMENTED OUT - has import issues, will re-add after core flows are green
     # path('registrations/', include('registrations.urls')),  # COMMENTED OUT - may have import issues, will re-add after core flows are green
@@ -67,6 +65,11 @@ urlpatterns = [
     path('public/events/<int:event_id>/results/', views.PublicEventResultsView.as_view(), name='public-event-results'),
     path('public/events/<int:event_id>/leaderboard/', views.PublicEventLeaderboardView.as_view(), name='public-event-leaderboard'),
     path('public/media/', views.PublicMediaListView.as_view(), name='public-media-list'),
-    # Public news is available at /api/content/public/news/ via content.urls
     path('public/stats/', views.PublicStatsView.as_view(), name='public-stats'),
+    
+    # Content (pages/news/banners)
+    path('news/', include('content.urls')),
+
+    # Gallery
+    path('gallery/', include('gallery.urls')),
 ]

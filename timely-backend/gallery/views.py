@@ -4,10 +4,12 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 
-from .models import Album, MediaAsset, Media
+from .models import Album, MediaAsset, Media, GalleryAlbum, GalleryMedia
 from .serializers import (
     AlbumSerializer, MediaAssetSerializer, MediaSerializer,
-    MediaUploadSerializer, MediaModerationSerializer, PublicMediaSerializer
+    MediaUploadSerializer, MediaModerationSerializer, PublicMediaSerializer,
+    GalleryAlbumSerializer, GalleryMediaSerializer,
+    PublicGalleryAlbumSerializer, PublicGalleryMediaSerializer
 )
 from .permissions import IsOrganizerOrAdminOrReadOnly
 
@@ -178,4 +180,68 @@ class MediaViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(uploaded_by=self.request.user)
+
+
+# Gallery endpoints for general use (not tied to events)
+class GalleryAlbumViewSet(viewsets.ModelViewSet):
+    """ViewSet for gallery albums"""
+    queryset = GalleryAlbum.objects.filter(is_public=True)
+    serializer_class = GalleryAlbumSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["is_public"]
+    search_fields = ["title", "description"]
+    ordering_fields = ["created_at", "title"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        if self.request.user.is_authenticated and self.request.user.role in ['ADMIN', 'ORGANIZER']:
+            return GalleryAlbum.objects.all()
+        return GalleryAlbum.objects.filter(is_public=True)
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class GalleryMediaViewSet(viewsets.ModelViewSet):
+    """ViewSet for gallery media"""
+    queryset = GalleryMedia.objects.filter(is_public=True)
+    serializer_class = GalleryMediaSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["album", "media_type", "is_public"]
+    search_fields = ["title", "album__title"]
+    ordering_fields = ["created_at", "title"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        if self.request.user.is_authenticated and self.request.user.role in ['ADMIN', 'ORGANIZER']:
+            return GalleryMedia.objects.all()
+        return GalleryMedia.objects.filter(is_public=True)
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
+class PublicGalleryAlbumViewSet(viewsets.ReadOnlyModelViewSet):
+    """Public read-only access to gallery albums"""
+    queryset = GalleryAlbum.objects.filter(is_public=True)
+    serializer_class = PublicGalleryAlbumSerializer
+    permission_classes = [permissions.AllowAny]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["title", "description"]
+    ordering_fields = ["created_at", "title"]
+    ordering = ["-created_at"]
+
+
+class PublicGalleryMediaViewSet(viewsets.ReadOnlyModelViewSet):
+    """Public read-only access to gallery media"""
+    queryset = GalleryMedia.objects.filter(is_public=True)
+    serializer_class = PublicGalleryMediaSerializer
+    permission_classes = [permissions.AllowAny]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["album", "media_type"]
+    search_fields = ["title", "album__title"]
+    ordering_fields = ["created_at", "title"]
+    ordering = ["-created_at"]
 

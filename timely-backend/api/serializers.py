@@ -21,9 +21,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'username', 'first_name', 'last_name', 'full_name',
-            'role', 'is_active', 'is_verified', 'created_at', 'last_login'
+            'role', 'is_active', 'is_staff', 'is_superuser', 'is_verified', 'created_at', 'last_login'
         ]
-        read_only_fields = ['id', 'created_at', 'last_login', 'is_verified']
+        read_only_fields = ['id', 'created_at', 'last_login', 'is_verified', 'role', 'is_staff', 'is_superuser']
 
 
 class SportSerializer(serializers.ModelSerializer):
