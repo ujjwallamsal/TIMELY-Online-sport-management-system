@@ -3,6 +3,8 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from .models import Page, News, Banner
+from django.contrib.auth import get_user_model
+from notifications.services.notification_service import NotificationService
 
 
 def send_realtime_update(group_name, event_type, data):
@@ -75,6 +77,23 @@ def news_published_signal(sender, instance, created, **kwargs):
                 'publish_at': instance.publish_at.isoformat() if instance.publish_at else instance.created_at.isoformat()
             }
         )
+
+        # Create notifications so spectators see "Admin changed news"
+        try:
+            User = get_user_model()
+            spectators = User.objects.filter(role=getattr(User.Role, 'SPECTATOR', 'SPECTATOR'), is_active=True)[:500]
+            for user in spectators:
+                NotificationService.send_notification(
+                    user=user,
+                    title="News updated",
+                    message=f"Admin changed news: {instance.title}",
+                    notification_type='announcement',
+                    topic='system',
+                    link_url=f"/news/{instance.id}"
+                )
+        except Exception:
+            # Do not block save on notification errors
+            pass
 
 
 @receiver(post_save, sender=Banner)

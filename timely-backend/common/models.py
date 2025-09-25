@@ -120,6 +120,35 @@ class AuditLog(models.Model):
         return ip
 
 
+class DeletionRequest(models.Model):
+    """Approval workflow for deletions of protected models"""
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    ]
+    requested_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='deletion_requests')
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    target = GenericForeignKey('content_type', 'object_id')
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    processed_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='processed_deletion_requests')
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+
+    def __str__(self):
+        return f"Delete {self.content_type.app_label}.{self.content_type.model}({self.object_id}) - {self.status}"
+
+
 class SystemSettings(models.Model):
     """System-wide settings and configuration"""
     

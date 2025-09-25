@@ -25,7 +25,7 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     
     # First-party (Timely) - accounts must come before admin
-    "accounts",          # <- custom user lives here
+    "accounts.apps.AccountsConfig",          # <- custom user lives here
     
     # Django admin (depends on accounts.User)
     "django.contrib.admin",
@@ -41,21 +41,21 @@ INSTALLED_APPS = [
     "channels",
     
     # First-party (Timely) - Minimal boot profile
-    "common",
-    "api",
-    "events",
-    "venues",
-    "sports",
-    "teams",
-    "registrations",
-    "fixtures",
-    "results",
-    "gallery",
-    "content",
-    "notifications",
-    "ticketing",
-    "tickets",
-    "reports",
+    "common.apps.CommonConfig",
+    "api.apps.ApiConfig",
+    "events.apps.EventsConfig",
+    "venues.apps.VenuesConfig",
+    "sports.apps.SportsConfig",
+    "teams.apps.TeamsConfig",
+    "registrations.apps.RegistrationsConfig",
+    "fixtures.apps.FixturesConfig",
+    "results.apps.ResultsConfig",
+    "gallery.apps.GalleryConfig",
+    "content.apps.ContentConfig",
+    "notifications.apps.NotificationsConfig",
+    "ticketing.apps.TicketingConfig",
+    "tickets.apps.TicketsConfig",
+    "reports.apps.ReportsConfig",
 ]
 
 # NOTE: Payments (Stripe) and app-level notifications are intentionally disabled for stabilization.
@@ -65,6 +65,7 @@ INSTALLED_APPS = [
 # --- Middleware ---
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -128,12 +129,22 @@ USE_I18N = True
 USE_TZ = True
 
 # --- Static / Media ---
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
+
+# Use WhiteNoise only for serving collected static files; avoid manifest in dev to prevent 404/MIME errors
+if DEBUG:
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+else:
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Add React build only for public site (not admin). Ensure admin static path is not shadowed.
+FRONTEND_DIST = BASE_DIR.parent / "timely-frontend" / "dist"
+TEMPLATES[0]["DIRS"] = [FRONTEND_DIST]
+STATICFILES_DIRS = [(FRONTEND_DIST / "assets")]
 
 # Media Hub settings
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB

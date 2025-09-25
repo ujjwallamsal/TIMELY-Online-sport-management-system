@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -90,7 +90,7 @@ class RegistrationAdmin(admin.ModelAdmin):
 	]
 	date_hierarchy = "submitted_at"
 	ordering = ["-submitted_at"]
-	actions = [approve_registrations, reject_registrations]
+	actions = [approve_registrations, reject_registrations, 'export_selected_to_csv', 'export_selected_to_pdf']
 
 	def get_queryset(self, request):
 		qs = (
@@ -112,6 +112,23 @@ class RegistrationAdmin(admin.ModelAdmin):
 		if obj and hasattr(obj, 'payments') and obj.payments.exists():
 			return False
 		return super().has_delete_permission(request, obj)
+
+	def export_selected_to_csv(self, request, queryset):
+		import csv
+		from django.http import HttpResponse
+		response = HttpResponse(content_type='text/csv; charset=utf-8')
+		response['Content-Disposition'] = 'attachment; filename=registrations.csv'
+		writer = csv.writer(response)
+		writer.writerow(['id','event','applicant_user','applicant_team','type','status','submitted_at'])
+		for r in queryset:
+			writer.writerow([r.id, r.event.name if r.event else '', getattr(r.applicant_user, 'email', ''), getattr(r.applicant_team, 'name', ''), r.type, r.status, r.submitted_at.isoformat() if r.submitted_at else ''])
+		return response
+	export_selected_to_csv.short_description = 'Export selected to CSV'
+
+	def export_selected_to_pdf(self, request, queryset):
+    		# TODO: Implement with WeasyPrint/ReportLab
+		self.message_user(request, 'PDF export is not yet implemented.', level=messages.INFO)
+	export_selected_to_pdf.short_description = 'Export selected to PDF (stub)'
 
 	def save_model(self, request, obj, form, change):
 		# Enforce XOR normalization before saving (also migrate legacy fields defensively)

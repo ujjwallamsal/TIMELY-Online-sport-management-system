@@ -71,6 +71,12 @@ class Team(models.Model):
 
 class TeamMember(models.Model):
     """Team member model for the lean MVP"""
+    ROLE_CHOICES = (
+        ('player', 'Player'),
+        ('captain', 'Captain'),
+        ('coach', 'Coach'),
+        ('manager', 'Manager'),
+    )
     team = models.ForeignKey(
         Team, 
         on_delete=models.CASCADE, 
@@ -85,6 +91,12 @@ class TeamMember(models.Model):
     )
     jersey_no = models.PositiveIntegerField(
         help_text="Jersey number"
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default='player',
+        help_text="Role of the team member",
     )
     position = models.CharField(
         max_length=50,

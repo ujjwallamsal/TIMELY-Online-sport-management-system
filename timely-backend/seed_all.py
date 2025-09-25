@@ -33,8 +33,11 @@ def seed_all():
         call_command('seed_results')
         
         # 4. Seed users (if not already done)
+    if os.environ.get('ALLOW_DEMO_SEED') == '1':
         print("\n👥 Seeding users...")
         call_command('seed_users')
+    else:
+        print("\n⏭️  Skipping demo user seeding (set ALLOW_DEMO_SEED=1 to enable).")
         
         print("\n✅ All seeding completed successfully!")
         print("\n📋 Sample data created:")

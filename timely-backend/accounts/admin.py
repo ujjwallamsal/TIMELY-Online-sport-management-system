@@ -7,6 +7,8 @@ from django.utils import timezone
 from django.contrib import messages
 from django.db import transaction
 from .models import User, OrganizerApplication
+from django.contrib.contenttypes.models import ContentType
+from common.models import DeletionRequest
 
 
 @admin.register(User)
@@ -21,7 +23,24 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ['email', 'username', 'first_name', 'last_name']
     ordering = ['-date_joined']
     readonly_fields = ['created_at', 'updated_at', 'date_joined']
-    
+    actions = ['export_selected_to_csv', 'export_selected_to_pdf']
+
+    def export_selected_to_csv(self, request, queryset):
+        import csv
+        from django.http import HttpResponse
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename=users.csv'
+        writer = csv.writer(response)
+        writer.writerow(['email','role','is_active','is_staff','is_superuser','date_joined'])
+        for u in queryset:
+            writer.writerow([u.email, u.role, u.is_active, u.is_staff, u.is_superuser, u.date_joined.isoformat() if u.date_joined else ''])
+        return response
+    export_selected_to_csv.short_description = 'Export selected to CSV'
+
+    def export_selected_to_pdf(self, request, queryset):
+        # TODO: Implement PDF export using a library like WeasyPrint/ReportLab
+        self.message_user(request, 'PDF export is not yet implemented.', level=messages.INFO)
+    export_selected_to_pdf.short_description = 'Export selected to PDF (stub)'
     fieldsets = (
         (None, {
             'fields': ('email', 'password')
@@ -50,6 +69,27 @@ class UserAdmin(BaseUserAdmin):
     def get_queryset(self, request):
         """Optimize queryset"""
         return super().get_queryset(request).select_related()
+
+    def delete_model(self, request, obj):
+        ct = ContentType.objects.get_for_model(User)
+        DeletionRequest.objects.create(
+            requested_by=request.user,
+            content_type=ct,
+            object_id=obj.id,
+            reason=request.POST.get('reason', 'Admin requested user deletion'),
+        )
+        self.message_user(request, "Deletion requested; pending approval.")
+
+    def delete_queryset(self, request, queryset):
+        ct = ContentType.objects.get_for_model(User)
+        for obj in queryset:
+            DeletionRequest.objects.create(
+                requested_by=request.user,
+                content_type=ct,
+                object_id=obj.id,
+                reason=request.POST.get('reason', 'Admin requested user deletion'),
+            )
+        self.message_user(request, f"Deletion requested for {queryset.count()} user(s); pending approval.")
 
 
 @admin.register(OrganizerApplication)
@@ -134,7 +174,20 @@ class OrganizerApplicationAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related('user', 'reviewed_by')
 
 
-# Customize admin site
-admin.site.site_header = "Timely Sports Management Admin"
+# --- Admin site branding and theme ---
+admin.site.site_header = "Timely Sports Management"
 admin.site.site_title = "Timely Admin"
-admin.site.index_title = "Welcome to Timely Sports Management"
+admin.site.index_title = "Operations Dashboard"
+
+
+class CustomAdminSite(admin.AdminSite):
+    class Media:
+        css = {
+            'all': (
+                'admin/css/custom.css',
+            )
+        }
+
+
+# Swap the default site class to include our Media definitions for CSS
+admin.site.__class__ = CustomAdminSite

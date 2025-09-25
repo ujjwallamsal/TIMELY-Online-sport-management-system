@@ -11,6 +11,9 @@ class Command(BaseCommand):
     help = 'Seed news articles and gallery content'
 
     def handle(self, *args, **options):
+        if os.environ.get("ALLOW_DEMO_SEED") != "1":
+            self.stdout.write(self.style.WARNING("Skipping news/gallery seeding (set ALLOW_DEMO_SEED=1 to enable)."))
+            return
         # Get or create admin user for authoring
         admin_user, created = User.objects.get_or_create(
             email='admin@timely.local',

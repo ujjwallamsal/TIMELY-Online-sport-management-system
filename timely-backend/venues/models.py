@@ -13,7 +13,7 @@ class Venue(models.Model):
     
     name = models.CharField(max_length=200, unique=True, help_text="Unique venue name")
     address = models.TextField(help_text="Full venue address")
-    capacity = models.PositiveIntegerField(help_text="Maximum capacity (0 for unlimited)")
+    capacity = models.IntegerField(null=True, blank=True, help_text="Maximum capacity (leave blank if unknown; 0 for unlimited)")
     facilities = models.JSONField(null=True, blank=True, help_text="Available facilities (JSON)")
     timezone = models.CharField(max_length=50, default='UTC', help_text="Venue timezone")
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="created_venues", help_text="User who created this venue")
@@ -35,8 +35,9 @@ class Venue(models.Model):
 
     def clean(self):
         """Validate venue data"""
-        if self.capacity < 0:
-            raise ValidationError({'capacity': 'Capacity must be non-negative'})
+        if self.capacity is not None:
+            if self.capacity < 0:
+                raise ValidationError({'capacity': 'Capacity must be non-negative'})
         
         if self.facilities:
             try:

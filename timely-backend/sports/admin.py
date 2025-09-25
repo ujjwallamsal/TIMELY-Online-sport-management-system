@@ -3,9 +3,12 @@ from django.contrib import admin
 from .models import Sport
 
 
-@admin.register(Sport)
-class SportAdmin(admin.ModelAdmin):
-    list_display = ['name', 'description', 'created_at']
-    list_filter = ['created_at']
-    search_fields = ['name', 'description']
-    ordering = ['name']
+# Hide Sports from admin if not needed
+def _unregister_sport():
+    try:
+        admin.site.unregister(Sport)
+    except Exception:
+        # Not registered or already unregistered
+        pass
+
+_unregister_sport()

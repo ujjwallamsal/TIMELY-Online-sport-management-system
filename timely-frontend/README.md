@@ -1,218 +1,228 @@
-# Timely Frontend
+# TIMELY Sports Management System - Frontend
 
-A modern, responsive sports event management system built with vanilla JavaScript, HTML, and CSS.
+A comprehensive React 18 frontend for the TIMELY online sports management system, built with TypeScript, Vite, and Tailwind CSS.
 
-## Features
+## 🚀 Quick Start
 
-- **Clean, Professional UI**: Modern design with light/dark theme support
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
-- **Role-Based Navigation**: Different views for Admin, Organizer, Coach, Athlete, and Spectator
-- **Real-time Updates**: WebSocket support for live data updates
-- **Accessibility**: WCAG 2.1 AA compliant with keyboard navigation
-- **Modular Architecture**: Clean separation of concerns with ES6 modules
+```bash
+# Install dependencies
+npm install
 
-## Tech Stack
+# Start development server
+npm run dev
 
-- **HTML5**: Semantic markup
-- **CSS3**: Custom properties, Grid, Flexbox
-- **Vanilla JavaScript**: ES6+ modules, no frameworks
-- **WebSocket**: Real-time communication
-- **Fetch API**: HTTP requests
+# Build for production
+npm run build
+```
 
-## Project Structure
+## 🏗️ Architecture
+
+### Tech Stack
+- **React 18** with TypeScript
+- **Vite** for fast development and building
+- **Tailwind CSS** for styling
+- **React Query** for data fetching and caching
+- **React Router v6** for routing
+- **Axios** for API communication
+- **Zod** for form validation
+- **Lucide React** for icons
+
+### Key Features
+
+#### 🔐 Authentication & Authorization
+- JWT-based authentication with refresh tokens
+- Role-based access control (Admin, Organizer, Coach, Athlete, Spectator)
+- Protected routes and navigation
+
+#### 🏠 Public Homepage
+- Compelling landing page with real data
+- Featured events showcase
+- News and gallery sections
+- Call-to-action sections
+
+#### 👨‍💼 Admin Dashboard
+- User management with search and filtering
+- Event management with status controls
+- System metrics and analytics
+- Quick actions for common tasks
+
+#### 🎯 Organizer Module
+- Event creation and management
+- Registration approval/rejection
+- Fixture generation
+- Results tracking
+- Event announcements
+
+#### 🏆 Coach Module
+- Results entry for fixtures
+- Team management
+- Performance tracking
+- Real-time updates
+
+#### 🏃‍♂️ Athlete Module
+- Event registration
+- Personal dashboard
+- Registration history
+- Upcoming fixtures
+
+#### 👥 Spectator Module
+- Event browsing
+- Ticket purchasing (simulated)
+- Live results viewing
+- Event details
+
+#### ⚡ Real-time Features
+- Server-Sent Events (SSE) with polling fallback
+- Live result updates
+- Real-time notifications
+- Connection status indicators
+
+#### 🎨 Design System
+- Modern, responsive design
+- Consistent color palette and typography
+- Mobile-first approach
+- Accessibility features
+- Loading states and animations
+
+## 📁 Project Structure
 
 ```
 src/
-├── app/                 # Main application logic
-│   └── App.js          # Application orchestrator
-├── pages/              # Page components
-│   ├── BasePage.js     # Base page class
-│   ├── DashboardPage.js
-│   ├── EventsPage.js
-│   ├── LoginPage.js
-│   └── ...
-├── services/           # API and external services
-│   └── api.js         # API client
-├── utils/             # Utility functions
-│   ├── theme.js       # Theme management
-│   ├── router.js      # Hash-based routing
-│   └── notifications.js # Toast notifications
-├── config/            # Configuration
-│   └── env.js         # Environment variables
-└── styles/            # CSS styles
-    └── main.css       # Main stylesheet
+├── api/                 # API client and queries
+├── auth/               # Authentication context and hooks
+├── components/         # Reusable UI components
+├── contexts/           # React contexts
+├── features/           # Feature-specific components
+│   ├── admin/          # Admin dashboard and management
+│   ├── dashboard/      # Role-based dashboards
+│   ├── events/         # Event management
+│   ├── fixtures/       # Fixture management
+│   ├── news/           # News and announcements
+│   ├── notifications/  # Notification system
+│   ├── registrations/  # Registration management
+│   ├── results/        # Results and leaderboards
+│   └── tickets/        # Ticketing system
+├── hooks/              # Custom React hooks
+├── schemas/            # Zod validation schemas
+├── types/              # TypeScript type definitions
+└── utils/              # Utility functions
 ```
 
-## Getting Started
-
-1. **Install Dependencies**: No build step required - just serve the files
-2. **Configure Backend**: Update `src/config/env.js` with your backend URL
-3. **Serve Files**: Use any static file server (e.g., `python -m http.server`)
-4. **Open Browser**: Navigate to `http://localhost:8000`
-
-## Configuration
+## 🔧 Configuration
 
 ### Environment Variables
+Create a `.env` file in the root directory:
 
-Create a `src/config/env.js` file or set `window.ENV` before loading:
-
-```javascript
-window.ENV = {
-  API_BASE_URL: 'http://127.0.0.1:8000/api',
-  WS_URL: 'ws://127.0.0.1:8000/ws/',
-  DEBUG: false
-};
+```env
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
-### Backend Integration
+### API Integration
+The frontend integrates with a Django REST Framework backend. Key endpoints:
 
-The frontend expects a Django REST API with the following endpoints:
+- **Authentication**: `/api/auth/login/`, `/api/auth/refresh/`
+- **Events**: `/api/events/`, `/api/events/{id}/`
+- **Users**: `/api/users/`
+- **Registrations**: `/api/registrations/`
+- **Results**: `/api/results/`
+- **Fixtures**: `/api/fixtures/`
 
-- `GET /api/accounts/users/me/` - Current user
-- `POST /api/accounts/auth/login/` - Login
-- `GET /api/events/` - List events
-- `GET /api/venues/` - List venues
-- `GET /api/registrations/` - List registrations
-- And more...
+## 🚦 Available Scripts
 
-## Pages
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+- `npm run type-check` - Run TypeScript compiler
 
-### Dashboard
-- KPI cards showing key metrics
-- Recent events, registrations, and notifications
-- Quick actions based on user role
+## 🎯 Key Features Implemented
 
-### Events
-- List view with search and filters
-- Create/edit event modals
-- Event detail view with tabs
+### ✅ Authentication System
+- JWT token management
+- Automatic token refresh
+- Role-based routing
+- Logout on token expiration
 
-### Event Detail
-- Overview tab with event information
-- Participants tab for registrations
-- Fixtures tab for schedule
-- Results tab for scores and leaderboard
-- Media tab for photos/videos
-- Tickets tab for sales
-- Settings tab for configuration
+### ✅ Data Management
+- React Query for caching and synchronization
+- Optimistic updates
+- Error handling and retry logic
+- Loading states
 
-### Other Pages
-- Registrations management
-- Fixtures and scheduling
-- Results and leaderboards
-- Ticket management
-- Venue management
-- Media gallery
-- User and role management
-- Reports and analytics
-- Settings
+### ✅ Form Handling
+- Zod validation schemas
+- Custom form hooks
+- Error display and validation
+- Submission states
 
-## Theming
+### ✅ Real-time Updates
+- SSE connection management
+- Polling fallback
+- Connection status monitoring
+- Automatic reconnection
 
-The application supports light and dark themes with CSS custom properties:
+### ✅ Error Handling
+- Error boundaries
+- Toast notifications
+- Graceful degradation
+- User-friendly error messages
 
-```css
-:root {
-  --bg-primary: #ffffff;
-  --text-primary: #1e293b;
-  --primary: #3b82f6;
-  /* ... more variables */
-}
+### ✅ Responsive Design
+- Mobile-first approach
+- Flexible grid layouts
+- Touch-friendly interactions
+- Consistent spacing
 
-[data-theme="dark"] {
-  --bg-primary: #0f172a;
-  --text-primary: #f8fafc;
-  /* ... dark theme overrides */
-}
-```
+## 🔄 State Management
 
-## Routing
+- **React Query** for server state
+- **React Context** for global app state
+- **Local state** with useState/useReducer
+- **URL state** with React Router
 
-Uses hash-based routing for deep linking:
+## 🎨 Styling
 
-- `#/dashboard` - Dashboard
-- `#/events` - Events list
-- `#/events/123` - Event detail
-- `#/events/123/results` - Event results tab
-- `#/registrations` - Registrations
-- And more...
+- **Tailwind CSS** for utility-first styling
+- **Custom CSS** for complex components
+- **Design tokens** for consistency
+- **Responsive breakpoints**
+- **Dark mode support** (ready for implementation)
 
-## API Client
+## 🚀 Performance
 
-The `API` class handles all backend communication:
+- **Code splitting** with React.lazy
+- **Bundle optimization** with Vite
+- **Image optimization**
+- **Lazy loading** for components
+- **Memoization** for expensive operations
 
-```javascript
-// Get events
-const events = await app.api.getEvents({ page: 1, page_size: 20 });
+## 🔒 Security
 
-// Create event
-const event = await app.api.createEvent({
-  name: 'New Event',
-  start_date: '2024-01-01T10:00:00Z'
-});
+- **JWT token security**
+- **XSS protection**
+- **CSRF protection** (backend dependent)
+- **Input validation**
+- **Secure API communication**
 
-// Upload file
-const result = await app.api.upload('/api/upload/', file);
-```
+## 📱 Browser Support
 
-## Notifications
+- Chrome 90+
+- Firefox 88+
+- Safari 14+
+- Edge 90+
 
-Toast notifications for user feedback:
+## 🤝 Contributing
 
-```javascript
-// Success notification
-app.notificationManager.success('Event created successfully!');
+1. Follow the existing code structure
+2. Use TypeScript for type safety
+3. Write meaningful commit messages
+4. Test your changes thoroughly
+5. Follow the established patterns
 
-// Error notification
-app.notificationManager.error('Failed to save event');
+## 📄 License
 
-// Info notification
-app.notificationManager.info('Processing...');
-```
+This project is part of the TIMELY Sports Management System.
 
-## Responsive Design
+---
 
-- **Desktop**: Full sidebar and topbar
-- **Tablet** (≤1150px): Collapsible sidebar
-- **Mobile** (≤768px): Stacked layout, full-width buttons
-
-## Accessibility
-
-- Keyboard navigation support
-- ARIA labels and roles
-- Focus management
-- Screen reader friendly
-- High contrast support
-
-## Browser Support
-
-- Chrome 80+
-- Firefox 75+
-- Safari 13+
-- Edge 80+
-
-## Development
-
-### Adding New Pages
-
-1. Create a new page class extending `BasePage`
-2. Add route in `App.js` setupRouting()
-3. Add navigation item in `getNavigationItems()`
-
-### Adding New Components
-
-1. Create component in appropriate directory
-2. Import and use in pages
-3. Add styles to `main.css`
-
-### Styling Guidelines
-
-- Use CSS custom properties for theming
-- Follow BEM-like naming conventions
-- Use semantic HTML elements
-- Ensure responsive design
-- Test with keyboard navigation
-
-## License
-
-MIT License - see LICENSE file for details.
+**Built with ❤️ using React, TypeScript, and modern web technologies.**

@@ -1,3 +1,4 @@
+import os
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -8,6 +9,9 @@ class Command(BaseCommand):
     help = 'Seed demo users with different roles'
 
     def handle(self, *args, **options):
+        if os.environ.get("ALLOW_DEMO_SEED") != "1":
+            self.stdout.write(self.style.WARNING("Skipping demo user seeding (set ALLOW_DEMO_SEED=1 to enable)."))
+            return
         with transaction.atomic():
             # Create demo users if they don't exist
             users_data = [

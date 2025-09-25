@@ -9,7 +9,7 @@ from gallery.views import PublicGalleryAlbumViewSet, PublicGalleryMediaViewSet
 router = DefaultRouter()
 
 # Register all viewsets
-router.register(r'auth', views.AuthViewSet, basename='auth')
+# Note: auth endpoints are handled by individual path patterns below
 router.register(r'users', views.UserViewSet, basename='user')
 router.register(r'events', views.EventViewSet, basename='event')
 router.register(r'venues', views.VenueViewSet, basename='venue')
@@ -41,9 +41,12 @@ urlpatterns = [
     # Include app-specific endpoints FIRST (before router to avoid conflicts)
     path('tickets/', include('tickets.urls')),
     
-    # Role application endpoints
+    # Test endpoint to verify URL loading
+    path('test/', views.HealthView.as_view(), name='test-endpoint'),
+    
+    # Role application endpoints - Added explicitly to ensure they're registered
     path('auth/apply-athlete/', views.ApplyAthleteView.as_view(), name='apply-athlete'),
-    path('auth/apply-coach/', views.ApplyCoachView.as_view(), name='apply-coach'),
+    path('auth/apply-coach/', views.ApplyCoachView.as_view(), name='apply-coach'), 
     path('auth/apply-organizer/', views.ApplyOrganizerView.as_view(), name='apply-organizer'),
     path('auth/applications/', views.UserApplicationsView.as_view(), name='user-applications'),
     

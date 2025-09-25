@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
-from .models import AuditLog, SystemSettings
+from django.utils import timezone
+from .models import AuditLog, SystemSettings, DeletionRequest
 
 
 @admin.register(AuditLog)
@@ -97,3 +98,36 @@ class SystemSettingsAdmin(admin.ModelAdmin):
             return f"{value_str[:50]}..."
         return value_str
     value_preview.short_description = 'Value'
+
+
+@admin.register(DeletionRequest)
+class DeletionRequestAdmin(admin.ModelAdmin):
+    list_display = ['content_type', 'object_id', 'requested_by', 'status', 'created_at']
+    list_filter = ['status', 'content_type']
+    search_fields = ['object_id', 'requested_by__email']
+    actions = ['approve_requests', 'reject_requests']
+
+    def approve_requests(self, request, queryset):
+        approved = 0
+        for req in queryset.filter(status='PENDING'):
+            model = req.content_type.model_class()
+            try:
+                obj = model.objects.get(id=req.object_id)
+                obj.delete()
+                req.status = 'APPROVED'
+                req.processed_by = request.user
+                req.processed_at = timezone.now()
+                req.save(update_fields=['status', 'processed_by', 'processed_at'])
+                approved += 1
+            except model.DoesNotExist:
+                req.status = 'REJECTED'
+                req.processed_by = request.user
+                req.processed_at = timezone.now()
+                req.save(update_fields=['status', 'processed_by', 'processed_at'])
+        self.message_user(request, f"Approved {approved} deletion request(s)")
+    approve_requests.short_description = 'Approve selected deletion requests'
+
+    def reject_requests(self, request, queryset):
+        updated = queryset.filter(status='PENDING').update(status='REJECTED', processed_by=request.user, processed_at=timezone.now())
+        self.message_user(request, f"Rejected {updated} deletion request(s)")
+    reject_requests.short_description = 'Reject selected deletion requests'

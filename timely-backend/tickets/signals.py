@@ -4,6 +4,7 @@ from django.dispatch import receiver
 from django.conf import settings
 
 from .models import TicketOrder, Ticket
+from notifications.models import Notification
 
 
 def safe_broadcast(group_name: str, event_type: str, data: dict):
@@ -38,6 +39,19 @@ def order_updated(sender, instance, created, **kwargs):
     Broadcast when order status changes
     """
     if not created:  # Only for updates, not creation
+        # Create a notification for the buyer
+        try:
+            Notification.objects.create(
+                user=instance.user,
+                kind='info',
+                topic='ticket',
+                title='Order status updated',
+                body=f'Your ticket order {instance.id} is now {instance.status}.',
+                link_url=None
+            )
+        except Exception:
+            pass
+
         # Broadcast to user group
         user_group = f"orders:user:{instance.user.id}"
         safe_broadcast(user_group, 'order.updated', {
@@ -47,8 +61,8 @@ def order_updated(sender, instance, created, **kwargs):
             'currency': instance.currency
         })
         
-        # Broadcast to event organizer group
-        event_group = f"orders:event:{instance.event.id}"
+        # Broadcast to event organizer group (use numeric foreign key field)
+        event_group = f"orders:event:{instance.event_id}"
         safe_broadcast(event_group, 'order.updated', {
             'order_id': instance.id,
             'user_id': instance.user.id,

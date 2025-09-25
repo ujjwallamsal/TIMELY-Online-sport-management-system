@@ -54,7 +54,7 @@ class TicketTypeAdmin(admin.ModelAdmin):
 @admin.register(TicketOrder)
 class TicketOrderAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'user', 'event_id', 'status', 'total_dollars',
+        'id', 'user', 'event_id', 'fixture_id', 'status', 'total_dollars',
         'payment_provider', 'created_at'
     ]
     list_filter = [
@@ -86,6 +86,32 @@ class TicketOrderAdmin(admin.ModelAdmin):
     def total_dollars(self, obj):
         return f"${obj.total_dollars:.2f}"
     total_dollars.short_description = 'Amount'
+
+    actions = ['mark_paid', 'mark_refunded', 'mark_cancelled', 'export_selected_to_csv']
+
+    def mark_paid(self, request, queryset):
+        queryset.update(status='paid')
+    mark_paid.short_description = 'Mark selected as Paid'
+
+    def mark_refunded(self, request, queryset):
+        queryset.update(status='refunded')
+    mark_refunded.short_description = 'Mark selected as Refunded'
+
+    def mark_cancelled(self, request, queryset):
+        queryset.update(status='failed')
+    mark_cancelled.short_description = 'Mark selected as Cancelled'
+
+    def export_selected_to_csv(self, request, queryset):
+        import csv
+        from django.http import HttpResponse
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename=ticket_orders.csv'
+        writer = csv.writer(response)
+        writer.writerow(['id','user','event_id','fixture_id','status','total_cents','currency','provider','created_at'])
+        for o in queryset:
+            writer.writerow([o.id, o.user.email, o.event_id, o.fixture_id, o.status, o.total_cents, o.currency, o.payment_provider, o.created_at.isoformat()])
+        return response
+    export_selected_to_csv.short_description = 'Export selected to CSV'
 
 
 @admin.register(Ticket)
@@ -133,26 +159,4 @@ class TicketAdmin(admin.ModelAdmin):
 
 
 
-# Custom admin actions
-@admin.action(description="Activate selected ticket types")
-def activate_ticket_types(modeladmin, request, queryset):
-    queryset.update(is_active=True)
-    modeladmin.message_user(request, f"{queryset.count()} ticket types activated.")
-
-@admin.action(description="Deactivate selected ticket types")
-def deactivate_ticket_types(modeladmin, request, queryset):
-    queryset.update(is_active=False)
-    modeladmin.message_user(request, f"{queryset.count()} ticket types deactivated.")
-
-@admin.action(description="Mark selected orders as paid")
-def mark_orders_paid(modeladmin, request, queryset):
-    for order in queryset:
-        if order.status == TicketOrder.Status.PENDING:
-            order.status = TicketOrder.Status.PAID
-            order.payment_date = timezone.now()
-            order.save()
-    modeladmin.message_user(request, f"{queryset.count()} orders marked as paid.")
-
-# Add actions to admin classes
-TicketTypeAdmin.actions = [activate_ticket_types, deactivate_ticket_types]
-TicketOrderAdmin.actions = [mark_orders_paid]
+# Remove broken custom actions that referenced non-existent fields

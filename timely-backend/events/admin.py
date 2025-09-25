@@ -39,7 +39,7 @@ class EventAdmin(admin.ModelAdmin):
     list_filter = ("sport", "status", "start_datetime")
     ordering = ("-start_datetime",)
     date_hierarchy = "start_datetime"
-    actions = [mark_ongoing, mark_completed]
+    actions = [mark_ongoing, mark_completed, 'export_selected_to_csv', 'export_selected_to_pdf']
     inlines = [DivisionInline]
     readonly_fields = ("created_at", "updated_at")
 
@@ -64,3 +64,20 @@ class EventAdmin(admin.ModelAdmin):
             if hasattr(obj, 'tickets') and obj.tickets.exists():
                 return False
         return super().has_delete_permission(request, obj)
+
+    def export_selected_to_csv(self, request, queryset):
+        import csv
+        from django.http import HttpResponse
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename=events.csv'
+        writer = csv.writer(response)
+        writer.writerow(['id','name','sport','venue','start_datetime','status'])
+        for e in queryset:
+            writer.writerow([e.id, e.name, e.sport, e.venue.name if e.venue else '', e.start_datetime.isoformat() if e.start_datetime else '', e.status])
+        return response
+    export_selected_to_csv.short_description = 'Export selected to CSV'
+
+    def export_selected_to_pdf(self, request, queryset):
+        # TODO: Implement with WeasyPrint/ReportLab
+        self.message_user(request, 'PDF export is not yet implemented.', level=messages.INFO)
+    export_selected_to_pdf.short_description = 'Export selected to PDF (stub)'
