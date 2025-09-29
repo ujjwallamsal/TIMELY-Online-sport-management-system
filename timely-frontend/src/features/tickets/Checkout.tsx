@@ -7,6 +7,8 @@ import { Form, FormGroup, FormRow, FormActions, Input, Button } from '../../comp
 import { api } from '../../api/client';
 import { ENDPOINTS } from '../../api/ENDPOINTS';
 import { CreditCard, Ticket, ArrowLeft, CheckCircle } from 'lucide-react';
+import { useAuth } from '../../auth/useAuth';
+import TicketsPrompt from '../../components/TicketsPrompt';
 import { z } from 'zod';
 
 interface CheckoutData {
@@ -35,10 +37,22 @@ const Checkout: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   const [isProcessing, setIsProcessing] = useState(false);
   
   const { data: event, isLoading: eventLoading } = useEvent(parseInt(eventId || '0'));
+
+  // Show sign-in prompt for anonymous users
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <TicketsPrompt 
+        title="Sign in to purchase tickets"
+        description="Create an account or sign in to complete your ticket purchase for this event."
+        showFeatures={false}
+      />
+    );
+  }
 
   const form = useForm<CheckoutData>({
     initialValues: {
@@ -65,7 +79,7 @@ const Checkout: React.FC = () => {
       setIsProcessing(true);
       try {
         // Call the actual checkout endpoint using the API client
-        const response = await api.post(ENDPOINTS.checkout, {
+        await api.post(ENDPOINTS.checkout, {
           event_id: form.values.event_id,
           items: [{
             type: 'general',
@@ -82,7 +96,7 @@ const Checkout: React.FC = () => {
           } : {}
         });
 
-        const result = response.data;
+        // handled by backend; no client-side usage
         showSuccess('Purchase Successful', 'Your tickets have been purchased successfully!');
         navigate(`/tickets/me`);
       } catch (error) {
