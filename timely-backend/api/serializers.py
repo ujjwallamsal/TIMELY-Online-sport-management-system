@@ -24,6 +24,21 @@ class UserSerializer(serializers.ModelSerializer):
             'role', 'is_active', 'is_staff', 'is_superuser', 'is_verified', 'created_at', 'last_login'
         ]
         read_only_fields = ['id', 'created_at', 'last_login', 'is_verified', 'role', 'is_staff', 'is_superuser']
+    
+    def to_representation(self, instance):
+        """Override to handle optional fields safely"""
+        data = super().to_representation(instance)
+        
+        # Ensure all fields have safe defaults
+        data['username'] = data.get('username') or ''
+        data['first_name'] = data.get('first_name') or ''
+        data['last_name'] = data.get('last_name') or ''
+        data['full_name'] = data.get('full_name') or data.get('email', '')
+        
+        # Ensure role is always present
+        data['role'] = data.get('role') or 'SPECTATOR'
+        
+        return data
 
 
 class SportSerializer(serializers.ModelSerializer):

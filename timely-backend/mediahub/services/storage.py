@@ -1,12 +1,23 @@
 """
 Media storage utilities for file validation and safe path generation.
-Handles file type checking, size validation, and secure upload paths.
+Handles file type checking, size validation, secure upload paths, and EXIF stripping.
 """
 import os
 import mimetypes
+import logging
 from typing import Tuple
+from io import BytesIO
 from django.core.files.uploadedfile import UploadedFile
+from django.core.files.base import ContentFile
 from django.conf import settings
+
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 # File type configurations
@@ -97,6 +108,59 @@ def validate_media_file(file: UploadedFile) -> Tuple[str, str]:
         raise ValueError(f"File too large. Maximum size for {kind}s is {size_mb:.0f}MB")
     
     return kind, mime_type
+
+
+def strip_exif_metadata(image_file: UploadedFile) -> ContentFile:
+    """
+    Strip EXIF metadata from an image file for privacy.
+    Removes GPS coordinates, camera serial numbers, and other metadata.
+    
+    Args:
+        image_file: Uploaded image file
+        
+    Returns:
+        ContentFile with metadata stripped
+        
+    Raises:
+        ValueError: If image processing fails
+    """
+    if not PIL_AVAILABLE:
+        logger.warning("PIL/Pillow not available, cannot strip EXIF metadata")
+        return image_file
+    
+    try:
+        # Open image
+        img = Image.open(image_file)
+        
+        # Save image without EXIF data
+        # Using getdata() and putdata() method to strip all metadata
+        data = list(img.getdata())
+        image_without_exif = Image.new(img.mode, img.size)
+        image_without_exif.putdata(data)
+        
+        # Save to BytesIO
+        output = BytesIO()
+        img_format = img.format or 'JPEG'
+        
+        # Use appropriate save parameters
+        save_kwargs = {'format': img_format}
+        if img_format in ['JPEG', 'JPG']:
+            save_kwargs['quality'] = 85
+            save_kwargs['optimize'] = True
+        elif img_format == 'PNG':
+            save_kwargs['optimize'] = True
+        
+        image_without_exif.save(output, **save_kwargs)
+        output.seek(0)
+        
+        # Return as ContentFile
+        return ContentFile(output.read(), name=image_file.name)
+        
+    except Exception as e:
+        logger.error(f"Error stripping EXIF metadata: {e}")
+        # Fail-safe: return original file if processing fails
+        logger.warning(f"Returning original file without EXIF stripping due to error")
+        return image_file
 
 
 def get_safe_filename(filename: str) -> str:

@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import { ENDPOINTS } from './ENDPOINTS';
+import { getStoredToken } from './client';
+import { useAuth } from '../auth/useAuth';
 
 // Types
 export interface User {
@@ -153,6 +155,7 @@ export const useMe = () => {
     queryKey: queryKeys.me,
     queryFn: () => api.get<User>(ENDPOINTS.me).then(res => res.data),
     retry: false,
+    enabled: !!getStoredToken(),
   });
 };
 
@@ -182,7 +185,12 @@ export const useEvent = (id: number) => {
 export const usePublicEvents = (params?: Record<string, any>) => {
   return useQuery({
     queryKey: [...queryKeys.public, 'events', params],
-    queryFn: () => api.get<Event[]>(ENDPOINTS.publicEvents, { params }).then(res => res.data),
+    queryFn: async () => {
+      const res = await api.get(ENDPOINTS.publicEvents, { params });
+      // Normalize to array: support both paginated and plain list responses
+      const data = res.data as any;
+      return Array.isArray(data?.results) ? data.results : (Array.isArray(data) ? data : []);
+    },
   });
 };
 
@@ -258,13 +266,12 @@ export const useResults = (params?: Record<string, any>) => {
   });
 };
 
-// News queries (gracefully handle missing endpoint)
+// News queries
 export const useNews = (params?: Record<string, any>) => {
   return useQuery({
     queryKey: [...queryKeys.news, params],
     queryFn: () => api.get<PaginatedResponse<NewsArticle>>(ENDPOINTS.news, { params }).then(res => res.data),
     retry: false,
-    enabled: false, // Disable by default since endpoint doesn't exist
   });
 };
 
@@ -273,17 +280,15 @@ export const usePublicNews = (params?: Record<string, any>) => {
     queryKey: [...queryKeys.public, 'news', params],
     queryFn: () => api.get<PaginatedResponse<NewsArticle>>(ENDPOINTS.publicNews, { params }).then(res => res.data),
     retry: false,
-    enabled: false, // Disable by default since endpoint doesn't exist
   });
 };
 
-// Gallery queries (gracefully handle missing endpoints)
+// Gallery queries
 export const useGalleryAlbums = (params?: Record<string, any>) => {
   return useQuery({
     queryKey: [...queryKeys.public, 'gallery-albums', params],
     queryFn: () => api.get<any[]>(ENDPOINTS.galleryAlbums, { params }).then(res => res.data),
     retry: false,
-    enabled: false, // Disable by default since endpoint doesn't exist
   });
 };
 
@@ -292,16 +297,41 @@ export const useGalleryMedia = (params?: Record<string, any>) => {
     queryKey: [...queryKeys.public, 'gallery-media', params],
     queryFn: () => api.get<any[]>(ENDPOINTS.galleryMedia, { params }).then(res => res.data),
     retry: false,
-    enabled: false, // Disable by default since endpoint doesn't exist
   });
 };
 
 export const usePublicGalleryMedia = (params?: Record<string, any>) => {
   return useQuery({
     queryKey: [...queryKeys.public, 'gallery-media', params],
-    queryFn: () => api.get<any[]>(ENDPOINTS.publicMedia, { params }).then(res => res.data),
+    queryFn: () => api.get(ENDPOINTS.galleryMedia, { params: { ...params, visibility: 'public' } }).then(res => {
+      // Normalize response to handle both array and paginated responses
+      const data = res.data;
+      if (Array.isArray(data?.results)) {
+        return data.results;
+      } else if (Array.isArray(data)) {
+        return data;
+      }
+      return [];
+    }),
     retry: false,
-    enabled: false, // Disable by default since endpoint doesn't exist
+  });
+};
+
+export const useMyGalleryMedia = (params?: Record<string, any>) => {
+  return useQuery({
+    queryKey: [...queryKeys.public, 'gallery-media', 'mine', params],
+    queryFn: () => api.get(ENDPOINTS.galleryMedia, { params: { ...params, mine: 1 } }).then(res => {
+      // Normalize response to handle both array and paginated responses
+      const data = res.data;
+      if (Array.isArray(data?.results)) {
+        return data.results;
+      } else if (Array.isArray(data)) {
+        return data;
+      }
+      return [];
+    }),
+    retry: false,
+    enabled: !!getStoredToken(),
   });
 };
 
@@ -375,6 +405,7 @@ export const useRegister = () => {
     mutationFn: (userData: {
       email: string;
       password: string;
+      password_confirm: string;
       first_name: string;
       last_name: string;
     }) => api.post(ENDPOINTS.register, userData).then(res => res.data),
@@ -423,7 +454,7 @@ export const useApproveRegistration = () => {
   
   return useMutation({
     mutationFn: (registrationId: number) =>
-      api.post(`/api/registrations/${registrationId}/approve/`).then(res => res.data),
+      api.post(ENDPOINTS.registrationApprove(registrationId)).then(res => res.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.registrations });
     },
@@ -435,7 +466,7 @@ export const useRejectRegistration = () => {
   
   return useMutation({
     mutationFn: (registrationId: number) =>
-      api.post(`/api/registrations/${registrationId}/reject/`).then(res => res.data),
+      api.post(ENDPOINTS.registrationReject(registrationId)).then(res => res.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.registrations });
     },
@@ -488,6 +519,114 @@ export const setStoredTokens = (accessToken: string, refreshToken: string): void
 export const clearStoredTokens = (): void => {
   localStorage.removeItem('timely_access_token');
   localStorage.removeItem('timely_refresh_token');
+};
+
+// Missing API functions that are referenced in components
+export const useGetAnnouncements = () => {
+  return useQuery({
+    queryKey: ['announcements'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/announcements/');
+        return response.data;
+      } catch (error) {
+        // Return empty array if endpoint doesn't exist yet
+        console.warn('Announcements endpoint not available:', error);
+        return [];
+      }
+    },
+    retry: false,
+  });
+};
+
+export const useChangePassword = () => {
+  return useMutation({
+    mutationFn: ({ userId, currentPassword, newPassword }: {
+      userId: number;
+      currentPassword: string;
+      newPassword: string;
+    }) => {
+      return api.post(ENDPOINTS.changePassword(userId), {
+        current_password: currentPassword,
+        new_password: newPassword,
+      }).then(res => res.data);
+    },
+  });
+};
+
+export const useUpdateProfile = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ userId, profileData }: {
+      userId: number;
+      profileData: Partial<User>;
+    }) => {
+      return api.patch(`/users/${userId}/`, profileData).then(res => res.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+    },
+  });
+};
+
+export const useGetNotifications = () => {
+  return useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => api.get(ENDPOINTS.notifications).then(res => {
+      // Normalize response to handle both array and paginated responses
+      const data = res.data;
+      if (Array.isArray(data?.results)) {
+        return data.results;
+      } else if (Array.isArray(data)) {
+        return data;
+      }
+      return [];
+    }),
+    retry: false,
+  });
+};
+
+export const useGetUnreadNotificationsCount = () => {
+  const { isAuthenticated } = useAuth();
+  const token = getStoredToken();
+  
+  return useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: async () => {
+      try {
+        // Backend uses underscore not dash: /api/notifications/unread_count/
+        const response = await api.get(`${ENDPOINTS.notifications}unread_count/`);
+        return response.data.count || 0;
+      } catch (error) {
+        // Fallback: fetch notifications and count unread client-side
+        try {
+          const list = await api.get(ENDPOINTS.notifications, { params: { read: 'false' } });
+          const data = list.data;
+          const items = Array.isArray(data?.results) ? data.results : (Array.isArray(data) ? data : []);
+          return items.length;
+        } catch (e) {
+          console.warn('Notifications endpoint not available:', e);
+          return 0;
+        }
+      }
+    },
+    enabled: isAuthenticated && !!token,
+    retry: false,
+  });
+};
+
+export const useMarkNotificationRead = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (notificationId: number) => {
+      return api.patch(`${ENDPOINTS.notifications}${notificationId}/mark-read/`).then(res => res.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
 };
 
 // Internal helper

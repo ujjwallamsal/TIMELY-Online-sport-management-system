@@ -14,7 +14,7 @@ import {
   useRegistrations, 
   useResults
 } from '../../api/queries';
-import { useAuth } from '../../auth/useAuth';
+import { useAuth } from '../../auth/AuthProvider';
 
 const OrganizerDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -175,7 +175,7 @@ const OrganizerDashboard: React.FC = () => {
                       <action.icon className="h-5 w-5 text-white" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900 group-hover:text-primary-600">
+                      <p className="text-sm font-medium text-gray-900 group-hover:text-blue-600">
                         {action.title}
                       </p>
                       <p className="text-xs text-gray-500">{action.description}</p>
@@ -269,8 +269,8 @@ const OrganizerDashboard: React.FC = () => {
                 {events.slice(0, 5).map((event) => (
                   <div key={event.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
                     <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                        <Calendar className="h-6 w-6 text-primary-600" />
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <Calendar className="h-6 w-6 text-blue-600" />
                       </div>
                       <div>
                         <h4 className="text-sm font-medium text-gray-900">{event.name}</h4>
@@ -290,7 +290,7 @@ const OrganizerDashboard: React.FC = () => {
                       </span>
                       <Link
                         to={`/events/${event.id}`}
-                        className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                       >
                         View →
                       </Link>

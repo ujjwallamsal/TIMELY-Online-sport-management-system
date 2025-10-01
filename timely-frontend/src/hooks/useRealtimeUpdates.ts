@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSSE } from './useSSE';
-import { useAuth } from '../auth/useAuth';
+import { useAuth } from '../auth/AuthProvider';
 
 interface RealtimeUpdate {
   type: 'fixture_update' | 'result_update' | 'announcement' | 'registration_update';
@@ -26,13 +26,15 @@ export const useRealtimeUpdates = () => {
     onOpen: () => {
       setIsConnected(true);
     },
-    onError: () => {
+    onError: (error) => {
       setIsConnected(false);
+      // Log error but don't crash the app
+      console.warn('SSE connection error:', error);
     },
     onClose: () => {
       setIsConnected(false);
     },
-    maxRetries: 5,
+    maxRetries: 3, // Reduced retries to fail faster to polling
   });
 
   // Fallback to polling if SSE is not available
@@ -48,9 +50,14 @@ export const useRealtimeUpdates = () => {
           if (data.updates) {
             setUpdates(prev => [...data.updates, ...prev.slice(0, 49)]);
           }
+        } else if (response.status === 404) {
+          // Endpoint doesn't exist, stop polling
+          console.warn('Realtime polling endpoint not available');
+          clearInterval(pollInterval);
         }
       } catch (err) {
-        console.error('Polling failed:', err);
+        // Network error, continue polling
+        console.warn('Polling failed, will retry:', err);
       }
     }, 30000);
 

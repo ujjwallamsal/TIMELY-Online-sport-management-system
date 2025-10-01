@@ -13,7 +13,7 @@ import {
   useCreateResult,
   useUpdateResult
 } from '../../api/queries';
-import { useAuth } from '../../auth/useAuth';
+import { useAuth } from '../../auth/AuthProvider';
 import { useToast } from '../../contexts/ToastContext';
 
 const ResultsEnter: React.FC = () => {

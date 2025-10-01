@@ -1,21 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from '../../hooks/useForm';
 import { useAuth } from '../../auth/AuthProvider';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../api/client';
 import { ENDPOINTS } from '../../api/ENDPOINTS';
 import { Form, FormGroup, FormRow, FormActions, Input, Button } from '../../components/Form';
-import { User, Mail, Phone, Calendar, MapPin, Shield, Crown, Users, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Mail, Phone, Calendar, MapPin, Shield, Crown, Users, Clock, CheckCircle, Eye, EyeOff, Lock } from 'lucide-react';
 import { z } from 'zod';
+import { validatePassword, validateConfirmPassword } from '../../utils/validators';
 
 interface ProfileData {
   first_name: string;
   last_name: string;
   email: string;
-  phone?: string;
-  date_of_birth?: string;
-  address?: string;
-  emergency_contact?: string;
+  username?: string;
+}
+
+interface PasswordChangeData {
+  current_password: string;
+  new_password: string;
+  confirm_new_password: string;
 }
 
 interface OrganizerApplication {
@@ -36,64 +40,148 @@ const Profile: React.FC = () => {
   });
   const [isSubmittingApplication, setIsSubmittingApplication] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
+  
+  // Password change state
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isPasswordSaving, setIsPasswordSaving] = useState(false);
+  const [passwordForm, setPasswordForm] = useState<PasswordChangeData>({
+    current_password: '',
+    new_password: '',
+    confirm_new_password: ''
+  });
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false
+  });
+  const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
 
   const form = useForm<ProfileData>({
     initialValues: {
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
       email: user?.email || '',
-      phone: user?.profile?.phone || '',
-      date_of_birth: user?.profile?.date_of_birth || '',
-      address: user?.profile?.address || '',
-      emergency_contact: user?.profile?.emergency_contact || '',
+      username: user?.username || '',
     },
     validationSchema: z.object({
       first_name: z.string().min(1, 'First name is required'),
       last_name: z.string().min(1, 'Last name is required'),
       email: z.string().email('Invalid email address'),
-      phone: z.string().optional(),
-      date_of_birth: z.string().optional(),
-      address: z.string().optional(),
-      emergency_contact: z.string().optional(),
+      username: z.string().optional(),
     }),
     onSubmit: async () => {
       setIsSaving(true);
       try {
-        await api.patch(ENDPOINTS.me, form.values);
+        // Call the me endpoint with PATCH
+        const response = await api.patch('/users/me/', form.values);
         
-        // Send notification
-        await api.post(ENDPOINTS.notifications, {
-          title: 'Profile Updated',
-          message: `You updated your profile ${new Date().toLocaleTimeString()}`,
-          type: 'info'
-        });
+        // Send notification (optional, don't fail if it errors)
+        try {
+          await api.post(ENDPOINTS.notifications, {
+            title: 'Profile Updated',
+            message: `You updated your profile ${new Date().toLocaleTimeString()}`,
+            type: 'info'
+          });
+        } catch (notifError) {
+          console.log('Notification failed (non-critical):', notifError);
+        }
         
         showSuccess('Profile Updated', 'Your profile has been updated successfully!');
-        refetchUser();
+        await refetchUser();
         setIsEditing(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Profile update error:', error);
-        showError('Update Failed', 'Failed to update profile. Please try again.');
+        const errorMessage = error?.response?.data?.detail || error?.response?.data?.error || 'Failed to update profile. Please try again.';
+        showError('Update Failed', errorMessage);
       } finally {
         setIsSaving(false);
       }
     },
   });
 
-  // Update form when user data changes
-  useEffect(() => {
-    if (user) {
+  // Update form when user data changes - only once when component mounts
+  // Wrapped in useCallback to prevent re-render loop
+  const initializeForm = useCallback(() => {
+    if (user && !isEditing) {
       form.setValues({
         first_name: user.first_name || '',
         last_name: user.last_name || '',
         email: user.email || '',
-        phone: user.profile?.phone || '',
-        date_of_birth: user.profile?.date_of_birth || '',
-        address: user.profile?.address || '',
-        emergency_contact: user.profile?.emergency_contact || '',
+        username: user.username || '',
       });
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.first_name, user?.last_name, user?.email, user?.username, isEditing]);
+  
+  useEffect(() => {
+    initializeForm();
+  }, [initializeForm]);
+
+  // Password change handlers
+  const handlePasswordChange = async () => {
+    setPasswordErrors({});
+    
+    // Client-side validation
+    const errors: Record<string, string> = {};
+    
+    if (!passwordForm.current_password) {
+      errors.current_password = 'Current password is required';
+    }
+    
+    const newPasswordError = validatePassword(passwordForm.new_password);
+    if (newPasswordError) {
+      errors.new_password = newPasswordError;
+    }
+    
+    const confirmPasswordError = validateConfirmPassword(passwordForm.new_password, passwordForm.confirm_new_password);
+    if (confirmPasswordError) {
+      errors.confirm_new_password = confirmPasswordError;
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setPasswordErrors(errors);
+      return;
+    }
+    
+    setIsPasswordSaving(true);
+    try {
+      // Use the correct endpoint with user ID
+      if (!user?.id) {
+        showError('Error', 'User not found');
+        return;
+      }
+      
+      await api.post(`/users/${user.id}/change-password/`, {
+        current_password: passwordForm.current_password,
+        new_password: passwordForm.new_password,
+        new_password_confirm: passwordForm.confirm_new_password
+      });
+      
+      showSuccess('Password Updated', 'Your password has been changed successfully');
+      setPasswordForm({
+        current_password: '',
+        new_password: '',
+        confirm_new_password: ''
+      });
+      setIsChangingPassword(false);
+    } catch (error: any) {
+      console.error('Password change error:', error);
+      if (error.response?.data) {
+        setPasswordErrors(error.response.data);
+      } else {
+        showError('Password Change Failed', 'Failed to change password. Please try again.');
+      }
+    } finally {
+      setIsPasswordSaving(false);
+    }
+  };
+
+  const togglePasswordVisibility = (field: 'current' | 'new' | 'confirm') => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
 
   const handleOrganizerApplication = async () => {
     if (!organizerApplication.reason || !organizerApplication.organization_name || !organizerApplication.phone) {
@@ -103,30 +191,36 @@ const Profile: React.FC = () => {
 
     setIsSubmittingApplication(true);
     try {
-      await api.post(ENDPOINTS.applyOrganizer, organizerApplication);
+      await api.post(ENDPOINTS.applyOrganizer, {
+        reason: organizerApplication.reason,
+        organization_name: organizerApplication.organization_name,
+        phone: organizerApplication.phone
+      });
       showSuccess('Application Submitted', 'Your organizer application has been submitted successfully!');
       setApplicationStatus('pending');
       setOrganizerApplication({ reason: '', organization_name: '', phone: '' });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Organizer application error:', error);
-      showError('Application Failed', 'Failed to submit organizer application. Please try again.');
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.detail || 'Failed to submit organizer application. Please try again.';
+      showError('Application Failed', errorMessage);
     } finally {
       setIsSubmittingApplication(false);
     }
   };
 
   const handleAthleteRequest = async () => {
+    setIsSubmittingApplication(true);
     try {
-      await api.post(ENDPOINTS.notifications, {
-        title: 'Athlete Role Request',
-        message: `${user?.first_name} ${user?.last_name} is requesting athlete role access. Please review their profile.`,
-        type: 'info',
-        recipient_type: 'admin'
+      await api.post(ENDPOINTS.applyAthlete, {
+        reason: 'Requesting athlete access to participate in events'
       });
-      showSuccess('Request Sent', 'Your athlete role request has been sent to administrators.');
-    } catch (error) {
+      showSuccess('Request Sent', 'Your athlete role request has been submitted successfully!');
+    } catch (error: any) {
       console.error('Athlete request error:', error);
-      showError('Request Failed', 'Failed to send athlete role request. Please try again.');
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.detail || 'Failed to send athlete role request. Please try again.';
+      showError('Request Failed', errorMessage);
+    } finally {
+      setIsSubmittingApplication(false);
     }
   };
 
@@ -155,10 +249,30 @@ const Profile: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center py-12">
+          <div className="card text-center">
             <User className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Profile Not Found</h3>
-            <p className="text-gray-500">Unable to load your profile information.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Profile Unavailable</h3>
+            <p className="text-gray-600 mb-6">We couldn't load your profile right now. This may be a temporary issue.</p>
+            <div className="flex justify-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => window.history.back()}
+              >
+                Go Back
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    await refetchUser();
+                    showSuccess('Retrying', 'Attempting to reload your profile...');
+                  } catch (e) {
+                    showError('Still Unavailable', 'Please try again in a moment.');
+                  }
+                }}
+              >
+                Retry
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -229,47 +343,19 @@ const Profile: React.FC = () => {
                       onChange={(e) => form.setValue('email', e.target.value)}
                       error={form.errors.email}
                       required
+                      disabled
+                      helperText="Email cannot be changed"
                     />
                   </FormGroup>
 
                   <FormGroup>
                     <Input
-                      label="Phone"
-                      name="phone"
-                      value={form.values.phone}
-                      onChange={(e) => form.setValue('phone', e.target.value)}
-                      error={form.errors.phone}
-                    />
-                  </FormGroup>
-
-                  <FormGroup>
-                    <Input
-                      label="Date of Birth"
-                      name="date_of_birth"
-                      type="date"
-                      value={form.values.date_of_birth}
-                      onChange={(e) => form.setValue('date_of_birth', e.target.value)}
-                      error={form.errors.date_of_birth}
-                    />
-                  </FormGroup>
-
-                  <FormGroup>
-                    <Input
-                      label="Address"
-                      name="address"
-                      value={form.values.address}
-                      onChange={(e) => form.setValue('address', e.target.value)}
-                      error={form.errors.address}
-                    />
-                  </FormGroup>
-
-                  <FormGroup>
-                    <Input
-                      label="Emergency Contact"
-                      name="emergency_contact"
-                      value={form.values.emergency_contact}
-                      onChange={(e) => form.setValue('emergency_contact', e.target.value)}
-                      error={form.errors.emergency_contact}
+                      label="Username (Optional)"
+                      name="username"
+                      value={form.values.username}
+                      onChange={(e) => form.setValue('username', e.target.value)}
+                      error={form.errors.username}
+                      helperText="Optional display name"
                     />
                   </FormGroup>
 
@@ -307,45 +393,16 @@ const Profile: React.FC = () => {
                         <p className="font-medium">{user.email}</p>
                       </div>
                     </div>
-                    {user.profile?.phone && (
+                    {user.username && (
                       <div className="flex items-center">
-                        <Phone className="h-5 w-5 text-gray-400 mr-3" />
+                        <User className="h-5 w-5 text-gray-400 mr-3" />
                         <div>
-                          <p className="text-sm text-gray-500">Phone</p>
-                          <p className="font-medium">{user.profile.phone}</p>
-                        </div>
-                      </div>
-                    )}
-                    {user.profile?.date_of_birth && (
-                      <div className="flex items-center">
-                        <Calendar className="h-5 w-5 text-gray-400 mr-3" />
-                        <div>
-                          <p className="text-sm text-gray-500">Date of Birth</p>
-                          <p className="font-medium">
-                            {new Date(user.profile.date_of_birth).toLocaleDateString()}
-                          </p>
+                          <p className="text-sm text-gray-500">Username</p>
+                          <p className="font-medium">{user.username}</p>
                         </div>
                       </div>
                     )}
                   </div>
-                  {user.profile?.address && (
-                    <div className="flex items-start">
-                      <MapPin className="h-5 w-5 text-gray-400 mr-3 mt-0.5" />
-                      <div>
-                        <p className="text-sm text-gray-500">Address</p>
-                        <p className="font-medium">{user.profile.address}</p>
-                      </div>
-                    </div>
-                  )}
-                  {user.profile?.emergency_contact && (
-                    <div className="flex items-center">
-                      <Phone className="h-5 w-5 text-gray-400 mr-3" />
-                      <div>
-                        <p className="text-sm text-gray-500">Emergency Contact</p>
-                        <p className="font-medium">{user.profile.emergency_contact}</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -356,18 +413,136 @@ const Profile: React.FC = () => {
                 <Shield className="h-5 w-5 mr-2" />
                 Current Role
               </h2>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3 mb-3">
                 {(() => {
                   const RoleIcon = getRoleIcon(user.role || 'SPECTATOR');
-                  return <RoleIcon className="h-6 w-6 text-primary-600" />;
+                  return <RoleIcon className="h-6 w-6 text-blue-600" />;
                 })()}
-                <span className="text-lg font-medium text-gray-900">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                   {getRoleDisplayName(user.role || 'SPECTATOR')}
                 </span>
               </div>
-              <p className="text-gray-600 mt-2">
+              <p className="text-gray-600">
                 You currently have {getRoleDisplayName(user.role || 'SPECTATOR').toLowerCase()} access to the platform.
               </p>
+            </div>
+
+            {/* Change Password */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                  <Lock className="h-5 w-5 mr-2" />
+                  Change Password
+                </h2>
+                {!isChangingPassword && (
+                  <Button
+                    onClick={() => setIsChangingPassword(true)}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Change Password
+                  </Button>
+                )}
+              </div>
+
+              {isChangingPassword ? (
+                <div className="space-y-4">
+                  <FormGroup>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Current Password
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type={showPasswords.current ? "text" : "password"}
+                        value={passwordForm.current_password}
+                        onChange={(e) => setPasswordForm(prev => ({ ...prev, current_password: e.target.value }))}
+                        error={passwordErrors.current_password}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility('current')}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPasswords.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </FormGroup>
+
+                  <FormGroup>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type={showPasswords.new ? "text" : "password"}
+                        value={passwordForm.new_password}
+                        onChange={(e) => setPasswordForm(prev => ({ ...prev, new_password: e.target.value }))}
+                        error={passwordErrors.new_password}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility('new')}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </FormGroup>
+
+                  <FormGroup>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type={showPasswords.confirm ? "text" : "password"}
+                        value={passwordForm.confirm_new_password}
+                        onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm_new_password: e.target.value }))}
+                        error={passwordErrors.confirm_new_password}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility('confirm')}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </FormGroup>
+
+                  <div className="flex space-x-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setIsChangingPassword(false);
+                        setPasswordForm({
+                          current_password: '',
+                          new_password: '',
+                          confirm_new_password: ''
+                        });
+                        setPasswordErrors({});
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handlePasswordChange}
+                      loading={isPasswordSaving}
+                      disabled={isPasswordSaving}
+                    >
+                      {isPasswordSaving ? 'Changing Password...' : 'Change Password'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-600">
+                  Click "Change Password" to update your account password.
+                </p>
+              )}
             </div>
           </div>
 
@@ -416,7 +591,7 @@ const Profile: React.FC = () => {
                         value={organizerApplication.reason}
                         onChange={(e) => setOrganizerApplication(prev => ({ ...prev, reason: e.target.value }))}
                         placeholder="Tell us why you want to become an organizer..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
                         rows={3}
                       />
                     </div>
@@ -444,8 +619,10 @@ const Profile: React.FC = () => {
                   onClick={handleAthleteRequest}
                   variant="outline"
                   className="w-full"
+                  loading={isSubmittingApplication}
+                  disabled={isSubmittingApplication}
                 >
-                  Request Athlete Access
+                  {isSubmittingApplication ? 'Submitting...' : 'Request Athlete Access'}
                 </Button>
               </div>
             </div>
@@ -471,7 +648,7 @@ const Profile: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Member Since</span>
                   <span className="text-sm font-medium text-gray-900">
-                    {new Date().toLocaleDateString()}
+                    {user.date_joined ? new Date(user.date_joined).toLocaleDateString() : 'Unknown'}
                   </span>
                 </div>
               </div>

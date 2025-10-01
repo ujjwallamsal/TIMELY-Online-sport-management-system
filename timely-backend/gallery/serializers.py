@@ -159,15 +159,18 @@ class GalleryAlbumSerializer(serializers.ModelSerializer):
 class GalleryMediaSerializer(serializers.ModelSerializer):
     """Serializer for gallery media"""
     file_url = serializers.SerializerMethodField()
-    album_title = serializers.CharField(source='album.title', read_only=True)
+    album_title = serializers.CharField(source='album.title', read_only=True, allow_null=True)
+    file = serializers.FileField(write_only=True, required=False, source='image')
+    album_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    album = serializers.PrimaryKeyRelatedField(read_only=True)
     
     class Meta:
         model = GalleryMedia
         fields = [
-            "id", "album", "title", "media_type", "image", "video_url",
+            "id", "album", "album_id", "title", "description", "media_type", "image", "file", "video_url",
             "is_public", "uploaded_by", "created_at", "file_url", "album_title"
         ]
-        read_only_fields = ["id", "uploaded_by", "created_at", "file_url", "album_title"]
+        read_only_fields = ["id", "uploaded_by", "created_at", "file_url", "album_title", "album"]
 
     def get_file_url(self, obj):
         return obj.file_url
@@ -176,6 +179,33 @@ class GalleryMediaSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request and hasattr(request, "user"):
             validated_data["uploaded_by"] = request.user
+        
+        # Handle album_id -> album mapping
+        album_id = validated_data.pop('album_id', None)
+        from .models import GalleryAlbum
+        if album_id:
+            try:
+                validated_data['album'] = GalleryAlbum.objects.get(id=album_id)
+            except GalleryAlbum.DoesNotExist:
+                # Create a default album if none exists
+                default_album, created = GalleryAlbum.objects.get_or_create(
+                    title="General",
+                    defaults={'description': 'General media uploads'}
+                )
+                validated_data['album'] = default_album
+        else:
+            # Create a default album if no album_id provided
+            default_album, created = GalleryAlbum.objects.get_or_create(
+                title="General",
+                defaults={'description': 'General media uploads'}
+            )
+            validated_data['album'] = default_album
+        
+        # Handle file -> image mapping
+        file = validated_data.pop('file', None)
+        if file:
+            validated_data['image'] = file
+        
         return super().create(validated_data)
 
 

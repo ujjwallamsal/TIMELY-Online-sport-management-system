@@ -2,18 +2,18 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from . import views, views_stripe, webhooks, views_ticketing
+from . import views, views_checkout, views_webhook
 
 app_name = 'tickets'
 
 urlpatterns = [
-    # New simplified ticketing endpoints
-    path('checkout/', views_ticketing.checkout, name='checkout'),
-    path('webhook/', views_ticketing.webhook, name='webhook'),
-    path('me/tickets/', views_ticketing.MyTicketsView.as_view(), name='my-tickets'),
-    path('tickets/<int:ticket_id>/qr/', views_ticketing.TicketQRView.as_view(), name='ticket-qr'),
-    path('verify/', views_ticketing.verify_ticket, name='verify-ticket'),
-    path('tickets/<int:ticket_id>/use/', views_ticketing.use_ticket, name='use-ticket'),
+    # Real Stripe Checkout endpoints
+    path('checkout/', views_checkout.checkout, name='checkout'),
+    path('free/', views_checkout.free_ticket, name='free-ticket'),
+    path('orders/by_session/', views_checkout.order_by_session, name='order-by-session'),
+    
+    # Stripe webhook (must be at root /api/stripe/webhook/ per main urls.py)
+    # This is handled in timely/urls.py as path('stripe/webhook/', ...)
     
     # Original complex ticketing endpoints (keeping for backward compatibility)
     # Public/Authenticated ticket type views
@@ -21,18 +21,10 @@ urlpatterns = [
          views.TicketTypeListView.as_view(), 
          name='event-ticket-types'),
     
-    # Order management (legacy)
+    # Legacy checkout (deprecated)
     path('legacy/checkout/', 
-         views.checkout, 
+         views.checkout_legacy, 
          name='legacy-checkout'),
-    
-    # Stripe integration
-    path('stripe/checkout/', 
-         views_stripe.create_checkout_session, 
-         name='stripe-checkout'),
-    path('webhook/', 
-         webhooks.stripe_webhook, 
-         name='stripe-webhook'),
     path('orders/', 
          views.create_order, 
          name='create-order'),
@@ -57,8 +49,8 @@ urlpatterns = [
          views.MyTicketsListView.as_view(), 
          name='my-tickets'),
     path('me/tickets/', 
-         views_stripe.get_my_tickets, 
-         name='my-tickets-stripe'),
+         views.MyTicketsListView.as_view(), 
+         name='my-tickets-me'),
     path('tickets/<int:ticket_id>/', 
          views.TicketDetailView.as_view(), 
          name='ticket-detail'),
@@ -66,11 +58,8 @@ urlpatterns = [
          views.ticket_qr, 
          name='ticket-qr'),
     path('tickets/<int:ticket_id>/qr/image/', 
-         views_stripe.get_ticket_qr, 
+         views.ticket_qr, 
          name='ticket-qr-image'),
-    path('tickets/<int:ticket_id>/qr/data/', 
-         views_stripe.get_ticket_qr_data, 
-         name='ticket-qr-data'),
     path('tickets/<int:ticket_id>/checkin/', 
          views.checkin_ticket, 
          name='checkin-ticket'),
@@ -98,11 +87,8 @@ urlpatterns = [
     path('tickets/<int:ticket_id>/use/', 
          views.use_ticket, 
          name='use-ticket'),
-    path('tickets/<int:ticket_id>/checkin/', 
-         views_stripe.use_ticket, 
-         name='use-ticket-stripe'),
     path('verify/', 
-         views_stripe.verify_ticket, 
+         views.checkin_ticket_qr, 
          name='verify-ticket'),
     path('checkin/', 
          views.checkin_ticket, 

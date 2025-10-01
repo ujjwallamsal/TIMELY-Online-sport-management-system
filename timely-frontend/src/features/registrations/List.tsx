@@ -14,6 +14,8 @@ import {
 import { useRegistrations } from '../../api/queries';
 import { formatDateTime, formatRelativeTime } from '../../utils/date';
 import { useToast } from '../../contexts/ToastContext';
+import { api } from '../../api/client';
+import { ENDPOINTS } from '../../api/ENDPOINTS';
 
 interface DenormalizedRegistration {
   id: number;
@@ -54,13 +56,13 @@ const RegistrationsList: React.FC = () => {
         const eventIds = [...new Set(registrations.map(r => r.event))];
         const userIds = [...new Set(registrations.map(r => r.user))];
 
-        // Fetch events and users in parallel
+        // Fetch events and users in parallel using proper API client
         const [eventsResponse, usersResponse] = await Promise.all([
           Promise.all(eventIds.map(id => 
-            fetch(`/api/events/${id}/`).then(res => res.ok ? res.json() : { id, name: 'Unknown Event' })
+            api.get(ENDPOINTS.event(id)).then(res => res.data).catch(() => ({ id, name: 'Unknown Event' }))
           )),
           Promise.all(userIds.map(id => 
-            fetch(`/api/users/${id}/`).then(res => res.ok ? res.json() : { id, first_name: 'Unknown', last_name: 'User' })
+            api.get(ENDPOINTS.users + `${id}/`).then(res => res.data).catch(() => ({ id, first_name: 'Unknown', last_name: 'User' }))
           ))
         ]);
 
@@ -232,8 +234,8 @@ const RegistrationsList: React.FC = () => {
                     <tr key={registration.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                            <Calendar className="h-6 w-6 text-primary-600" />
+                          <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <Calendar className="h-6 w-6 text-blue-600" />
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">
@@ -285,7 +287,7 @@ const RegistrationsList: React.FC = () => {
                         <div className="flex items-center justify-end space-x-2">
                           <Link
                             to={`/events/${registration.event}`}
-                            className="text-primary-600 hover:text-primary-900 p-1"
+                            className="text-blue-600 hover:text-blue-900 p-1"
                             title="View Event"
                           >
                             <Eye className="h-4 w-4" />

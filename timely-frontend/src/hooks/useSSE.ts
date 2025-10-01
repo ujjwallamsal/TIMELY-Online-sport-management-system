@@ -39,10 +39,18 @@ export const useSSE = (options: SSEOptions) => {
 
       eventSource.onerror = (event) => {
         setIsConnected(false);
+        
+        // Check if it's a 406 error or similar server rejection
+        if (eventSource.readyState === EventSource.CLOSED) {
+          setError('Server rejected connection (406) - falling back to polling');
+          // Don't retry SSE if server rejects it
+          return;
+        }
+        
         setError('Connection error');
         options.onError?.(event);
 
-        // Auto-retry with exponential backoff
+        // Auto-retry with exponential backoff only for network errors
         if (retryCount < (options.maxRetries || 5)) {
           const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
           retryTimeoutRef.current = setTimeout(() => {

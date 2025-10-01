@@ -196,7 +196,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({
           {...props}
           id={checkboxId}
           type="checkbox"
-          className={`h-4 w-4 text-primary-600 focus:ring-blue-500 border-gray-300 rounded ${error ? 'border-red-300' : ''} ${className}`}
+          className={`h-4 w-4 text-blue-600 focus:ring-blue-600 border-gray-300 rounded ${error ? 'border-red-300' : ''} ${className}`}
         />
         {label && (
           <label htmlFor={checkboxId} className="ml-2 block text-sm text-gray-900">

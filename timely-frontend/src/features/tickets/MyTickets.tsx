@@ -12,9 +12,11 @@ interface Ticket {
   venue_name?: string;
   ticket_type: string;
   price: number;
-  status: 'valid' | 'used' | 'cancelled';
+  status: 'pending_approval' | 'approved' | 'rejected' | 'valid' | 'used' | 'cancelled' | 'void';
   qr_code?: string;
+  qr_payload?: string;
   created_at: string;
+  approved_at?: string;
 }
 
 const MyTickets: React.FC = () => {
@@ -46,7 +48,7 @@ const MyTickets: React.FC = () => {
       setIsLoading(true);
       setError(null);
       const response = await api.get(ENDPOINTS.myTickets);
-      setTickets(response.data.results || []);
+      setTickets(response.data.tickets || response.data.results || []);
     } catch (error) {
       console.error('Error fetching tickets:', error);
       setError('Failed to load tickets');
@@ -57,11 +59,17 @@ const MyTickets: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'pending_approval':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'approved':
       case 'valid':
         return 'bg-green-100 text-green-800';
+      case 'rejected':
+        return 'bg-red-100 text-red-800';
       case 'used':
         return 'bg-gray-100 text-gray-800';
       case 'cancelled':
+      case 'void':
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -70,12 +78,20 @@ const MyTickets: React.FC = () => {
 
   const getStatusText = (status: string) => {
     switch (status) {
+      case 'pending_approval':
+        return 'Pending Approval';
+      case 'approved':
+        return 'Approved';
+      case 'rejected':
+        return 'Rejected';
       case 'valid':
         return 'Valid';
       case 'used':
         return 'Used';
       case 'cancelled':
         return 'Cancelled';
+      case 'void':
+        return 'Voided';
       default:
         return status;
     }
@@ -221,19 +237,40 @@ const MyTickets: React.FC = () => {
                     {ticket.venue_name}
                   </div>
                 )}
-                <div className="text-sm text-gray-500">
-                  <strong>Type:</strong> {ticket.ticket_type}
-                </div>
+                {ticket.ticket_type && (
+                  <div className="text-sm text-gray-500">
+                    <strong>Type:</strong> {ticket.ticket_type}
+                  </div>
+                )}
                 <div className="text-sm text-gray-500">
                   <strong>Ticket #:</strong> {ticket.id.toString().padStart(6, '0')}
                 </div>
               </div>
 
+              {/* Pending approval message */}
+              {ticket.status === 'pending_approval' && (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-xs text-yellow-800">
+                    <strong>Admin review pending.</strong> You'll be notified when approved.
+                  </p>
+                </div>
+              )}
+
+              {/* Rejected message */}
+              {ticket.status === 'rejected' && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-xs text-red-800">
+                    <strong>Ticket rejected.</strong> Please contact support for details.
+                  </p>
+                </div>
+              )}
+
               <div className="flex space-x-2">
                 <button
                   onClick={() => handleViewQR(ticket)}
                   className="flex-1 btn btn-outline text-sm"
-                  disabled={ticket.status !== 'valid'}
+                  disabled={!['valid', 'approved'].includes(ticket.status)}
+                  title={!['valid', 'approved'].includes(ticket.status) ? 'QR code available after approval' : ''}
                 >
                   <QrCode className="h-4 w-4 mr-1" />
                   QR Code
@@ -241,6 +278,8 @@ const MyTickets: React.FC = () => {
                 <button
                   onClick={() => handleDownloadTicket(ticket)}
                   className="flex-1 btn btn-secondary text-sm"
+                  disabled={!['valid', 'approved'].includes(ticket.status)}
+                  title={!['valid', 'approved'].includes(ticket.status) ? 'Download available after approval' : ''}
                 >
                   <Download className="h-4 w-4 mr-1" />
                   Download

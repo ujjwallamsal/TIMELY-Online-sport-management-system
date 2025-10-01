@@ -86,6 +86,25 @@ class NotificationViewSet(viewsets.ModelViewSet):
         notification.mark_read()
         return Response(NotificationSerializer(notification).data, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request, *args: Any, **kwargs: Any) -> Response:
+        """Get unread notification count for current user"""
+        try:
+            # Count unread notifications for the current user
+            unread_count = Notification.objects.filter(
+                user=request.user,
+                read_at__isnull=True
+            ).count()
+            
+            return Response({
+                'count': unread_count
+            })
+        except Exception as e:
+            return Response(
+                {'error': 'Failed to get unread count'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=False, methods=['post'])
     def mark_read_bulk(self, request, *args: Any, **kwargs: Any) -> Response:
         """Mark a list of notification ids as read: {"ids": [uuid,...]}"""

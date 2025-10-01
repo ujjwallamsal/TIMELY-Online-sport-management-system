@@ -87,65 +87,23 @@ class TicketDetailView(generics.RetrieveAPIView):
 
 # Order Management Views
 
+# Note: Main checkout endpoint has been moved to views_checkout.py
+# This legacy endpoint is kept for backward compatibility with complex ticket types
 @api_view(['POST'])
 @permission_classes([CanPurchaseTickets])
-def checkout(request):
+def checkout_legacy(request):
     """
-    Create checkout session for tickets
+    Legacy checkout for multi-type ticket purchases (complex flow)
+    Use /api/tickets/checkout/ for the simplified real Stripe flow
     """
     serializer = CreateOrderSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    data = serializer.validated_data
-    
-    try:
-        with transaction.atomic():
-            # Calculate total
-            total_cents, currency = calculate_order_total(data['items'])
-            
-            # Create order
-            order = TicketOrder.objects.create(
-                user=request.user,
-                event_id=data['event_id'],
-                fixture_id=data.get('fixture_id'),
-                total_cents=total_cents,
-                currency=currency
-            )
-            
-            # Create tickets
-            for item in data['items']:
-                ticket_type_id = item['ticket_type_id']
-                quantity = item['qty']
-                
-                for _ in range(quantity):
-                    ticket = Ticket.objects.create(
-                        order=order,
-                        ticket_type_id=ticket_type_id
-                    )
-                    # Generate QR payload
-                    ticket.qr_payload = generate_qr_payload(
-                        ticket.id, order.id, ticket.serial
-                    )
-                    ticket.save()
-            
-            # For development, return mock payment intent
-            payment_data = {
-                'order_id': order.id,
-                'client_secret': f'mock_secret_{order.id}',
-                'payment_intent_id': f'mock_intent_{order.id}',
-                'total_cents': total_cents,
-                'currency': currency,
-                'status': 'requires_payment_method'
-            }
-            
-            return Response(payment_data, status=status.HTTP_201_CREATED)
-            
-    except Exception as e:
-        return Response(
-            {'error': str(e)}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+    return Response(
+        {'detail': 'Please use /api/tickets/checkout/ for ticket purchases'},
+        status=status.HTTP_410_GONE
+    )
 
 
 @api_view(['POST'])

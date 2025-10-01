@@ -423,6 +423,21 @@ class OrganizerApplication(models.Model):
         default=Status.PENDING,
         db_index=True
     )
+    
+    # Organizer-specific fields
+    organization_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Name of the organization"
+    )
+    business_doc = models.FileField(
+        upload_to='organizer_documents/business/',
+        null=True,
+        blank=True,
+        help_text="Business registration or organization document"
+    )
+    
     reason = models.TextField(blank=True, help_text="Reason for application")
     reviewed_by = models.ForeignKey(
         User, 

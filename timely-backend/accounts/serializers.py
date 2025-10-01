@@ -109,12 +109,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating user profile - only fields that exist on User model"""
     class Meta:
         model = User
         fields = [
             "first_name",
-            "last_name"
+            "last_name",
+            "username"
         ]
+        extra_kwargs = {
+            'username': {'required': False, 'allow_blank': True, 'allow_null': True},
+        }
 
 
 class UserListSerializer(serializers.ModelSerializer):
@@ -222,7 +227,15 @@ class OrganizerApplicationSerializer(serializers.ModelSerializer):
 class OrganizerApplicationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrganizerApplication
-        fields = ['reason']
+        fields = ['organization_name', 'business_doc']
+    
+    def validate(self, attrs):
+        # Ensure required fields are provided
+        if not attrs.get('organization_name') or attrs.get('organization_name').strip() == '':
+            raise serializers.ValidationError("Organization name is required")
+        if not attrs.get('business_doc'):
+            raise serializers.ValidationError("Business document is required")
+        return attrs
     
     def create(self, validated_data):
         user = self.context['request'].user
@@ -271,12 +284,15 @@ class AthleteApplicationSerializer(serializers.ModelSerializer):
 class AthleteApplicationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AthleteApplication
-        fields = ['date_of_birth', 'sports', 'id_document', 'medical_clearance', 'reason']
+        fields = ['id_document', 'medical_clearance']
     
-    def validate_sports(self, value):
-        if not value or len(value) == 0:
-            raise serializers.ValidationError("At least one sport must be selected")
-        return value
+    def validate(self, attrs):
+        # Ensure required files are provided
+        if not attrs.get('id_document'):
+            raise serializers.ValidationError("Government ID document is required")
+        if not attrs.get('medical_clearance'):
+            raise serializers.ValidationError("Medical clearance document is required")
+        return attrs
     
     def create(self, validated_data):
         user = self.context['request'].user
@@ -323,18 +339,15 @@ class CoachApplicationSerializer(serializers.ModelSerializer):
 
 
 class CoachApplicationCreateSerializer(serializers.ModelSerializer):
+    certificate = serializers.FileField(source='coaching_certificate')
+    
     class Meta:
         model = CoachApplication
-        fields = ['sports', 'team_preference', 'coaching_certificate', 'resume', 'reason']
-    
-    def validate_sports(self, value):
-        if not value or len(value) == 0:
-            raise serializers.ValidationError("At least one sport must be selected")
-        return value
+        fields = ['certificate', 'resume']
     
     def validate(self, attrs):
         # Ensure at least one document is provided
-        if not attrs.get('coaching_certificate') and not attrs.get('resume'):
+        if not attrs.get('certificate') and not attrs.get('resume'):
             raise serializers.ValidationError("Either coaching certificate or resume must be provided")
         return attrs
     

@@ -12,9 +12,8 @@ import {
   useFixtures, 
   useResults
 } from '../../api/queries';
-import { useAuth } from '../../auth/useAuth';
-import { listFixtures, listResults } from '../../api/admin';
-import { formatDateTime, formatRelativeTime } from '../../utils/date';
+import { useAuth } from '../../auth/AuthProvider';
+// import { formatDateTime, formatRelativeTime } from '../../utils/date';
 import { useToast } from '../../contexts/ToastContext';
 
 const CoachDashboard: React.FC = () => {

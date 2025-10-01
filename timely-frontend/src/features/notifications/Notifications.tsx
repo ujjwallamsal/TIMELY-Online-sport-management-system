@@ -3,6 +3,8 @@ import { Bell, Send, MessageSquare, X, CheckCircle } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from '../../hooks/useForm';
 import { useToast } from '../../contexts/ToastContext';
+import { useGetNotifications, useMarkNotificationRead } from '../../api/queries';
+import NotificationDrawer from '../../components/NotificationDrawer';
 
 interface Notification {
   id: number;
@@ -22,42 +24,40 @@ interface AnnouncementData {
 const Notifications: React.FC = () => {
   const { showSuccess, showError } = useToast();
   const [activeTab, setActiveTab] = useState<'notifications' | 'announce'>('notifications');
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // Mock notifications data
-  const notifications: Notification[] = [
-    {
-      id: 1,
-      title: 'Event Registration Open',
-      message: 'Registration for Sydney Basketball Championship 2025 is now open.',
-      type: 'info',
-      created_at: '2025-01-15T10:30:00Z',
-      read: false,
-    },
-    {
-      id: 2,
-      title: 'Match Result Updated',
-      message: 'The result for Match #3 has been updated.',
-      type: 'success',
-      created_at: '2025-01-15T09:15:00Z',
-      read: true,
-    },
-    {
-      id: 3,
-      title: 'Payment Confirmation',
-      message: 'Your ticket purchase has been confirmed. Check your email for details.',
-      type: 'success',
-      created_at: '2025-01-14T16:45:00Z',
-      read: true,
-    },
-    {
-      id: 4,
-      title: 'Event Cancelled',
-      message: 'The Tennis Tournament scheduled for tomorrow has been cancelled due to weather.',
-      type: 'warning',
-      created_at: '2025-01-14T14:20:00Z',
-      read: false,
-    },
-  ];
+  // Fetch real notifications data
+  const { data: notifications = [], isLoading } = useGetNotifications();
+  const markAsReadMutation = useMarkNotificationRead();
+
+  const handleMarkAsRead = async (notificationId: number) => {
+    try {
+      await markAsReadMutation.mutateAsync(notificationId);
+      showSuccess('Notification Marked as Read', 'Notification has been marked as read.');
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+      showError('Error', 'Failed to mark notification as read.');
+    }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    setSelectedNotification(notification);
+    setIsDrawerOpen(true);
+    // Mark as read if unread
+    if (!notification.read) {
+      handleMarkAsRead(notification.id);
+    }
+  };
+
+  const handleCloseDrawer = () => {
+    setIsDrawerOpen(false);
+    setSelectedNotification(null);
+  };
+
+  // Calculate unread count - ensure notifications is always an array
+  const notificationsArray = Array.isArray(notifications?.results) ? notifications.results : (Array.isArray(notifications) ? notifications : []);
+  const unreadCount = notificationsArray.filter((n: Notification) => !n.read).length;
 
   const form = useForm<AnnouncementData>({
     initialValues: {
@@ -108,8 +108,6 @@ const Notifications: React.FC = () => {
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -157,17 +155,32 @@ const Notifications: React.FC = () => {
         {/* Notifications Tab */}
         {activeTab === 'notifications' && (
           <div className="space-y-4">
-            {notifications.length === 0 ? (
+            {isLoading ? (
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="card animate-pulse">
+                    <div className="flex items-start space-x-3">
+                      <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+                      <div className="flex-1">
+                        <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : notificationsArray.length === 0 ? (
               <div className="text-center py-12">
                 <Bell className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Notifications</h3>
                 <p className="text-gray-500">You're all caught up! No new notifications.</p>
               </div>
             ) : (
-              notifications.map((notification) => (
+              notificationsArray.map((notification: Notification) => (
                 <div
                   key={notification.id}
-                  className={`card border-l-4 ${getNotificationBg(notification.type)} ${
+                  onClick={() => handleNotificationClick(notification)}
+                  className={`card border-l-4 ${getNotificationBg(notification.type)} cursor-pointer hover:shadow-lg transition-shadow ${
                     !notification.read ? 'shadow-md' : ''
                   }`}
                 >
@@ -283,6 +296,16 @@ const Notifications: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Notification Detail Drawer */}
+      {selectedNotification && (
+        <NotificationDrawer
+          notification={selectedNotification}
+          isOpen={isDrawerOpen}
+          onClose={handleCloseDrawer}
+          onMarkAsRead={handleMarkAsRead}
+        />
+      )}
     </div>
   );
 };

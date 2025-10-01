@@ -1,5 +1,6 @@
 import React from 'react';
-import type { WebSocketStatus } from '../api/websocket';
+
+type WebSocketStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnected' | 'unknown';
 
 interface WebSocketStatusIndicatorProps {
   status: WebSocketStatus;

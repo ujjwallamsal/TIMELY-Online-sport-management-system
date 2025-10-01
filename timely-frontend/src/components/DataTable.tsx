@@ -95,7 +95,7 @@ function DataTable<T extends Record<string, any>>({
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {data.map((item, index) => (
-              <tr key={index} className="hover:bg-gray-50">
+              <tr key={String((item as any)?.id ?? (item as any)?.original?.id ?? (item as any)?.pk ?? (item as any)?.uuid ?? index)} className="hover:bg-gray-50">
                 {columns.map((column) => {
                   const keyStr = String(column.key);
                   const value = keyStr.includes('.')

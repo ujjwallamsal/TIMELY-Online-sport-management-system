@@ -174,9 +174,12 @@ class GalleryMedia(models.Model):
         GalleryAlbum, 
         on_delete=models.CASCADE, 
         related_name="media_items",
-        help_text="Associated album"
+        null=True,
+        blank=True,
+        help_text="Associated album (optional)"
     )
     title = models.CharField(max_length=200, help_text="Media title")
+    description = models.TextField(blank=True, help_text="Media description")
     media_type = models.CharField(
         max_length=20, 
         choices=MediaType.choices, 

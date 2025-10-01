@@ -142,7 +142,8 @@ export function useForm<T extends Record<string, any>>({
     }
   }, [values, validate, onSubmit]);
 
-  const isValid = Object.keys(errors).length === 0 && validate();
+  // Check validity without triggering validation (to avoid infinite loop)
+  const isValid = Object.keys(errors).length === 0;
 
   return {
     values,

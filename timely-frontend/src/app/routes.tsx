@@ -2,7 +2,7 @@ import React from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { AuthProvider } from '../auth/AuthProvider';
+import AuthProvider from '../auth/AuthProvider';
 import { ToastProvider } from '../contexts/ToastContext';
 import { Protected } from '../auth/Protected';
 import { Login } from '../auth/Login';
@@ -10,6 +10,8 @@ import { Register } from '../auth/Register';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import OfflineIndicator from '../components/OfflineIndicator';
+import RoleRefresh from '../components/RoleRefresh';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 // Lazy load feature components
 const Home = React.lazy(() => import('../features/home/Home'));
@@ -35,11 +37,25 @@ const Tickets = React.lazy(() => import('../features/ticketing/Events'));
 const TicketCheckout = React.lazy(() => import('../features/ticketing/Checkout'));
 const MyTickets = React.lazy(() => import('../features/ticketing/MyTickets'));
 const Checkout = React.lazy(() => import('../features/tickets/Checkout'));
+const CheckoutSuccess = React.lazy(() => import('../features/tickets/CheckoutSuccess'));
+const CheckoutCancel = React.lazy(() => import('../features/tickets/CheckoutCancel'));
 const MyTicketsNew = React.lazy(() => import('../features/tickets/MyTickets'));
 const Notifications = React.lazy(() => import('../features/notifications/Notifications'));
-const Dashboard = React.lazy(() => import('../features/dashboard/User'));
+const Dashboard = React.lazy(() => import('../features/dashboard/Dashboard'));
 const UpgradeCenter = React.lazy(() => import('../features/upgrade/UpgradeCenter'));
 const Profile = React.lazy(() => import('../features/profile/Profile'));
+const PrivacyPolicy = React.lazy(() => import('../features/legal/PrivacyPolicy'));
+const TermsOfService = React.lazy(() => import('../features/legal/TermsOfService'));
+const Accessibility = React.lazy(() => import('../features/legal/Accessibility'));
+const HelpCenter = React.lazy(() => import('../features/support/HelpCenter'));
+const Contact = React.lazy(() => import('../features/support/Contact'));
+const Security = React.lazy(() => import('../features/support/Security'));
+const Status = React.lazy(() => import('../features/support/Status'));
+// New role-specific pages
+const Schedule = React.lazy(() => import('../features/schedule/Schedule'));
+const Teams = React.lazy(() => import('../features/teams/Teams'));
+const Approvals = React.lazy(() => import('../features/approvals/Approvals'));
+const Announcements = React.lazy(() => import('../features/announcements/Announcements'));
 // Organizer/Coach/Athlete admin-like pages are disabled; use Django Admin for back-office
 
 // Create a client
@@ -55,7 +71,8 @@ const queryClient = new QueryClient({
 // Layout wrapper
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <SimpleErrorBoundary>
+    <ErrorBoundary>
+      <RoleRefresh />
       <div className="min-h-screen flex flex-col">
         <OfflineIndicator />
         <Navbar />
@@ -66,7 +83,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </main>
         <Footer />
       </div>
-    </SimpleErrorBoundary>
+    </ErrorBoundary>
   );
 };
 
@@ -77,10 +94,20 @@ const Loading: React.FC = () => (
   </div>
 );
 
-// Error boundary component
-const SimpleErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  return <>{children}</>;
-};
+// Error boundary component for route-level errors
+const RouteErrorBoundary: React.FC = () => (
+  <ErrorBoundary>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Page Error</h1>
+        <p className="text-gray-600 mb-6">Something went wrong loading this page.</p>
+        <a href="/" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+          Go Home
+        </a>
+      </div>
+    </div>
+  </ErrorBoundary>
+);
 
 // Create the router
 const router = createBrowserRouter([
@@ -93,7 +120,7 @@ const router = createBrowserRouter([
         </React.Suspense>
       </Layout>
     ),
-    errorElement: <SimpleErrorBoundary><div /></SimpleErrorBoundary>,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/upgrade',
@@ -110,17 +137,21 @@ const router = createBrowserRouter([
   {
     path: '/login',
     element: (
-      <React.Suspense fallback={<Loading />}>
-        <Login />
-      </React.Suspense>
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <Login />
+        </React.Suspense>
+      </Layout>
     ),
   },
   {
     path: '/register',
     element: (
-      <React.Suspense fallback={<Loading />}>
-        <Register />
-      </React.Suspense>
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <Register />
+        </React.Suspense>
+      </Layout>
     ),
   },
   {
@@ -162,6 +193,18 @@ const router = createBrowserRouter([
         <Layout>
           <React.Suspense fallback={<Loading />}>
             <EventEdit />
+          </React.Suspense>
+        </Layout>
+      </Protected>
+    ),
+  },
+  {
+    path: '/events/mine',
+    element: (
+      <Protected requiredRole={['ORGANIZER', 'ADMIN']}>
+        <Layout>
+          <React.Suspense fallback={<Loading />}>
+            <Events />
           </React.Suspense>
         </Layout>
       </Protected>
@@ -368,6 +411,30 @@ const router = createBrowserRouter([
     ),
   },
   {
+    path: '/tickets/checkout/success',
+    element: (
+      <Protected>
+        <Layout>
+          <React.Suspense fallback={<Loading />}>
+            <CheckoutSuccess />
+          </React.Suspense>
+        </Layout>
+      </Protected>
+    ),
+  },
+  {
+    path: '/tickets/checkout/cancel',
+    element: (
+      <Protected>
+        <Layout>
+          <React.Suspense fallback={<Loading />}>
+            <CheckoutCancel />
+          </React.Suspense>
+        </Layout>
+      </Protected>
+    ),
+  },
+  {
     path: '/tickets/my-tickets',
     element: (
       <Protected>
@@ -403,6 +470,18 @@ const router = createBrowserRouter([
       </Protected>
     ),
   },
+  {
+    path: '/settings',
+    element: (
+      <Protected>
+        <Layout>
+          <React.Suspense fallback={<Loading />}>
+            <Profile />
+          </React.Suspense>
+        </Layout>
+      </Protected>
+    ),
+  },
   // Admin routes removed - superusers use Django Admin at http://127.0.0.1:8000/admin
   {
     // Admin-like dashboards removed; use Django Admin instead
@@ -414,6 +493,54 @@ const router = createBrowserRouter([
         <Layout>
           <React.Suspense fallback={<Loading />}>
             <Notifications />
+          </React.Suspense>
+        </Layout>
+      </Protected>
+    ),
+  },
+  {
+    path: '/schedule',
+    element: (
+      <Protected requiredRole={['ATHLETE', 'COACH', 'SPECTATOR']}>
+        <Layout>
+          <React.Suspense fallback={<Loading />}>
+            <Schedule />
+          </React.Suspense>
+        </Layout>
+      </Protected>
+    ),
+  },
+  {
+    path: '/teams',
+    element: (
+      <Protected requiredRole={['COACH']}>
+        <Layout>
+          <React.Suspense fallback={<Loading />}>
+            <Teams />
+          </React.Suspense>
+        </Layout>
+      </Protected>
+    ),
+  },
+  {
+    path: '/approvals',
+    element: (
+      <Protected requiredRole={['COACH', 'ORGANIZER', 'ADMIN']}>
+        <Layout>
+          <React.Suspense fallback={<Loading />}>
+            <Approvals />
+          </React.Suspense>
+        </Layout>
+      </Protected>
+    ),
+  },
+  {
+    path: '/announcements',
+    element: (
+      <Protected requiredRole={['ORGANIZER', 'ADMIN']}>
+        <Layout>
+          <React.Suspense fallback={<Loading />}>
+            <Announcements />
           </React.Suspense>
         </Layout>
       </Protected>
@@ -456,21 +583,91 @@ const router = createBrowserRouter([
       </Layout>
     ),
   },
+  {
+    path: '/privacy',
+    element: (
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <PrivacyPolicy />
+        </React.Suspense>
+      </Layout>
+    ),
+  },
+  {
+    path: '/terms',
+    element: (
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <TermsOfService />
+        </React.Suspense>
+      </Layout>
+    ),
+  },
+  {
+    path: '/accessibility',
+    element: (
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <Accessibility />
+        </React.Suspense>
+      </Layout>
+    ),
+  },
+  {
+    path: '/help',
+    element: (
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <HelpCenter />
+        </React.Suspense>
+      </Layout>
+    ),
+  },
+  {
+    path: '/contact',
+    element: (
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <Contact />
+        </React.Suspense>
+      </Layout>
+    ),
+  },
+  {
+    path: '/security',
+    element: (
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <Security />
+        </React.Suspense>
+      </Layout>
+    ),
+  },
+  {
+    path: '/status',
+    element: (
+      <Layout>
+        <React.Suspense fallback={<Loading />}>
+          <Status />
+        </React.Suspense>
+      </Layout>
+    ),
+  },
 ]);
 
 // Main App component
 const App: React.FC = () => {
   return (
-    <SimpleErrorBoundary>
+    <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <AuthProvider>
             <RouterProvider router={router} />
-            <ReactQueryDevtools initialIsOpen={false} />
+{import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
           </AuthProvider>
         </ToastProvider>
       </QueryClientProvider>
-    </SimpleErrorBoundary>
+    </ErrorBoundary>
   );
 };
 

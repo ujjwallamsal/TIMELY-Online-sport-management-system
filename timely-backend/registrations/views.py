@@ -1,6 +1,7 @@
 """
 Views for registration management
 """
+import logging
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -25,6 +26,8 @@ from .services.notifications import (
     send_registration_confirmation, send_payment_confirmation, 
     send_status_update, send_organizer_notification
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RegistrationViewSet(viewsets.ModelViewSet):
@@ -344,50 +347,88 @@ class RegistrationViewSet(viewsets.ModelViewSet):
         """Approve registration (organizer only)"""
         registration = self.get_object()
         
-        # Check permissions
-        if not request.user.has_perm('registrations.can_manage_registration', registration):
+        # Check permissions - organizer of the event or admin
+        is_organizer = registration.event.created_by == request.user
+        is_admin = request.user.role == 'ADMIN'
+        
+        if not (is_organizer or is_admin):
             return Response(
-                {'error': 'Permission denied'},
+                {'error': 'Permission denied. Only event organizers and admins can approve registrations.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        reason = request.data.get('reason', '')
-        registration.approve(reason=reason)
+        if registration.status != 'PENDING':
+            return Response(
+                {'error': 'Can only approve pending registrations'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        # Send notification
-        send_status_update(registration, 'approved')
+        # Update registration status
+        old_status = registration.status
+        registration.status = 'APPROVED'
+        registration.decided_at = timezone.now()
+        registration.decided_by = request.user
+        registration.reason = request.data.get('reason', '')
+        registration.save()
         
-        return Response({
-            'id': registration.id,
-            'status': registration.status,
-            'decided_at': registration.decided_at.isoformat(),
-            'reason': registration.reason
-        })
+        # Send notification to athlete
+        send_status_update(registration, old_status, 'APPROVED')
+        
+        # Notify athlete via notifications API
+        try:
+            from notifications.models import Notification
+            Notification.objects.create(
+                user=registration.applicant_user or registration.applicant,
+                title='Registration Approved',
+                message=f'Your registration for {registration.event.name} has been approved! Check your schedule.',
+                type='success',
+                link=f'/schedule'
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create notification: {e}")
+        
+        return Response(RegistrationDetailSerializer(registration).data)
 
     @action(detail=True, methods=['patch'], url_path='reject')
     def reject(self, request, pk=None):
         """Reject registration (organizer only)"""
         registration = self.get_object()
         
-        # Check permissions
-        if not request.user.has_perm('registrations.can_manage_registration', registration):
+        # Check permissions - organizer of the event or admin
+        is_organizer = registration.event.created_by == request.user
+        is_admin = request.user.role == 'ADMIN'
+        
+        if not (is_organizer or is_admin):
             return Response(
-                {'error': 'Permission denied'},
+                {'error': 'Permission denied. Only event organizers and admins can reject registrations.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        reason = request.data.get('reason', '')
-        registration.reject(reason=reason)
+        # Update registration status
+        old_status = registration.status
+        registration.status = 'REJECTED'
+        registration.decided_at = timezone.now()
+        registration.decided_by = request.user
+        registration.reason = request.data.get('reason', '')
+        registration.save()
         
-        # Send notification
-        send_status_update(registration, 'rejected')
+        # Send notification to athlete
+        send_status_update(registration, old_status, 'REJECTED')
         
-        return Response({
-            'id': registration.id,
-            'status': registration.status,
-            'decided_at': registration.decided_at.isoformat(),
-            'reason': registration.reason
-        })
+        # Notify athlete via notifications API
+        try:
+            from notifications.models import Notification
+            Notification.objects.create(
+                user=registration.applicant_user or registration.applicant,
+                title='Registration Rejected',
+                message=f'Your registration for {registration.event.name} was rejected. Reason: {registration.reason or "Not specified"}',
+                type='warning',
+                link=f'/registrations/my'
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create notification: {e}")
+        
+        return Response(RegistrationDetailSerializer(registration).data)
 
 
 class RegistrationDocumentViewSet(viewsets.ModelViewSet):

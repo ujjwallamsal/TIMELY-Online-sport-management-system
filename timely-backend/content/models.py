@@ -260,3 +260,120 @@ class Announcement(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class FooterLink(models.Model):
+    """Footer links management for site navigation"""
+    
+    class LinkType(models.TextChoices):
+        INTERNAL = "internal", "Internal Page"
+        EXTERNAL = "external", "External URL"
+        EMAIL = "email", "Email Address"
+        PHONE = "phone", "Phone Number"
+    
+    class Section(models.TextChoices):
+        HELP = "help", "Help & Support"
+        LEGAL = "legal", "Legal & Policies"
+        COMPANY = "company", "Company"
+        CONTACT = "contact", "Contact"
+        SOCIAL = "social", "Social"
+    
+    title = models.CharField(max_length=100, help_text="Link display text")
+    url = models.URLField(blank=True, help_text="External URL or internal page slug")
+    link_type = models.CharField(max_length=20, choices=LinkType.choices, default=LinkType.INTERNAL)
+    section = models.CharField(max_length=20, choices=Section.choices, default=Section.HELP)
+    sort_order = models.PositiveIntegerField(default=0, help_text="Display order (0 = first)")
+    is_active = models.BooleanField(default=True, help_text="Whether link is active")
+    opens_in_new_tab = models.BooleanField(default=False, help_text="Open in new tab (external links)")
+    
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['section', 'sort_order', 'title']
+        indexes = [
+            models.Index(fields=['section', 'is_active']),
+            models.Index(fields=['sort_order']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} ({self.get_section_display()})"
+
+
+class SocialProfile(models.Model):
+    """Social media profiles management"""
+    
+    class Platform(models.TextChoices):
+        TWITTER = "twitter", "Twitter/X"
+        FACEBOOK = "facebook", "Facebook"
+        INSTAGRAM = "instagram", "Instagram"
+        LINKEDIN = "linkedin", "LinkedIn"
+        YOUTUBE = "youtube", "YouTube"
+        TIKTOK = "tiktok", "TikTok"
+        DISCORD = "discord", "Discord"
+        TWITCH = "twitch", "Twitch"
+    
+    platform = models.CharField(max_length=20, choices=Platform.choices, unique=True)
+    url = models.URLField(help_text="Full URL to the social media profile")
+    username = models.CharField(max_length=100, blank=True, help_text="Username/handle (without @)")
+    display_name = models.CharField(max_length=100, blank=True, help_text="Custom display name")
+    is_active = models.BooleanField(default=True, help_text="Whether profile is active")
+    sort_order = models.PositiveIntegerField(default=0, help_text="Display order (0 = first)")
+    
+    # Icons and styling
+    icon_class = models.CharField(max_length=50, blank=True, help_text="CSS icon class (e.g., 'fab fa-twitter')")
+    color = models.CharField(max_length=7, blank=True, help_text="Hex color code (e.g., '#1DA1F2')")
+    
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['sort_order', 'platform']
+        indexes = [
+            models.Index(fields=['is_active', 'sort_order']),
+        ]
+    
+    def __str__(self):
+        return f"{self.get_platform_display()} ({self.username or self.url})"
+    
+    def get_display_name(self):
+        """Get display name, falling back to platform name"""
+        return self.display_name or self.get_platform_display()
+    
+    def get_icon_class(self):
+        """Get icon class with fallbacks"""
+        if self.icon_class:
+            return self.icon_class
+        
+        # Default icon classes for common platforms
+        defaults = {
+            'twitter': 'fab fa-twitter',
+            'facebook': 'fab fa-facebook',
+            'instagram': 'fab fa-instagram',
+            'linkedin': 'fab fa-linkedin',
+            'youtube': 'fab fa-youtube',
+            'tiktok': 'fab fa-tiktok',
+            'discord': 'fab fa-discord',
+            'twitch': 'fab fa-twitch',
+        }
+        return defaults.get(self.platform, 'fas fa-link')
+    
+    def get_color(self):
+        """Get color with fallbacks"""
+        if self.color:
+            return self.color
+        
+        # Default colors for common platforms
+        defaults = {
+            'twitter': '#1DA1F2',
+            'facebook': '#1877F2',
+            'instagram': '#E4405F',
+            'linkedin': '#0077B5',
+            'youtube': '#FF0000',
+            'tiktok': '#000000',
+            'discord': '#5865F2',
+            'twitch': '#9146FF',
+        }
+        return defaults.get(self.platform, '#666666')

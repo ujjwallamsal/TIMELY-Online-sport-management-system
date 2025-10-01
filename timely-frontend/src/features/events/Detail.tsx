@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useEvent } from '../../api/queries';
 import { formatDateTime } from '../../utils/format';
 import { useEventStream } from '../../hooks/useEventStream';
 import { api } from '../../api/client';
 import { ENDPOINTS } from '../../api/ENDPOINTS';
+import { useAuth } from '../../auth/AuthProvider';
+import { useToast } from '../../contexts/ToastContext';
 import { 
   Calendar, 
   MapPin, 
@@ -13,7 +15,8 @@ import {
   Clock, 
   RefreshCw,
   Wifi,
-  WifiOff
+  WifiOff,
+  Ticket
 } from 'lucide-react';
 
 interface Fixture {
@@ -54,6 +57,10 @@ interface LeaderboardEntry {
 
 const EventDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  const { showSuccess, showError } = useToast();
   const eventId = parseInt(id || '0');
   const { data: event, isLoading } = useEvent(eventId);
   
@@ -64,12 +71,82 @@ const EventDetail: React.FC = () => {
   const [isLoadingFixtures, setIsLoadingFixtures] = useState(false);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
+  const [isProcessingTicket, setIsProcessingTicket] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'canceled' | null>(null);
+  const hasNotifiedRef = useRef(false);
 
   // Use SSE for real-time updates
-  const { isConnected, connectionStatus } = useEventStream({
+  const { isConnected, connectionStatus, errorMessage } = useEventStream({
     eventId,
     enabled: !!eventId && eventId > 0
   });
+
+  // Detect Stripe Checkout return status
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('success') === '1' || params.get('success') === 'true') {
+      setCheckoutStatus('success');
+    } else if (params.get('canceled') === '1' || params.get('canceled') === 'true') {
+      setCheckoutStatus('canceled');
+    }
+  }, [location.search]);
+
+  // On successful checkout, create a notification once and clean URL params
+  useEffect(() => {
+    const handleSuccess = async () => {
+      if (checkoutStatus !== 'success' || hasNotifiedRef.current) return;
+      try {
+        await api.post(ENDPOINTS.notifications, {
+          title: 'Ticket Purchased',
+          message: `Your ticket for ${event?.name || 'the event'} has been issued.`,
+          type: 'success'
+        });
+        hasNotifiedRef.current = true;
+        // Strip query params
+        const url = new URL(window.location.href);
+        url.searchParams.delete('success');
+        url.searchParams.delete('canceled');
+        window.history.replaceState({}, '', url.toString());
+      } catch {}
+    };
+    handleSuccess();
+  }, [checkoutStatus, event]);
+
+  // Handle ticket purchase
+  const handleGetTicket = async () => {
+    if (!isAuthenticated) {
+      const returnTo = encodeURIComponent(`/events/${eventId}`);
+      navigate(`/login?returnTo=${returnTo}`);
+      return;
+    }
+
+    setIsProcessingTicket(true);
+    try {
+      if (event?.fee_cents && event.fee_cents > 0) {
+        // Paid event - navigate to checkout page
+        navigate(`/events/${eventId}/checkout`);
+      } else {
+        // Free event - call dedicated free endpoint
+        await api.post(ENDPOINTS.ticketsFree, { event_id: eventId });
+        showSuccess('Ticket Issued', 'Your free ticket has been issued successfully!');
+        // Create notification
+        await api.post(ENDPOINTS.notifications, {
+          title: 'Free Ticket Issued',
+          message: `You have received a free ticket for ${event?.name}`,
+          type: 'success'
+        });
+        navigate('/tickets/me');
+      }
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail
+        || error?.response?.data?.error
+        || error?.response?.data?.message
+        || 'Failed to process ticket. Please try again.';
+      showError('Ticket Error', msg);
+    } finally {
+      setIsProcessingTicket(false);
+    }
+  };
 
   // Fetch fixtures
   const fetchFixtures = async () => {
@@ -208,8 +285,49 @@ const EventDetail: React.FC = () => {
               ) : (
                 <WifiOff className="h-4 w-4 text-gray-400" />
               )}
-              <span className="capitalize">{connectionStatus}</span>
+              <span className="capitalize">{connectionStatus === 'connected' ? 'Live updates active' : 'Auto-refresh every 15s'}</span>
             </div>
+          </div>
+
+        {errorMessage && (
+          <div className="mb-4 p-3 rounded-md bg-yellow-50 border border-yellow-200">
+            <div className="text-sm text-yellow-800">
+              <strong>Note:</strong> Live updates temporarily unavailable. Results will refresh automatically every 15 seconds.
+            </div>
+          </div>
+        )}
+
+        {checkoutStatus && (
+          <div className={`mb-4 p-4 rounded-md border ${checkoutStatus === 'success' ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+            <div className="flex items-center justify-between">
+              <div className={`text-sm ${checkoutStatus === 'success' ? 'text-green-800' : 'text-yellow-800'}`}>
+                {checkoutStatus === 'success' ? 'Payment successful! Your ticket will appear in My Tickets shortly.' : 'Checkout was canceled. You can try again when ready.'}
+              </div>
+              <button
+                onClick={() => setCheckoutStatus(null)}
+                className={`text-sm ${checkoutStatus === 'success' ? 'text-green-700 hover:text-green-900' : 'text-yellow-700 hover:text-yellow-900'}`}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+          {/* Get Ticket Button */}
+          <div className="mt-6">
+            <button
+              onClick={handleGetTicket}
+              disabled={isProcessingTicket || eventStatus === 'ENDED'}
+              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Ticket className="h-5 w-5 mr-2" />
+              {isProcessingTicket ? 'Processing...' : (
+                event?.fee_cents && event.fee_cents > 0 ? 'Get Ticket' : 'Get Free Ticket'
+              )}
+            </button>
+            {eventStatus === 'ENDED' && (
+              <p className="mt-2 text-sm text-gray-500">This event has ended.</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

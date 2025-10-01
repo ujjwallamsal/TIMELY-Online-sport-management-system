@@ -27,23 +27,22 @@ class TicketOrderSerializer(serializers.ModelSerializer):
 class TicketSerializer(serializers.ModelSerializer):
     """Serializer for simplified Ticket model"""
     
-    order_status = serializers.CharField(source='order.status', read_only=True)
-    
     class Meta:
         model = Ticket
         fields = [
-            'id', 'order', 'serial', 'code', 'status', 'qr_payload',
-            'order_status', 'issued_at', 'used_at'
+            'id', 'serial', 'code', 'status', 'qr_payload',
+            'issued_at', 'used_at'
         ]
         read_only_fields = ['id', 'serial', 'code', 'qr_payload', 'issued_at']
 
 
 class CheckoutSerializer(serializers.Serializer):
-    """Serializer for checkout request"""
+    """Serializer for checkout request - only event_id required, backend calculates amount"""
     
     event_id = serializers.IntegerField()
-    amount = serializers.IntegerField(min_value=1, help_text="Amount in cents")
-    currency = serializers.CharField(max_length=3, default='USD')
+    quantity = serializers.IntegerField(min_value=1, max_value=10, default=1, help_text="Number of tickets (1-10)")
+    amount = serializers.IntegerField(min_value=0, required=False, help_text="Amount in cents (ignored, calculated by backend)")
+    currency = serializers.CharField(max_length=3, default='USD', required=False)
     
     def validate_event_id(self, value):
         """Validate event exists"""
@@ -277,17 +276,66 @@ class OrderSummarySerializer(serializers.Serializer):
 class MyTicketsListSerializer(serializers.ModelSerializer):
     """Serializer for my tickets list view"""
     
-    ticket_type_name = serializers.CharField(source='ticket_type.name', read_only=True)
-    event_name = serializers.CharField(source='order.event.name', read_only=True)
+    ticket_type_name = serializers.SerializerMethodField()
+    event_name = serializers.SerializerMethodField()
+    event_id = serializers.IntegerField(source='order.event_id', read_only=True)
+    event_date = serializers.SerializerMethodField()
+    venue_name = serializers.SerializerMethodField()
     order_status = serializers.CharField(source='order.status', read_only=True)
+    price = serializers.SerializerMethodField()
     fixture_info = serializers.SerializerMethodField()
     
     class Meta:
         model = Ticket
         fields = [
-            'id', 'serial', 'ticket_type_name', 'event_name',
-            'status', 'issued_at', 'used_at', 'order_status', 'fixture_info'
+            'id', 'serial', 'ticket_type_name', 'event_name', 'event_id', 'event_date',
+            'venue_name', 'price', 'status', 'issued_at', 'used_at', 'order_status', 
+            'fixture_info', 'qr_payload', 'approved_at'
         ]
+    
+    def get_ticket_type_name(self, obj):
+        """Get ticket type name or default"""
+        if obj.ticket_type:
+            return obj.ticket_type.name
+        return 'General Admission'
+    
+    def get_event_name(self, obj):
+        """Get event name"""
+        try:
+            from events.models import Event
+            event = Event.objects.get(id=obj.order.event_id)
+            return event.name
+        except Event.DoesNotExist:
+            return f"Event #{obj.order.event_id}"
+    
+    def get_event_date(self, obj):
+        """Get event start date"""
+        try:
+            from events.models import Event
+            event = Event.objects.get(id=obj.order.event_id)
+            return event.start_datetime.isoformat() if event.start_datetime else None
+        except Event.DoesNotExist:
+            return None
+    
+    def get_venue_name(self, obj):
+        """Get venue name"""
+        try:
+            from events.models import Event
+            event = Event.objects.get(id=obj.order.event_id)
+            return event.venue.name if event.venue else None
+        except Event.DoesNotExist:
+            return None
+    
+    def get_price(self, obj):
+        """Get price from order total divided by number of tickets"""
+        # Return price in dollars (cents / 100)
+        if obj.order.total_cents == 0:
+            return 0.0
+        # Divide order total by number of tickets
+        num_tickets = obj.order.tickets.count()
+        if num_tickets > 0:
+            return obj.order.total_cents / (100 * num_tickets)
+        return obj.order.total_cents / 100
     
     def get_fixture_info(self, obj):
         """Get fixture information if applicable"""

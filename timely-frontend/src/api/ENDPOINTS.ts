@@ -1,83 +1,85 @@
 export const ENDPOINTS = {
   // health/docs
-  health:'/api/health/', docs:'/api/docs/', schema:'/api/schema/',
+  health:'/health/', docs:'/docs/', schema:'/schema/',
 
   // auth/user
-  login:'/api/auth/login/', refresh:'/api/auth/refresh/', register:'/api/auth/register/',
-  me:'/api/me/', users:'/api/users/',
+  login:'/auth/login/', refresh:'/auth/refresh/', register:'/auth/register/',
+  me:'/me/', users:'/users/',
+  changePassword:(userId:number)=>`/users/${userId}/change-password/`,
 
   // events domain
-  events:'/api/events/', event:(id:number)=>`/api/events/${id}/`,
-  eventAnnounce:(id:number)=>`/api/events/${id}/announce/`,
-  eventCancel:(id:number)=>`/api/events/${id}/cancel/`,
-  eventFixtures:(id:number)=>`/api/events/${id}/fixtures/`,
-  eventGenFixtures:(id:number)=>`/api/events/${id}/fixtures/generate/`,
-  eventLeaderboard:(id:number)=>`/api/events/${id}/leaderboard/`,
-  venues:'/api/venues/', venue:(id:number)=>`/api/venues/${id}/`,
-  venueSlots:(id:number)=>`/api/venues/${id}/slots/`,
-  sports:'/api/sports/',
+  events:'/events/', event:(id:number)=>`/events/${id}/`,
+  eventAnnounce:(id:number)=>`/events/${id}/announce/`,
+  eventCancel:(id:number)=>`/events/${id}/cancel/`,
+  eventFixtures:(id:number)=>`/events/${id}/fixtures/`,
+  eventGenFixtures:(id:number)=>`/events/${id}/fixtures/generate/`,
+  eventLeaderboard:(id:number)=>`/events/${id}/leaderboard/`,
+  venues:'/venues/', venue:(id:number)=>`/venues/${id}/`,
+  venueSlots:(id:number)=>`/venues/${id}/slots/`,
+  sports:'/sports/',
 
   // public
-  publicEvents:'/api/public/events/', publicEvent:(id:number)=>`/api/public/events/${id}/`,
-  publicEventFixtures:(id:number)=>`/api/public/events/${id}/fixtures/`,
-  publicEventResults:(id:number)=>`/api/public/events/${id}/results/`,
-  publicEventLeaderboard:(id:number)=>`/api/public/events/${id}/leaderboard/`,
+  publicEvents:'/public/events/', publicEvent:(id:number)=>`/public/events/${id}/`,
+  publicEventFixtures:(id:number)=>`/public/events/${id}/fixtures/`,
+  publicEventResults:(id:number)=>`/public/events/${id}/results/`,
+  publicEventLeaderboard:(id:number)=>`/public/events/${id}/leaderboard/`,
 
   // registrations
-  registrations:'/api/registrations/', registration:(id:number)=>`/api/registrations/${id}/`,
-  registrationDocs:(id:number)=>`/api/registrations/${id}/documents/`,
-  registrationApprove:(id:number)=>`/api/registrations/${id}/approve/`,
-  registrationReject:(id:number)=>`/api/registrations/${id}/reject/`,
+  registrations:'/registrations/', registration:(id:number)=>`/registrations/${id}/`,
+  registrationDocs:(id:number)=>`/registrations/${id}/documents/`,
+  registrationApprove:(id:number)=>`/registrations/${id}/approve/`,
+  registrationReject:(id:number)=>`/registrations/${id}/reject/`,
+  registrationCheckout:'/registrations/checkout/',
+  registrationSuccess:'/registrations/success/',
+  myRegistrations:'/registrations/mine/',
 
   // fixtures & results
-  fixtures:'/api/fixtures/', results:'/api/results/',
-  result:(id:number)=>`/api/results/${id}/`, fixtureResult:(fixId:number)=>`/api/fixtures/${fixId}/result/`,
+  fixtures:'/fixtures/', fixture:(id:number)=>`/fixtures/${id}/`, results:'/results/',
+  result:(id:number)=>`/results/${id}/`, fixtureResult:(fixId:number)=>`/fixtures/${fixId}/result/`,
 
   // content
-  news:'/api/news/', newsItem:(id:number)=>`/api/news/${id}/`,
-  galleryAlbums:'/api/gallery/albums/', galleryMedia:'/api/gallery/media/', mediaItem:(id:number)=>`/api/gallery/media/${id}/`,
+  news:'/news/', newsItem:(id:number)=>`/news/${id}/`,
+  galleryAlbums:'/gallery/albums/', galleryMedia:'/gallery/media/', mediaItem:(id:number)=>`/gallery/media/${id}/`,
   // content public pages/legal
-  publicPages:'/api/content/public/pages/',
-  publicPageBySlug:(slug:string)=>`/api/content/public/pages/by_slug/?slug=${encodeURIComponent(slug)}`,
-  legalTerms:'/api/content/public/legal/terms/',
-  legalPrivacy:'/api/content/public/legal/privacy/',
+  publicPages:'/content/public/pages/',
+  publicPageBySlug:(slug:string)=>`/content/public/pages/by_slug/?slug=${encodeURIComponent(slug)}`,
+  legalTerms:'/content/public/legal/terms/',
+  legalPrivacy:'/content/public/legal/privacy/',
   
   // aliases for backward compatibility
-  publicNews:'/api/news/',
-  publicMedia:'/api/gallery/media/',
+  publicNews:'/news/',
+  publicMedia:'/gallery/media/',
 
   // tickets
-  checkout:'/api/tickets/checkout/', myTickets:'/api/tickets/me/tickets/',
-  ticketQR:(id:number)=>`/api/tickets/tickets/${id}/qr/`,
-  ticketUse:(id:number)=>`/api/tickets/tickets/${id}/use/`,
-  verify:'/api/tickets/verify/',
+  checkout:'/tickets/checkout/', myTickets:'/tickets/me/tickets/', ticketsFree:'/tickets/free/', freeTicket:'/tickets/free/',
+  ticketQR:(id:number)=>`/tickets/tickets/${id}/qr/`,
+  ticketUse:(id:number)=>`/tickets/tickets/${id}/use/`,
+  verify:'/tickets/verify/',
 
   // notifications (we'll use for approval workflow)
-  notifications:'/api/notifications/', threads:'/api/notifications/threads/', messages:'/api/notifications/messages/',
+  notifications:'/notifications/', threads:'/notifications/threads/', messages:'/notifications/messages/',
 
   // role applications
-  applyAthlete:'/api/auth/apply-athlete/',
-  applyCoach:'/api/auth/apply-coach/',
-  applyOrganizer:'/api/auth/apply-organizer/',
-  myApplications:'/api/auth/applications/',
+  applyAthlete:'/auth/apply-athlete/',
+  applyCoach:'/auth/apply-coach/',
+  applyOrganizer:'/auth/apply-organizer/',
+  myApplications:'/auth/applications/',
 
   // realtime (SSE; fallback to polling if 404)
-  sseEvent:(id:number)=>`/api/events/${id}/stream/`,
-  sseEventResults:(id:number)=>`/api/events/${id}/results/stream/`,
-};
+  sseEvent:(id:number)=>`/events/${id}/stream/`,
+  sseEventResults:(id:number)=>`/events/${id}/results/stream/`,
+} as const;
 
 // Normalize API URL - strips accidental '/api' prefixes
 export const normalizeApiUrl = (url: string): string => {
-  // If URL already starts with /api/, return as is
-  if (url.startsWith('/api/')) {
-    return url;
+  // Remove leading slash if present
+  const cleanUrl = url.startsWith('/') ? url.slice(1) : url;
+  
+  // If it starts with 'api/', remove it (double API prefix protection)
+  if (cleanUrl.startsWith('api/')) {
+    return cleanUrl.slice(4);
   }
   
-  // If URL starts with /, add /api prefix
-  if (url.startsWith('/')) {
-    return `/api${url}`;
-  }
-  
-  // If URL doesn't start with /, add /api/ prefix
-  return `/api/${url}`;
+  // Return with leading slash
+  return `/${cleanUrl}`;
 };

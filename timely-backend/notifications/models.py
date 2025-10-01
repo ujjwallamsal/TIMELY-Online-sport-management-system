@@ -165,3 +165,143 @@ class Message(models.Model):
         if not self.deleted_at:
             self.deleted_at = timezone.now()
             self.save(update_fields=['deleted_at'])
+
+
+class NotificationUnread(models.Model):
+    """Track unread notification counts per user for efficient counting"""
+    
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='notification_unread'
+    )
+    count = models.PositiveIntegerField(default=0, help_text="Number of unread notifications")
+    last_updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Notification Unread Count'
+        verbose_name_plural = 'Notification Unread Counts'
+        indexes = [
+            models.Index(fields=['user', 'count']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email}: {self.count} unread"
+    
+    @classmethod
+    def get_or_create_for_user(cls, user):
+        """Get or create unread count for user"""
+        unread, created = cls.objects.get_or_create(user=user)
+        return unread
+    
+    @classmethod
+    def update_count_for_user(cls, user):
+        """Update unread count for a user based on actual notifications"""
+        count = Notification.objects.filter(
+            user=user,
+            read_at__isnull=True
+        ).count()
+        
+        unread, _ = cls.objects.get_or_create(user=user)
+        unread.count = count
+        unread.save(update_fields=['count', 'last_updated'])
+        return unread
+    
+    @classmethod
+    def increment_for_user(cls, user):
+        """Increment unread count for user"""
+        unread, created = cls.get_or_create_for_user(user)
+        if not created:  # Don't increment if just created (count is already accurate)
+            unread.count += 1
+            unread.save(update_fields=['count', 'last_updated'])
+        return unread
+    
+    @classmethod
+    def decrement_for_user(cls, user):
+        """Decrement unread count for user"""
+        unread, created = cls.get_or_create_for_user(user)
+        if not created and unread.count > 0:
+            unread.count -= 1
+            unread.save(update_fields=['count', 'last_updated'])
+        return unread
+
+
+class NotificationTemplate(models.Model):
+    """Templates for different types of notifications"""
+    
+    TEMPLATE_TYPE_CHOICES = [
+        ('role_approval', 'Role Approval'),
+        ('role_rejection', 'Role Rejection'),
+        ('event_reminder', 'Event Reminder'),
+        ('registration_confirmed', 'Registration Confirmed'),
+        ('payment_success', 'Payment Success'),
+        ('payment_failed', 'Payment Failed'),
+        ('fixture_updated', 'Fixture Updated'),
+        ('result_published', 'Result Published'),
+        ('system_maintenance', 'System Maintenance'),
+        ('announcement', 'Announcement'),
+    ]
+    
+    name = models.CharField(max_length=100, unique=True)
+    template_type = models.CharField(max_length=50, choices=TEMPLATE_TYPE_CHOICES)
+    subject_template = models.CharField(max_length=200, help_text="Email subject template")
+    body_template = models.TextField(help_text="Notification body template")
+    variables = models.JSONField(default=list, help_text="Available template variables")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['template_type', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return self.name
+
+
+class Broadcast(models.Model):
+    """System-wide broadcasts to users"""
+    
+    TARGET_TYPE_CHOICES = [
+        ('all', 'All Users'),
+        ('role', 'By Role'),
+        ('event', 'Event Participants'),
+        ('custom', 'Custom Query'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('scheduled', 'Scheduled'),
+        ('sending', 'Sending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    ]
+    
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    target_type = models.CharField(max_length=20, choices=TARGET_TYPE_CHOICES)
+    target_criteria = models.JSONField(default=dict, help_text="Criteria for targeting users")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    total_recipients = models.PositiveIntegerField(default=0)
+    sent_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='created_broadcasts'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'scheduled_at']),
+            models.Index(fields=['created_by', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} ({self.get_status_display()})"

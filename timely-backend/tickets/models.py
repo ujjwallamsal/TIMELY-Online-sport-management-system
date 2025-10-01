@@ -61,8 +61,10 @@ class TicketOrder(models.Model):
     """Ticket order model for ticketing system"""
     
     class Status(models.TextChoices):
+        PAYMENT_PENDING = "payment_pending", "Payment Pending"
         PENDING = "pending", "Pending"
         PAID = "paid", "Paid"
+        FREE = "free", "Free"
         FAILED = "failed", "Failed"
         REFUNDED = "refunded", "Refunded"
     
@@ -73,12 +75,13 @@ class TicketOrder(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ticket_orders")
     event_id = models.PositiveIntegerField(help_text="Event ID")
     fixture_id = models.PositiveIntegerField(null=True, blank=True, help_text="Fixture ID")
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PAYMENT_PENDING, db_index=True)
     total_cents = models.PositiveIntegerField(help_text="Total amount in cents")
     currency = models.CharField(max_length=3, default='USD')
     payment_provider = models.CharField(max_length=20, choices=Provider.choices, default=Provider.STRIPE)
-    provider_session_id = models.CharField(max_length=255, blank=True, help_text="Payment provider session ID")
+    provider_session_id = models.CharField(max_length=255, blank=True, db_index=True, help_text="Payment provider session ID")
     provider_payment_intent_id = models.CharField(max_length=255, blank=True, help_text="Payment provider intent ID")
+    client_reference_id = models.CharField(max_length=255, blank=True, null=True, db_index=True, help_text="Unique reference for this order")
     
     # Audit fields
     created_at = models.DateTimeField(auto_now_add=True)
@@ -92,6 +95,14 @@ class TicketOrder(models.Model):
             models.Index(fields=['user', 'status']),
             models.Index(fields=['event_id', 'status']),
             models.Index(fields=['provider_payment_intent_id']),
+        ]
+        constraints = [
+            # Ensure payment intent IDs are unique (when not blank)
+            models.UniqueConstraint(
+                fields=['provider_payment_intent_id'],
+                condition=models.Q(provider_payment_intent_id__gt=''),
+                name='unique_payment_intent'
+            )
         ]
     
     def __str__(self):
@@ -107,14 +118,29 @@ class Ticket(models.Model):
     """Simplified ticket model for ticketing system"""
     
     class Status(models.TextChoices):
+        PENDING_APPROVAL = "pending_approval", "Pending Approval"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
         VALID = "valid", "Valid"
         USED = "used", "Used"
         VOID = "void", "Void"
     
-    order = models.ForeignKey(TicketOrder, on_delete=models.CASCADE, related_name="tickets")
-    ticket_type = models.ForeignKey('TicketType', on_delete=models.CASCADE, related_name="tickets")
+    order = models.ForeignKey(TicketOrder, on_delete=models.CASCADE, related_name="tickets", null=True, blank=True, db_column='order_id')
+    ticket_type = models.ForeignKey('TicketType', on_delete=models.CASCADE, related_name="tickets", null=True, blank=True, db_column='ticket_type_id')
     serial = models.CharField(max_length=50, unique=True, help_text="Unique ticket serial number")
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.VALID, db_index=True)
+    code = models.CharField(max_length=50, blank=True, help_text="Ticket code for display")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING_APPROVAL, db_index=True)
+    
+    # Approval fields
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_tickets',
+        help_text="Admin/Organizer who approved this ticket"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, help_text="When ticket was approved")
     
     # QR code data
     qr_payload = models.TextField(help_text="QR code payload string")
@@ -128,13 +154,12 @@ class Ticket(models.Model):
         verbose_name_plural = 'Tickets'
         ordering = ['-issued_at']
         indexes = [
-            models.Index(fields=['order']),
             models.Index(fields=['serial']),
             models.Index(fields=['status']),
         ]
     
     def __str__(self):
-        return f"Ticket {self.serial} - Event {self.order.event_id}"
+        return f"Ticket {self.serial}"
     
     def save(self, *args, **kwargs):
         if not self.serial:
@@ -163,7 +188,19 @@ class Ticket(models.Model):
     @property
     def is_valid(self):
         """Check if ticket is valid for use"""
-        return self.status == self.Status.VALID
+        return self.status in [self.Status.VALID, self.Status.APPROVED]
+    
+    def approve(self, approved_by):
+        """Approve the ticket"""
+        self.status = self.Status.APPROVED
+        self.approved_by = approved_by
+        self.approved_at = timezone.now()
+        self.save()
+    
+    def reject(self):
+        """Reject the ticket"""
+        self.status = self.Status.REJECTED
+        self.save()
     
     def use_ticket(self):
         """Mark ticket as used"""

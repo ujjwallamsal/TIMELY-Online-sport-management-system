@@ -3,7 +3,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
 from content.views import PublicNewsViewSet
-from gallery.views import PublicGalleryAlbumViewSet, PublicGalleryMediaViewSet
+from gallery.views import PublicGalleryAlbumViewSet, PublicGalleryMediaViewSet, GalleryMediaViewSet
 
 # Create unified router for all API endpoints
 router = DefaultRouter()
@@ -25,7 +25,7 @@ router.register(r'reports', views.ReportViewSet, basename='report')
 # Public read-only endpoints required for portal
 router.register(r'news', PublicNewsViewSet, basename='public-news')
 router.register(r'gallery/albums', PublicGalleryAlbumViewSet, basename='public-gallery-albums')
-router.register(r'gallery/media', PublicGalleryMediaViewSet, basename='public-gallery-media')
+router.register(r'gallery/media', GalleryMediaViewSet, basename='gallery-media')
 
 urlpatterns = [
     # Health check
@@ -40,6 +40,10 @@ urlpatterns = [
 
     # Include app-specific endpoints FIRST (before router to avoid conflicts)
     path('tickets/', include('tickets.urls')),
+    path('content/', include('content.urls')),
+    
+    # Stripe webhook (must be at root /api/stripe/webhook/)
+    path('stripe/webhook/', __import__('tickets.views_webhook', fromlist=['stripe_webhook']).stripe_webhook, name='stripe-webhook'),
     
     # Test endpoint to verify URL loading
     path('test/', views.HealthView.as_view(), name='test-endpoint'),

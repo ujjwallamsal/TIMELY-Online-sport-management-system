@@ -13,35 +13,120 @@ User = get_user_model()
 class ResultSerializer(serializers.ModelSerializer):
     """Serializer for Result model"""
     
-    # Related field data
-    fixture_id = serializers.IntegerField(source='fixture.id', read_only=True)
-    fixture_name = serializers.CharField(source='fixture.__str__', read_only=True)
-    home_team = serializers.CharField(source='fixture.home.name', read_only=True)
-    away_team = serializers.CharField(source='fixture.away.name', read_only=True)
-    event_name = serializers.CharField(source='fixture.event.name', read_only=True)
-    event_id = serializers.IntegerField(source='fixture.event.id', read_only=True)
+    # Related field data - all nullable for robustness
+    fixture_id = serializers.SerializerMethodField()
+    fixture_name = serializers.SerializerMethodField()
+    home_team = serializers.SerializerMethodField()
+    away_team = serializers.SerializerMethodField()
+    home_team_name = serializers.SerializerMethodField()
+    away_team_name = serializers.SerializerMethodField()
+    event_name = serializers.SerializerMethodField()
+    event_id = serializers.SerializerMethodField()
+    fixture_display = serializers.SerializerMethodField()
     
     # Verification data
-    verified_by_name = serializers.CharField(source='verified_by.get_full_name', read_only=True)
-    verified_by_email = serializers.CharField(source='verified_by.email', read_only=True)
+    verified_by_name = serializers.SerializerMethodField()
+    verified_by_email = serializers.SerializerMethodField()
     
     # Computed fields
     is_draw = serializers.BooleanField(read_only=True)
     is_finalized = serializers.BooleanField(read_only=True)
-    winner_name = serializers.CharField(source='winner.name', read_only=True)
+    winner_name = serializers.SerializerMethodField()
+    finalized_at = serializers.SerializerMethodField()
     
     # Frontend compatibility fields
     home_score = serializers.IntegerField(source='score_home', read_only=True)
     away_score = serializers.IntegerField(source='score_away', read_only=True)
     
+    def get_fixture_id(self, obj):
+        return obj.fixture.id if obj.fixture else None
+    
+    def get_fixture_name(self, obj):
+        try:
+            return str(obj.fixture) if obj.fixture else None
+        except Exception:
+            return None
+    
+    def get_fixture_display(self, obj):
+        try:
+            return str(obj.fixture) if obj.fixture else None
+        except Exception:
+            return None
+    
+    def get_home_team(self, obj):
+        try:
+            return obj.fixture.home.name if obj.fixture and obj.fixture.home else None
+        except Exception:
+            return None
+    
+    def get_away_team(self, obj):
+        try:
+            return obj.fixture.away.name if obj.fixture and obj.fixture.away else None
+        except Exception:
+            return None
+    
+    def get_home_team_name(self, obj):
+        try:
+            return obj.fixture.home.name if obj.fixture and obj.fixture.home else None
+        except Exception:
+            return None
+    
+    def get_away_team_name(self, obj):
+        try:
+            return obj.fixture.away.name if obj.fixture and obj.fixture.away else None
+        except Exception:
+            return None
+    
+    def get_event_name(self, obj):
+        try:
+            return obj.fixture.event.name if obj.fixture and obj.fixture.event else None
+        except Exception:
+            return None
+    
+    def get_event_id(self, obj):
+        try:
+            return obj.fixture.event.id if obj.fixture and obj.fixture.event else None
+        except Exception:
+            return None
+    
+    def get_verified_by_name(self, obj):
+        try:
+            return obj.verified_by.get_full_name() if obj.verified_by else None
+        except Exception:
+            return None
+    
+    def get_verified_by_email(self, obj):
+        try:
+            return obj.verified_by.email if obj.verified_by else None
+        except Exception:
+            return None
+    
+    def get_winner_name(self, obj):
+        try:
+            if hasattr(obj, 'winner') and obj.winner:
+                return obj.winner.name if hasattr(obj.winner, 'name') else str(obj.winner)
+            return None
+        except Exception:
+            return None
+    
+    def get_finalized_at(self, obj):
+        """Map verified_at to finalized_at for frontend compatibility"""
+        try:
+            if hasattr(obj, 'verified_at') and hasattr(obj, 'status'):
+                return obj.verified_at if obj.status == 'FINALIZED' else None
+            return None
+        except Exception:
+            return None
+    
     class Meta:
         model = Result
         fields = [
-            'id', 'fixture_id', 'fixture_name', 'home_team', 'away_team',
+            'id', 'fixture', 'fixture_id', 'fixture_name', 'fixture_display',
+            'home_team', 'away_team', 'home_team_name', 'away_team_name',
             'event_name', 'event_id', 'score_home', 'score_away', 'home_score', 'away_score',
             'winner', 'winner_name',
-            'verified_by', 'verified_by_name', 'verified_by_email', 'verified_at',
-            'is_draw', 'is_finalized',
+            'verified_by', 'verified_by_name', 'verified_by_email', 'verified_at', 'finalized_at',
+            'is_draw', 'is_finalized', 'status',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

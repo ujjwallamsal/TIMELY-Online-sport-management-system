@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth } from '../auth/useAuth';
+import { useAuth } from '../auth/AuthProvider';
 import { submitDeleteRequest, DeleteRequest } from '../api/notifications';
 import { useToast } from '../contexts/ToastContext';
 

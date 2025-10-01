@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Camera, Image, Video, Play, Download, Eye, Upload, Edit, Trash2, Search, Filter } from 'lucide-react';
-import { usePublicGalleryMedia } from '../../api/queries';
-import { useAuth } from '../../auth/useAuth';
+import { usePublicGalleryMedia, useMyGalleryMedia } from '../../api/queries';
+import { useAuth } from '../../auth/AuthProvider';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../api/client';
+import { ENDPOINTS } from '../../api/ENDPOINTS';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface MediaItem {
   id: number;
@@ -33,18 +35,23 @@ const Gallery: React.FC = () => {
     title: '',
     description: '',
     album_id: '',
+    visibility: 'private' as 'public' | 'private',
   });
   const [isUploading, setIsUploading] = useState(false);
-  const { hasRole } = useAuth();
+  const { hasRole, isAuthenticated } = useAuth();
   const { showSuccess, showError } = useToast();
+  const queryClient = useQueryClient();
 
   // Initialize tab from URL
   useEffect(() => {
     const tab = searchParams.get('tab') as 'public' | 'mine' | null;
-    if (tab === 'public' || tab === 'mine') {
+    if (tab === 'public' || (tab === 'mine' && isAuthenticated)) {
       setActiveTab(tab);
+    } else if (!isAuthenticated) {
+      // Non-authenticated users should only see public tab
+      setActiveTab('public');
     }
-  }, [searchParams]);
+  }, [searchParams, isAuthenticated]);
 
   // Update URL when tab changes
   const handleTabChange = (tab: 'public' | 'mine') => {
@@ -57,15 +64,17 @@ const Gallery: React.FC = () => {
     limit: 50,
   });
 
-  const { data: myMedia, isLoading: myLoading } = usePublicGalleryMedia({
+  const { data: myMedia, isLoading: myLoading } = useMyGalleryMedia({
     limit: 50,
-    scope: 'mine',
   });
 
   const media = activeTab === 'public' ? publicMedia : myMedia;
   const isLoading = activeTab === 'public' ? publicLoading : myLoading;
 
-  const filteredMedia = media?.filter((item: MediaItem) => {
+  // Ensure media is always an array to prevent crashes
+  const mediaArray = Array.isArray(media) ? media : [];
+
+  const filteredMedia = mediaArray.filter((item: MediaItem) => {
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
@@ -80,7 +89,7 @@ const Gallery: React.FC = () => {
     if (typeFilter !== 'all' && item.media_type !== typeFilter) return false;
 
     return true;
-  }) || [];
+  });
 
   const handleDownload = (mediaItem: MediaItem) => {
     // Mock download functionality
@@ -89,24 +98,51 @@ const Gallery: React.FC = () => {
   };
 
   const handleUpload = async () => {
-    if (!uploadForm.file) return;
+    if (!uploadForm.file) {
+      showError('No file selected', 'Please select a file to upload');
+      return;
+    }
     
     setIsUploading(true);
     try {
       const formData = new FormData();
       formData.append('file', uploadForm.file);
-      formData.append('title', uploadForm.title);
-      formData.append('description', uploadForm.description);
-      formData.append('visibility', 'private');
-      if (uploadForm.album_id) formData.append('album_id', uploadForm.album_id);
+      formData.append('title', uploadForm.title || uploadForm.file.name);
+      formData.append('description', uploadForm.description || '');
+      formData.append('is_public', uploadForm.visibility === 'public' ? 'true' : 'false');
+      formData.append('media_type', uploadForm.file.type.startsWith('image/') ? 'image' : 'video');
+      if (uploadForm.album_id) formData.append('album_id', uploadForm.album_id.toString());
 
-      await api.post('/api/media/', formData);
-      showSuccess('Media uploaded successfully');
+      // Use correct headers for multipart form data
+      await api.post(ENDPOINTS.galleryMedia, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      showSuccess('Upload successful', 'Your media has been uploaded and will be reviewed.');
+      
+      // Create a notification
+      try {
+        await api.post(ENDPOINTS.notifications, {
+          title: 'Media Uploaded',
+          message: `Your media "${uploadForm.title || uploadForm.file.name}" has been uploaded successfully.`,
+          type: 'success'
+        });
+      } catch (notifError) {
+        console.warn('Failed to create notification:', notifError);
+      }
+      
       setShowUploadModal(false);
-      setUploadForm({ file: null, title: '', description: '', album_id: '' });
-      // Refresh data would go here
-    } catch (error) {
-      showError('Upload failed', 'Please try again');
+      setUploadForm({ file: null, title: '', description: '', album_id: '', visibility: 'private' });
+      
+      // Invalidate both public and private gallery queries
+      queryClient.invalidateQueries({ queryKey: ['public', 'gallery-media'] });
+      queryClient.invalidateQueries({ queryKey: ['gallery-media'] });
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      const errorMsg = error.response?.data?.detail || error.response?.data?.message || 'Failed to upload media';
+      showError('Upload failed', errorMsg);
     } finally {
       setIsUploading(false);
     }
@@ -116,9 +152,9 @@ const Gallery: React.FC = () => {
     if (!confirm('Are you sure you want to delete this media?')) return;
     
     try {
-      await api.delete(`/api/media/${mediaId}/`);
+      await api.delete(ENDPOINTS.mediaItem(mediaId));
       showSuccess('Media deleted successfully');
-      // Refresh data would go here
+      queryClient.invalidateQueries({ queryKey: ['public', 'gallery-media'] });
     } catch (error) {
       showError('Delete failed', 'Please try again');
     }
@@ -127,9 +163,9 @@ const Gallery: React.FC = () => {
   const handleToggleVisibility = async (mediaId: number, currentVisibility: string) => {
     try {
       const newVisibility = currentVisibility === 'public' ? 'private' : 'public';
-      await api.patch(`/api/media/${mediaId}/`, { is_public: newVisibility === 'public' });
+      await api.patch(ENDPOINTS.mediaItem(mediaId), { is_public: newVisibility === 'public' });
       showSuccess(`Media ${newVisibility === 'public' ? 'made public' : 'made private'}`);
-      // Refresh data would go here
+      queryClient.invalidateQueries({ queryKey: ['public', 'gallery-media'] });
     } catch (error) {
       showError('Update failed', 'Please try again');
     }
@@ -181,7 +217,7 @@ const Gallery: React.FC = () => {
                 }
               </p>
             </div>
-            {activeTab === 'mine' && (
+            {activeTab === 'mine' && isAuthenticated && (
               <button
                 onClick={() => setShowUploadModal(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
@@ -207,16 +243,18 @@ const Gallery: React.FC = () => {
               >
                 All Media (Public)
               </button>
-              <button
-                onClick={() => handleTabChange('mine')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'mine'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                My Gallery
-              </button>
+              {isAuthenticated && (
+                <button
+                  onClick={() => handleTabChange('mine')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'mine'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  My Gallery
+                </button>
+              )}
             </nav>
           </div>
         </div>
@@ -230,7 +268,7 @@ const Gallery: React.FC = () => {
               placeholder="Search media..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -238,7 +276,7 @@ const Gallery: React.FC = () => {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value as 'all' | 'image' | 'video')}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
             >
               <option value="all">All Types</option>
               <option value="image">Images</option>
@@ -430,6 +468,19 @@ const Gallery: React.FC = () => {
                       rows={3}
                       placeholder="Enter description"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Visibility
+                    </label>
+                    <select
+                      value={uploadForm.visibility}
+                      onChange={(e) => setUploadForm(prev => ({ ...prev, visibility: e.target.value as 'public' | 'private' }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    >
+                      <option value="private">Private (Only You)</option>
+                      <option value="public">Public (Everyone)</option>
+                    </select>
                   </div>
                   <div className="flex justify-end space-x-3">
                     <button

@@ -13,12 +13,11 @@ import {
   useRegistrations, 
   useFixtures
 } from '../../api/queries';
-import { useAuth } from '../../auth/useAuth';
+import { useAuth } from '../../auth/AuthProvider';
 
 const AthleteDashboard: React.FC = () => {
   const { user } = useAuth();
   
-  // Fetch data for athlete's registrations and fixtures
   const { data: registrationsData, isLoading: registrationsLoading } = useRegistrations({
     user: user?.id,
     page_size: 10,
@@ -28,9 +27,7 @@ const AthleteDashboard: React.FC = () => {
     page_size: 20,
   });
 
-  // const { data: resultsData, isLoading: resultsLoading } = useResults({
-  //   page_size: 10,
-  // });
+ 
 
   const registrations = registrationsData?.results || [];
   const fixtures = fixturesData?.results || [];

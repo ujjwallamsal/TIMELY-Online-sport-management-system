@@ -18,7 +18,7 @@ if settings.DEBUG:
 
 # Catch-all route for React frontend (public site only)
 urlpatterns += [
-    re_path(r"^(?!admin/|api/|static/|media/).*$",
+    re_path(r"^(?!admin/|api/|static/|media/|ws/).*$",
             TemplateView.as_view(template_name="index.html")),
 ]
 

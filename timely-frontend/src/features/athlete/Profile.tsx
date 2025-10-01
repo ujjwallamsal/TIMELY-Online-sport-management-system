@@ -10,7 +10,7 @@ import {
   MapPin,
   Calendar
 } from 'lucide-react';
-import { useAuth } from '../../auth/useAuth';
+import { useAuth } from '../../auth/AuthProvider';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../api/client';
 import { ENDPOINTS } from '../../api/ENDPOINTS';

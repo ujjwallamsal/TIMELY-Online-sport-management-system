@@ -11,6 +11,8 @@ export const Register: React.FC = () => {
     last_name: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
   const navigate = useNavigate();
   const registerMutation = useRegister();
@@ -64,14 +66,13 @@ export const Register: React.FC = () => {
       await registerMutation.mutateAsync({
         email: formData.email,
         password: formData.password,
+        password_confirm: formData.password_confirm,
         first_name: formData.first_name,
         last_name: formData.last_name,
       });
-      
-      // Registration successful, redirect to login
-      navigate('/login', { 
-        state: { message: 'Registration successful! Please log in.' }
-      });
+      // Registration successful, always redirect to dashboard
+      // The Dashboard component will show the appropriate role-based view
+      navigate('/dashboard', { replace: true });
     } catch (error: any) {
       if (error.response?.data) {
         const errorData = error.response.data;
@@ -87,7 +88,7 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
@@ -97,7 +98,7 @@ export const Register: React.FC = () => {
             Or{' '}
             <Link
               to="/login"
-              className="font-medium text-primary-600 hover:text-primary-500"
+              className="font-medium text-blue-600 hover:text-blue-500"
             >
               sign in to your existing account
             </Link>
@@ -177,17 +178,27 @@ export const Register: React.FC = () => {
               <label htmlFor="password" className="form-label">
                 Password
               </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className={`form-input ${errors.password ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
-                placeholder="Create a password"
-                value={formData.password}
-                onChange={handleChange}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  required
+                  className={`form-input pr-20 ${errors.password ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
+                  placeholder="Create a password"
+                  value={formData.password}
+                  onChange={handleChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 px-3 text-sm text-gray-600 hover:text-gray-800"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">{errors.password}</p>
               )}
@@ -197,17 +208,27 @@ export const Register: React.FC = () => {
               <label htmlFor="password_confirm" className="form-label">
                 Confirm password
               </label>
-              <input
-                id="password_confirm"
-                name="password_confirm"
-                type="password"
-                autoComplete="new-password"
-                required
-                className={`form-input ${errors.password_confirm ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
-                placeholder="Confirm your password"
-                value={formData.password_confirm}
-                onChange={handleChange}
-              />
+              <div className="relative">
+                <input
+                  id="password_confirm"
+                  name="password_confirm"
+                  type={showPasswordConfirm ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  required
+                  className={`form-input pr-20 ${errors.password_confirm ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
+                  placeholder="Confirm your password"
+                  value={formData.password_confirm}
+                  onChange={handleChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                  className="absolute inset-y-0 right-0 px-3 text-sm text-gray-600 hover:text-gray-800"
+                  aria-label={showPasswordConfirm ? 'Hide password' : 'Show password'}
+                >
+                  {showPasswordConfirm ? 'Hide' : 'Show'}
+                </button>
+              </div>
               {errors.password_confirm && (
                 <p className="mt-1 text-sm text-red-600">{errors.password_confirm}</p>
               )}
@@ -218,7 +239,7 @@ export const Register: React.FC = () => {
             <button
               type="submit"
               disabled={registerMutation.isPending}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {registerMutation.isPending ? (
                 <div className="spinner"></div>

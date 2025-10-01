@@ -14,7 +14,7 @@ import {
 import { listFixtures, listResults, checkEndpointExists } from '../../api/admin';
 import { Fixture, Result } from '../../api/types';
 import { formatDateTime, formatRelativeTime } from '../../utils/date';
-import { useAuth } from '../../auth/useAuth';
+import { useAuth } from '../../auth/AuthProvider';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../api/client';
 import { ENDPOINTS } from '../../api/ENDPOINTS';

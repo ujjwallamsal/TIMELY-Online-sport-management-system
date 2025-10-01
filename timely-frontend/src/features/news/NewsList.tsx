@@ -87,13 +87,13 @@ const NewsList: React.FC = () => {
             <div className="card">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div>
-                  <div className="w-full h-64 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
-                    <Newspaper className="h-16 w-16 text-primary-600" />
+                  <div className="w-full h-64 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
+                    <Newspaper className="h-16 w-16 text-blue-600" />
                   </div>
                 </div>
                 <div className="flex flex-col justify-center">
                   <div className="flex items-center space-x-4 mb-4">
-                    <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                    <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
                       Featured
                     </span>
                     <span className="text-sm text-gray-500">
@@ -112,7 +112,7 @@ const NewsList: React.FC = () => {
                   </p>
                   <Link
                     to={`/news/${news.results[0].id}`}
-                    className="inline-flex items-center text-primary-600 hover:text-primary-700 font-medium"
+                    className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium"
                   >
                     Read Full Article
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -146,7 +146,7 @@ const NewsList: React.FC = () => {
                 </div>
               </div>
               
-              <h3 className="text-xl font-semibold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors line-clamp-2">
+              <h3 className="text-xl font-semibold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors line-clamp-2">
                 {article.title}
               </h3>
               
@@ -156,7 +156,7 @@ const NewsList: React.FC = () => {
               
               <Link
                 to={`/news/${article.id}`}
-                className="inline-flex items-center text-primary-600 hover:text-primary-700 font-medium text-sm"
+                className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium text-sm"
               >
                 Read More
                 <ArrowRight className="ml-1 h-3 w-3" />

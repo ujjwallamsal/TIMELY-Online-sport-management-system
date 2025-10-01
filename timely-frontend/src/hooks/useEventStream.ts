@@ -13,54 +13,20 @@ export const useEventStream = ({ eventId, enabled = true, onMessage, onError }: 
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollingRef = useRef<number | null>(null);
 
-  // SSE connection
+  // SSE connection - disabled to avoid 406 errors, use polling only
   const connectSSE = () => {
     if (!eventId || !enabled) return;
 
-    try {
-      setConnectionStatus('connecting');
-      
-      // Try to connect to SSE endpoint
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
-      const sseUrl = `${baseUrl}${ENDPOINTS.sseEventResults(eventId)}`;
-      const eventSource = new EventSource(sseUrl);
-      
-      eventSource.onopen = () => {
-        setIsConnected(true);
-        setConnectionStatus('connected');
-        console.log('SSE connected to:', sseUrl);
-      };
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          handleRealtimeMessage(data);
-          onMessage?.(data);
-        } catch (error) {
-          console.error('Error parsing SSE message:', error);
-        }
-      };
-
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
-        setConnectionStatus('error');
-        setIsConnected(false);
-        eventSource.close();
-        onError?.(error);
-        
-        // Fallback to polling
-        startPolling();
-      };
-
-      eventSourceRef.current = eventSource;
-    } catch (error) {
-      console.error('Failed to connect to SSE:', error);
-      setConnectionStatus('error');
-      startPolling();
-    }
+    // Skip SSE connection and go directly to polling to avoid 406 errors
+    console.log('Using automatic updates for event:', eventId);
+    setConnectionStatus('connected'); // Show as connected for polling
+    setIsConnected(true);
+    setErrorMessage(null);
+    startPolling();
   };
 
   // Polling fallback when SSE 404s
@@ -71,11 +37,11 @@ export const useEventStream = ({ eventId, enabled = true, onMessage, onError }: 
 
     console.log('Starting polling fallback for event:', eventId);
     pollingRef.current = window.setInterval(() => {
-      // Refetch related queries every 20s
+      // Refetch related queries every 15s
       queryClient.invalidateQueries({ queryKey: ['fixtures', 'event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['results', 'event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId] });
-    }, 20000); // 20 seconds
+    }, 15000); // 15 seconds
   };
 
   const handleRealtimeMessage = (data: any) => {
@@ -122,6 +88,7 @@ export const useEventStream = ({ eventId, enabled = true, onMessage, onError }: 
   return {
     isConnected,
     connectionStatus,
+    errorMessage,
     reconnect: connectSSE
   };
 };

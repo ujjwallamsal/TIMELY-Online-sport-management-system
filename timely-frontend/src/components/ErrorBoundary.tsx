@@ -1,6 +1,6 @@
-import { Component } from 'react';
-import type { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface Props {
   children: ReactNode;
@@ -14,81 +14,80 @@ interface State {
 }
 
 class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false };
-  }
+  public state: State = {
+    hasError: false
+  };
 
-  static getDerivedStateFromError(error: Error): State {
+  public static getDerivedStateFromError(error: Error): State {
+    // Update state so the next render will show the fallback UI
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
     this.setState({ error, errorInfo });
   }
 
-  handleRetry = () => {
+  private handleRetry = () => {
     this.setState({ hasError: false, error: undefined, errorInfo: undefined });
   };
 
-  handleGoHome = () => {
-    window.location.href = '/';
-  };
-
-  render() {
+  public render() {
     if (this.state.hasError) {
+      // Custom fallback UI
       if (this.props.fallback) {
         return this.props.fallback;
       }
 
+      // Default error UI
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
           <div className="max-w-md w-full">
-            <div className="card text-center">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="h-8 w-8 text-red-600" />
-              </div>
-              
+            <div className="text-center">
+              <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
                 Something went wrong
               </h1>
-              
               <p className="text-gray-600 mb-6">
-                We're sorry, but something unexpected happened. Please try again or go back to the home page.
+                We're sorry, but something unexpected happened. Please try refreshing the page.
               </p>
-
-              {import.meta.env.DEV && this.state.error && (
-                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-left">
-                  <h3 className="text-sm font-medium text-red-800 mb-2">Error Details:</h3>
-                  <pre className="text-xs text-red-700 whitespace-pre-wrap">
-                    {this.state.error.toString()}
-                  </pre>
-                  {this.state.errorInfo && (
-                    <pre className="text-xs text-red-700 whitespace-pre-wrap mt-2">
-                      {this.state.errorInfo.componentStack}
-                    </pre>
-                  )}
-                </div>
-              )}
-
-              <div className="flex space-x-3 justify-center">
+              
+              <div className="space-y-3">
                 <button
                   onClick={this.handleRetry}
-                  className="btn btn-primary inline-flex items-center"
+                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Try Again
                 </button>
                 
-                <button
-                  onClick={this.handleGoHome}
-                  className="btn btn-outline inline-flex items-center"
+                <Link
+                  to="/"
+                  className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center"
                 >
                   <Home className="h-4 w-4 mr-2" />
                   Go Home
-                </button>
+                </Link>
               </div>
+
+              {/* Development error details */}
+              {process.env.NODE_ENV === 'development' && this.state.error && (
+                <details className="mt-6 text-left">
+                  <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+                    Error Details (Development Only)
+                  </summary>
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700 overflow-auto max-h-32">
+                    <div className="font-semibold mb-1">Error:</div>
+                    <div className="mb-2">{this.state.error.message}</div>
+                    {this.state.errorInfo && (
+                      <>
+                        <div className="font-semibold mb-1">Component Stack:</div>
+                        <div className="whitespace-pre-wrap">{this.state.errorInfo.componentStack}</div>
+                      </>
+                    )}
+                  </div>
+                </details>
+              )}
             </div>
           </div>
         </div>

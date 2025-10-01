@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useForm } from '../hooks/useForm';
 import { registerSchema, type RegisterFormData } from '../schemas/auth';
 import { Input, Button, Select } from '../components/Form';
+import { Eye, EyeOff } from 'lucide-react';
 
 const Register: React.FC = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const form = useForm<RegisterFormData>({
     initialValues: {
@@ -24,6 +27,7 @@ const Register: React.FC = () => {
         await register({
           email: values.email,
           password: values.password,
+          password_confirm: values.confirmPassword,
           first_name: values.first_name,
           last_name: values.last_name,
           role: values.role,
@@ -113,31 +117,51 @@ const Register: React.FC = () => {
               ]}
             />
 
-            <Input
-              label="Password"
-              type="password"
-              name="password"
-              value={form.values.password}
-              onChange={(e) => form.setValue('password', e.target.value)}
-              onBlur={() => form.validateField('password')}
-              error={form.errors.password}
-              placeholder="Enter your password"
-              autoComplete="new-password"
-              required
-            />
+            <div className="relative">
+              <Input
+                label="Password"
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={form.values.password}
+                onChange={(e) => form.setValue('password', e.target.value)}
+                onBlur={() => form.validateField('password')}
+                error={form.errors.password}
+                placeholder="Enter your password"
+                autoComplete="new-password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-9 text-gray-500 hover:text-gray-700 focus:outline-none"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
 
-            <Input
-              label="Confirm Password"
-              type="password"
-              name="confirmPassword"
-              value={form.values.confirmPassword}
-              onChange={(e) => form.setValue('confirmPassword', e.target.value)}
-              onBlur={() => form.validateField('confirmPassword')}
-              error={form.errors.confirmPassword}
-              placeholder="Confirm your password"
-              autoComplete="new-password"
-              required
-            />
+            <div className="relative">
+              <Input
+                label="Confirm Password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                name="confirmPassword"
+                value={form.values.confirmPassword}
+                onChange={(e) => form.setValue('confirmPassword', e.target.value)}
+                onBlur={() => form.validateField('confirmPassword')}
+                error={form.errors.confirmPassword}
+                placeholder="Confirm your password"
+                autoComplete="new-password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-9 text-gray-500 hover:text-gray-700 focus:outline-none"
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
 
             <Button
               type="submit"

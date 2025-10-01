@@ -42,8 +42,10 @@ class StripeProvider(PaymentProvider):
                     'quantity': item.get('quantity', 1),
                 })
             
-            # Create checkout session
+            # Create checkout session with idempotency key
+            idempotency_key = f"checkout_{order_data.get('order_id', '')}_{order_data.get('user_id', '')}"
             session = stripe.checkout.Session.create(
+                idempotency_key=idempotency_key,
                 payment_method_types=['card'],
                 line_items=line_items,
                 mode='payment',
@@ -233,8 +235,10 @@ class StripeGateway:
                     'quantity': 1,
                 })
             
-            # Create checkout session
+            # Create checkout session with idempotency key to prevent duplicates
+            idempotency_key = f"order_{order.id}_{order.user.id}_{int(order.created_at.timestamp())}"
             session = stripe.checkout.Session.create(
+                idempotency_key=idempotency_key,
                 payment_method_types=['card'],
                 line_items=line_items,
                 mode='payment',

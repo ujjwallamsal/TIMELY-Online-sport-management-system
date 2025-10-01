@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "gallery.apps.GalleryConfig",
     "content.apps.ContentConfig",
     "notifications.apps.NotificationsConfig",
+    "payments.apps.PaymentsConfig",
     "ticketing.apps.TicketingConfig",
     "tickets.apps.TicketsConfig",
     "reports.apps.ReportsConfig",
@@ -305,9 +306,9 @@ REALTIME_CONFIG = {
 }
 
 # Stripe Configuration
-STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', 'pk_test_your_test_key_here')
-STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', 'sk_test_your_test_key_here')
-STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', 'whsec_your_webhook_secret_here')
+STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default='')
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default='')
+VITE_STRIPE_PUBLISHABLE_KEY = env('VITE_STRIPE_PUBLISHABLE_KEY', default='')
 
 # Enhanced Email Configuration for Payment Confirmations
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Console for development
@@ -400,10 +401,6 @@ if DEBUG:
 # Optional 2FA: django-otp integration (stub)
 # INSTALLED_APPS += ["django_otp", "django_otp.plugins.otp_totp"]
 
-# --- Stripe Configuration ---
-STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')
-STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
-STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
 
 # Email configuration for ticket receipts
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@timely.com')

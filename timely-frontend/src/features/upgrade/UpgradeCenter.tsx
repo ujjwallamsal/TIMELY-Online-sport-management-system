@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useApplyAthlete, useApplyCoach, useApplyOrganizer, useApplications } from '../../api/queries';
-import { useAuth } from '../../auth/useAuth';
+import { useAuth } from '../../auth/AuthProvider';
+import { useToast } from '../../contexts/ToastContext';
 
 const SectionCard: React.FC<{ title: string; accent: string; children: React.ReactNode }> = ({ title, accent, children }) => {
   return (
@@ -20,6 +21,7 @@ const Badge: React.FC<{ text: string }>=({ text }) => (
 const UpgradeCenter: React.FC = () => {
   const { user } = useAuth();
   const { data: apps } = useApplications();
+  const { showSuccess, showError } = useToast();
   const applyAthlete = useApplyAthlete();
   const applyCoach = useApplyCoach();
   const applyOrganizer = useApplyOrganizer();
@@ -35,24 +37,60 @@ const UpgradeCenter: React.FC = () => {
   const [orgForm, setOrgForm] = useState<{ organization_name?: string; business_doc?: File | null }>({});
 
   const onApplyAthlete = () => {
+    if (!athleteForm.id_document || !athleteForm.medical_clearance) {
+      showError('Missing Documents', 'Please upload both ID document and medical clearance');
+      return;
+    }
     const fd = new FormData();
-    if (athleteForm.id_document) fd.append('id_document', athleteForm.id_document);
-    if (athleteForm.medical_clearance) fd.append('medical_clearance', athleteForm.medical_clearance);
-    applyAthlete.mutate(fd);
+    fd.append('id_document', athleteForm.id_document);
+    fd.append('medical_clearance', athleteForm.medical_clearance);
+    applyAthlete.mutate(fd, {
+      onSuccess: () => {
+        showSuccess('Application Submitted', 'Your athlete application has been submitted. An admin will review it shortly.');
+        setAthleteForm({});
+      },
+      onError: (error: any) => {
+        showError('Application Failed', error.response?.data?.detail || 'Failed to submit application. Please try again.');
+      }
+    });
   };
 
   const onApplyCoach = () => {
+    if (!coachForm.certificate) {
+      showError('Missing Document', 'Please upload your coaching certificate');
+      return;
+    }
     const fd = new FormData();
-    if (coachForm.certificate) fd.append('certificate', coachForm.certificate);
+    fd.append('certificate', coachForm.certificate);
     if (coachForm.resume) fd.append('resume', coachForm.resume);
-    applyCoach.mutate(fd);
+    applyCoach.mutate(fd, {
+      onSuccess: () => {
+        showSuccess('Application Submitted', 'Your coach application has been submitted. An admin will review it shortly.');
+        setCoachForm({});
+      },
+      onError: (error: any) => {
+        showError('Application Failed', error.response?.data?.detail || 'Failed to submit application. Please try again.');
+      }
+    });
   };
 
   const onApplyOrganizer = () => {
+    if (!orgForm.organization_name || !orgForm.business_doc) {
+      showError('Missing Information', 'Please provide organization name and business document');
+      return;
+    }
     const fd = new FormData();
-    if (orgForm.organization_name) fd.append('organization_name', orgForm.organization_name);
-    if (orgForm.business_doc) fd.append('business_doc', orgForm.business_doc);
-    applyOrganizer.mutate(fd);
+    fd.append('organization_name', orgForm.organization_name);
+    fd.append('business_doc', orgForm.business_doc);
+    applyOrganizer.mutate(fd, {
+      onSuccess: () => {
+        showSuccess('Application Submitted', 'Your organizer application has been submitted. An admin will review it shortly.');
+        setOrgForm({});
+      },
+      onError: (error: any) => {
+        showError('Application Failed', error.response?.data?.detail || 'Failed to submit application. Please try again.');
+      }
+    });
   };
 
   return (

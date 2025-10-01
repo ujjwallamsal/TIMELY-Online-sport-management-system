@@ -29,7 +29,9 @@ class PaymentIntent(models.Model):
     registration = models.ForeignKey(
         'registrations.Registration',
         on_delete=models.CASCADE,
-        related_name='payment_intents'
+        related_name='payment_intents',
+        null=True,
+        blank=True
     )
     
     # Metadata
@@ -103,7 +105,9 @@ class Refund(models.Model):
     registration = models.ForeignKey(
         'registrations.Registration',
         on_delete=models.CASCADE,
-        related_name='refunds'
+        related_name='refunds',
+        null=True,
+        blank=True
     )
     
     # Metadata
@@ -127,3 +131,159 @@ class Refund(models.Model):
     @property
     def amount_dollars(self):
         return self.amount_cents / 100
+
+
+class PaymentSettings(models.Model):
+    """Centralized payment configuration settings"""
+    
+    ENVIRONMENT_CHOICES = [
+        ('test', 'Test'),
+        ('live', 'Live'),
+    ]
+    
+    # Stripe Configuration
+    stripe_publishable_key = models.CharField(max_length=255, blank=True, help_text="Stripe publishable key")
+    stripe_secret_key = models.CharField(max_length=255, blank=True, help_text="Stripe secret key (encrypted)")
+    stripe_webhook_secret = models.CharField(max_length=255, blank=True, help_text="Stripe webhook secret")
+    stripe_connect_account_id = models.CharField(max_length=255, blank=True, help_text="Stripe Connect account ID")
+    
+    # Environment and Status
+    environment = models.CharField(max_length=10, choices=ENVIRONMENT_CHOICES, default='test')
+    is_active = models.BooleanField(default=True, help_text="Enable payment processing")
+    
+    # Fees and Tax
+    platform_fee_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text="Platform fee percentage")
+    tax_rate_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text="Default tax rate percentage")
+    
+    # Currency and Limits
+    default_currency = models.CharField(max_length=3, default='USD')
+    minimum_amount_cents = models.PositiveIntegerField(default=50, help_text="Minimum payment amount in cents")
+    maximum_amount_cents = models.PositiveIntegerField(default=100000, help_text="Maximum payment amount in cents")
+    
+    # Features
+    enable_refunds = models.BooleanField(default=True)
+    enable_partial_refunds = models.BooleanField(default=True)
+    enable_offline_payments = models.BooleanField(default=False)
+    
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_payment_settings'
+    )
+    
+    class Meta:
+        verbose_name = 'Payment Settings'
+        verbose_name_plural = 'Payment Settings'
+        indexes = [
+            models.Index(fields=['environment', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"Payment Settings ({self.get_environment_display()})"
+    
+    def save(self, *args, **kwargs):
+        # Only allow one active settings per environment
+        if self.is_active:
+            PaymentSettings.objects.filter(
+                environment=self.environment,
+                is_active=True
+            ).exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+
+
+class DeliveryEndpoint(models.Model):
+    """Track delivery endpoints for notifications and webhooks"""
+    
+    ENDPOINT_TYPE_CHOICES = [
+        ('web_push', 'Web Push'),
+        ('email', 'Email'),
+        ('sms', 'SMS'),
+        ('webhook', 'Webhook'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('failed', 'Failed'),
+    ]
+    
+    name = models.CharField(max_length=100)
+    endpoint_type = models.CharField(max_length=20, choices=ENDPOINT_TYPE_CHOICES)
+    url = models.URLField(blank=True, help_text="Endpoint URL for webhooks")
+    config = models.JSONField(default=dict, help_text="Endpoint configuration")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    
+    # Failure tracking
+    failure_count = models.PositiveIntegerField(default=0)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['endpoint_type', 'status']),
+            models.Index(fields=['status', 'failure_count']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_endpoint_type_display()})"
+
+
+class DeliveryLog(models.Model):
+    """Log delivery attempts for notifications and webhooks"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+        ('retrying', 'Retrying'),
+    ]
+    
+    endpoint = models.ForeignKey(DeliveryEndpoint, on_delete=models.CASCADE, related_name='delivery_logs')
+    notification = models.ForeignKey(
+        'notifications.Notification',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='delivery_logs'
+    )
+    webhook_event = models.ForeignKey(
+        WebhookEvent,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='delivery_logs'
+    )
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    response_code = models.PositiveIntegerField(null=True, blank=True)
+    response_body = models.TextField(blank=True)
+    error_message = models.TextField(blank=True)
+    
+    # Retry tracking
+    retry_count = models.PositiveIntegerField(default=0)
+    max_retries = models.PositiveIntegerField(default=3)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['endpoint', 'status']),
+            models.Index(fields=['notification', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"Delivery {self.id} - {self.get_status_display()}"

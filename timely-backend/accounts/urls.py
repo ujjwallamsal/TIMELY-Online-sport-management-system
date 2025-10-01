@@ -20,6 +20,11 @@ urlpatterns = [
         path('password/forgot/', views.AuthViewSet.as_view({'post': 'password_reset_request'}), name='password-forgot'),
         path('password/reset/confirm/', views.AuthViewSet.as_view({'post': 'password_reset_confirm'}), name='password-reset-confirm'),
         path('verify-email/', views.AuthViewSet.as_view({'post': 'verify_email'}), name='verify-email'),
+        # Role application endpoints
+        path('apply-athlete/', views.apply_athlete_role, name='apply-athlete'),
+        path('apply-coach/', views.apply_coach_role, name='apply-coach'),
+        path('apply-organizer/', views.apply_organizer_role, name='apply-organizer'),
+        path('applications/', views.get_my_applications, name='my-applications'),
     ])),
     
     # User management endpoints

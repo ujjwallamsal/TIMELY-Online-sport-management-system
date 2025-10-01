@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuth } from '../auth/useAuth';
+import { useAuth } from '../auth/AuthProvider';
 import { Forbidden } from '../pages/Forbidden';
 
 interface ProtectedProps {

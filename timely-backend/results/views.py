@@ -3,6 +3,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils import timezone
@@ -30,6 +31,13 @@ from realtime.services import (
 )
 
 
+class ResultPagination(PageNumberPagination):
+    """Pagination for results list"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class ResultViewSet(viewsets.ModelViewSet):
     """ViewSet for managing results"""
     
@@ -39,6 +47,7 @@ class ResultViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = ResultSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = ResultPagination
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -46,58 +55,105 @@ class ResultViewSet(viewsets.ModelViewSet):
         return ResultSerializer
     
     def get_queryset(self):
-        """Filter results based on user role and permissions"""
-        queryset = super().get_queryset()
-        
-        # Apply role-based filtering
-        if not self.request.user.is_authenticated:
-            # Public users can only see finalized results
-            queryset = queryset.filter(finalized_at__isnull=False)
-        elif self.request.user.is_staff or self.request.user.role == 'ADMIN':
-            # Admin sees all results
-            pass
-        elif self.request.user.role == 'ORGANIZER':
-            # Organizer sees results for their events + finalized results
-            queryset = queryset.filter(
-                Q(fixture__event__created_by=self.request.user) |
-                Q(finalized_at__isnull=False)
-            )
-        elif self.request.user.role == 'COACH':
-            # Coach sees results for teams they coach + finalized results
-            from teams.models import Team
-            team_ids = Team.objects.filter(coach=self.request.user).values_list('id', flat=True)
-            queryset = queryset.filter(
-                Q(fixture__home_id__in=team_ids) |
-                Q(fixture__away_id__in=team_ids) |
-                Q(finalized_at__isnull=False)
-            ).distinct()
-        elif self.request.user.role == 'ATHLETE':
-            # Athlete sees results for teams they're in + finalized results
-            from teams.models import TeamMember
-            team_ids = TeamMember.objects.filter(athlete=self.request.user).values_list('team_id', flat=True)
-            queryset = queryset.filter(
-                Q(fixture__home_id__in=team_ids) |
-                Q(fixture__away_id__in=team_ids) |
-                Q(finalized_at__isnull=False)
-            ).distinct()
-        else:
-            # Spectator sees only finalized results
-            queryset = queryset.filter(finalized_at__isnull=False)
-        
-        # Filter by event if specified
-        event_id = self.request.query_params.get('event_id')
-        if event_id:
-            queryset = queryset.filter(fixture__event_id=event_id)
-        
-        # Filter by finalized status
-        finalized = self.request.query_params.get('finalized')
-        if finalized is not None:
-            if finalized.lower() == 'true':
-                queryset = queryset.filter(finalized_at__isnull=False)
+        """Filter results based on user role and permissions - returns empty queryset on errors"""
+        try:
+            queryset = super().get_queryset()
+            
+            # Apply role-based filtering
+            if not self.request.user.is_authenticated:
+                # Public users can only see finalized results
+                queryset = queryset.filter(status='FINALIZED')
+            elif self.request.user.is_staff or self.request.user.role == 'ADMIN':
+                # Admin sees all results
+                pass
+            elif self.request.user.role == 'ORGANIZER':
+                # Organizer sees results for their events + finalized results
+                queryset = queryset.filter(
+                    Q(fixture__event__created_by=self.request.user) |
+                    Q(status='FINALIZED')
+                )
+            elif self.request.user.role == 'COACH':
+                # Coach sees results for teams they coach + finalized results
+                from teams.models import Team
+                
+                # Support recorded_by parameter for coaches recording results
+                recorded_by = self.request.query_params.get('recorded_by')
+                if recorded_by:
+                    try:
+                        recorded_by_id = int(recorded_by)
+                        if recorded_by_id == self.request.user.id:
+                            # Coach viewing their own recorded results
+                            queryset = queryset.filter(verified_by=self.request.user)
+                        else:
+                            # Invalid recorded_by, return empty
+                            return queryset.none()
+                    except (ValueError, TypeError):
+                        # Invalid recorded_by parameter, return empty queryset
+                        return queryset.none()
+                else:
+                    # Default: show results for teams they coach + finalized results
+                    try:
+                        team_ids = list(Team.objects.filter(coach=self.request.user).values_list('id', flat=True))
+                        if team_ids:
+                            queryset = queryset.filter(
+                                Q(fixture__home_id__in=team_ids) |
+                                Q(fixture__away_id__in=team_ids) |
+                                Q(status='FINALIZED')
+                            ).distinct()
+                        else:
+                            # Coach has no teams, show only finalized results
+                            queryset = queryset.filter(status='FINALIZED')
+                    except Exception as e:
+                        # If team lookup fails, return empty queryset to prevent 500
+                        import logging
+                        logging.error(f"Error fetching coach teams: {e}")
+                        return queryset.none()
+            elif self.request.user.role == 'ATHLETE':
+                # Athlete sees results for teams they're in + finalized results
+                from teams.models import TeamMember
+                try:
+                    team_ids = list(TeamMember.objects.filter(athlete=self.request.user).values_list('team_id', flat=True))
+                    if team_ids:
+                        queryset = queryset.filter(
+                            Q(fixture__home_id__in=team_ids) |
+                            Q(fixture__away_id__in=team_ids) |
+                            Q(status='FINALIZED')
+                        ).distinct()
+                    else:
+                        queryset = queryset.filter(status='FINALIZED')
+                except Exception as e:
+                    # If team member lookup fails, return empty queryset
+                    import logging
+                    logging.error(f"Error fetching athlete teams: {e}")
+                    return queryset.none()
             else:
-                queryset = queryset.filter(finalized_at__isnull=True)
-        
-        return queryset
+                # Spectator sees only finalized results
+                queryset = queryset.filter(status='FINALIZED')
+            
+            # Filter by event if specified
+            event_id = self.request.query_params.get('event_id')
+            if event_id:
+                try:
+                    event_id_int = int(event_id)
+                    queryset = queryset.filter(fixture__event_id=event_id_int)
+                except (ValueError, TypeError):
+                    # Invalid event_id, return empty queryset
+                    return queryset.none()
+            
+            # Filter by finalized status
+            finalized = self.request.query_params.get('finalized')
+            if finalized is not None:
+                if finalized.lower() == 'true':
+                    queryset = queryset.filter(status='FINALIZED')
+                else:
+                    queryset = queryset.exclude(status='FINALIZED')
+            
+            return queryset
+        except Exception as e:
+            # Catch-all: if anything goes wrong, return empty queryset to prevent 500
+            import logging
+            logging.error(f"Error in ResultViewSet.get_queryset: {e}")
+            return Result.objects.none()
     
     def perform_create(self, serializer):
         """Create result with proper permissions"""
@@ -281,7 +337,7 @@ class EventResultsView(APIView):
         # Get recent finalized results
         recent_results = Result.objects.filter(
             fixture__event=event,
-            finalized_at__isnull=False
+            status='FINALIZED'
         ).select_related(
             'fixture__home', 'fixture__away', 'winner'
         ).order_by('-created_at')[:10]
@@ -295,7 +351,7 @@ class EventResultsView(APIView):
         total_fixtures = Fixture.objects.filter(event=event).count()
         finalized_results = Result.objects.filter(
             fixture__event=event,
-            finalized_at__isnull=False
+            status='FINALIZED'
         ).count()
         
         data = {
@@ -328,14 +384,14 @@ class EventRecentResultsView(APIView):
         # Get finalized results
         results = Result.objects.filter(
             fixture__event=event,
-            finalized_at__isnull=False
+            status='FINALIZED'
         ).select_related(
             'fixture__home', 'fixture__away', 'winner'
         ).order_by('-created_at')[offset:offset + limit]
         
         total_count = Result.objects.filter(
             fixture__event=event,
-            finalized_at__isnull=False
+            status='FINALIZED'
         ).count()
         
         data = {

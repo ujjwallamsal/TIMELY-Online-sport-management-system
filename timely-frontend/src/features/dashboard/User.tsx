@@ -1,13 +1,32 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Trophy, Users, Ticket } from 'lucide-react';
-import { useAuth } from '../../auth/useAuth';
+import { useAuth } from '../../auth/AuthProvider';
 import { useRegistrations, usePublicEvents } from '../../api/queries';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../../api/client';
+import { ENDPOINTS } from '../../api/ENDPOINTS';
 
 const UserDashboard: React.FC = () => {
   const { user } = useAuth();
   const { data: registrations } = useRegistrations({ page_size: 5 });
   const { data: upcomingEvents } = usePublicEvents({ page_size: 3, status: 'upcoming' });
+
+  // Fetch my tickets count with graceful fallback
+  const { data: myTicketsCount = 0 } = useQuery({
+    queryKey: ['tickets', 'me', 'count'],
+    queryFn: async () => {
+      try {
+        const res = await api.get(ENDPOINTS.myTickets);
+        const data = res.data as any;
+        const list = Array.isArray(data?.results) ? data.results : (Array.isArray(data) ? data : []);
+        return list.length;
+      } catch (e) {
+        return 0;
+      }
+    },
+    retry: false,
+  });
 
   const stats = [
     {
@@ -28,7 +47,7 @@ const UserDashboard: React.FC = () => {
     },
     {
       name: 'My Tickets',
-      value: 0, // TODO: Implement tickets
+      value: myTicketsCount,
       icon: Ticket,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100',
@@ -85,7 +104,7 @@ const UserDashboard: React.FC = () => {
               <h2 className="text-lg font-semibold text-gray-900">Recent Registrations</h2>
               <Link
                 to="/registrations"
-                className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
               >
                 View all
               </Link>
@@ -128,7 +147,7 @@ const UserDashboard: React.FC = () => {
               <h2 className="text-lg font-semibold text-gray-900">Upcoming Events</h2>
               <Link
                 to="/events"
-                className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
               >
                 View all
               </Link>
@@ -136,11 +155,11 @@ const UserDashboard: React.FC = () => {
             
             {upcomingEvents && upcomingEvents.length > 0 ? (
               <div className="space-y-4">
-                {upcomingEvents.map((event) => (
+                {upcomingEvents.map((event: any) => (
                   <div key={event.id} className="p-3 bg-gray-50 rounded-lg">
                     <Link
                       to={`/events/${event.id}`}
-                      className="block hover:text-primary-600"
+                      className="block hover:text-blue-600"
                     >
                       <p className="font-medium text-gray-900">{event.name}</p>
                       <p className="text-sm text-gray-500 mt-1">
@@ -170,7 +189,7 @@ const UserDashboard: React.FC = () => {
               to="/events"
               className="card hover:shadow-lg transition-shadow text-center"
             >
-              <Calendar className="h-8 w-8 text-primary-600 mx-auto mb-2" />
+              <Calendar className="h-8 w-8 text-blue-600 mx-auto mb-2" />
               <h3 className="font-medium text-gray-900">Browse Events</h3>
               <p className="text-sm text-gray-500">Find events to participate in</p>
             </Link>
@@ -179,7 +198,7 @@ const UserDashboard: React.FC = () => {
               to="/registrations/create"
               className="card hover:shadow-lg transition-shadow text-center"
             >
-              <Users className="h-8 w-8 text-primary-600 mx-auto mb-2" />
+              <Users className="h-8 w-8 text-blue-600 mx-auto mb-2" />
               <h3 className="font-medium text-gray-900">Register for Event</h3>
               <p className="text-sm text-gray-500">Sign up for a new event</p>
             </Link>
@@ -188,7 +207,7 @@ const UserDashboard: React.FC = () => {
               to="/results"
               className="card hover:shadow-lg transition-shadow text-center"
             >
-              <Trophy className="h-8 w-8 text-primary-600 mx-auto mb-2" />
+              <Trophy className="h-8 w-8 text-blue-600 mx-auto mb-2" />
               <h3 className="font-medium text-gray-900">View Results</h3>
               <p className="text-sm text-gray-500">Check competition results</p>
             </Link>

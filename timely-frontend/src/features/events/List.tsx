@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Calendar, MapPin } from 'lucide-react';
-import { usePublicEvents } from '../../api/queries';
-import { formatDate, formatDateTime } from '../../utils/format';
+import { usePublicEvents, useEvents } from '../../api/queries';
+import { useAuth } from '../../auth/AuthProvider';
+import { formatDate, formatTime } from '../../utils/dateUtils';
 import DataTable from '../../components/DataTable';
 import { type Event } from '../../api/queries';
 
 const EventsList: React.FC = () => {
+  const location = useLocation();
+  const { user } = useAuth();
+  const isMyEventsRoute = location.pathname === '/events/mine';
+  
   const [filters, setFilters] = useState({
     search: '',
     status: '',
@@ -14,17 +19,34 @@ const EventsList: React.FC = () => {
   });
   const [currentPage, setCurrentPage] = useState(1);
 
-  const { data: events, isLoading } = usePublicEvents({
-    page: currentPage,
-    page_size: 12,
-    search: filters.search || undefined,
-    status: filters.status || undefined,
-    sport: filters.sport || undefined,
-  });
+  // Use different query based on route
+  const { data: publicEvents, isLoading: isLoadingPublic } = usePublicEvents(
+    !isMyEventsRoute ? {
+      page: currentPage,
+      limit: 12,
+      search: filters.search || undefined,
+      status: filters.status || undefined,
+      sport: filters.sport || undefined,
+    } : undefined
+  );
+
+  const { data: myEvents, isLoading: isLoadingMy } = useEvents(
+    isMyEventsRoute ? {
+      page: currentPage,
+      page_size: 12,
+      created_by: user?.id,
+      search: filters.search || undefined,
+      status: filters.status || undefined,
+      sport: filters.sport || undefined,
+    } : undefined
+  );
+
+  const events = isMyEventsRoute ? myEvents?.results : publicEvents;
+  const isLoading = isMyEventsRoute ? isLoadingMy : isLoadingPublic;
 
   const columns = [
     {
-      key: 'title',
+      key: 'name',
       title: 'Event',
       render: (value: string, event: Event) => (
         <div>
@@ -60,26 +82,28 @@ const EventsList: React.FC = () => {
       ),
     },
     {
-      key: 'start_date',
+      key: 'start_datetime',
       title: 'Date & Time',
-      render: (value: string) => (
-        <div className="text-sm">
-          <div className="flex items-center text-gray-900">
-            <Calendar className="h-4 w-4 mr-1" />
-            {formatDate(value)}
+      render: (value: string) => {
+        return (
+          <div className="text-sm">
+            <div className="flex items-center text-gray-900">
+              <Calendar className="h-4 w-4 mr-1" />
+              {formatDate(value)}
+            </div>
+            <div className="text-gray-500">
+              {formatTime(value)}
+            </div>
           </div>
-          <div className="text-gray-500">
-            {formatDateTime(value)}
-          </div>
-        </div>
-      ),
+        );
+      },
     },
     {
-      key: 'registration_fee',
+      key: 'fee_cents',
       title: 'Fee',
       render: (value: number) => (
         <span className="text-sm font-medium">
-          {value ? `$${value}` : 'Free'}
+          {value ? `$${(value / 100).toFixed(2)}` : 'Free'}
         </span>
       ),
     },
@@ -117,9 +141,13 @@ const EventsList: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Sports Events</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            {isMyEventsRoute ? 'My Events' : 'Sports Events'}
+          </h1>
           <p className="text-gray-600">
-            Discover and participate in exciting sports events happening around you.
+            {isMyEventsRoute 
+              ? 'Events you have created and manage' 
+              : 'Discover and participate in exciting sports events happening around you.'}
           </p>
         </div>
 
@@ -147,7 +175,7 @@ const EventsList: React.FC = () => {
                 <select
                   id="status"
                   value={filters.status}
-                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('status', e.target.value)}
                   className="form-input"
                 >
                   <option value="">All Statuses</option>
@@ -166,7 +194,7 @@ const EventsList: React.FC = () => {
                   type="text"
                   placeholder="Filter by sport..."
                   value={filters.sport}
-                  onChange={(e) => handleFilterChange('sport', e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('sport', e.target.value)}
                   className="form-input"
                 />
               </div>
@@ -206,13 +234,13 @@ const EventsList: React.FC = () => {
             </div>
             <div className="card text-center">
               <div className="text-3xl font-bold text-primary-600 mb-2">
-                {events.filter(e => e.status === 'PUBLISHED').length}
+                {events.filter((e: Event) => e.status === 'PUBLISHED').length}
               </div>
               <div className="text-gray-600">Published Events</div>
             </div>
             <div className="card text-center">
               <div className="text-3xl font-bold text-primary-600 mb-2">
-                {events.filter(e => e.fee_cents === 0 || !e.fee_cents).length}
+                {events.filter((e: Event) => e.fee_cents === 0 || !e.fee_cents).length}
               </div>
               <div className="text-gray-600">Free Events</div>
             </div>

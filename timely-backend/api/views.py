@@ -209,11 +209,17 @@ class UserViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get', 'patch'])
     def me(self, request):
-        """Get or update current user profile - delegates to accounts app"""
-        from accounts.views import UserViewSet
-        user_view = UserViewSet()
-        user_view.request = request
-        return user_view.me(request)
+        """Get or update current user profile"""
+        if request.method == 'GET':
+            serializer = UserSerializer(request.user)
+            return Response(serializer.data)
+        else:
+            # Update profile (PATCH)
+            serializer = UserSerializer(request.user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ===== SPORTS & VENUES =====
@@ -1359,9 +1365,10 @@ class MeView(APIView):
             serializer = UserSerializer(request.user)
             return Response(serializer.data)
         except Exception as e:
+            print(f"Error in MeView.get: {e}")  # Debug logging
             return Response(
-                {'detail': 'Authentication failed'},
-                status=status.HTTP_401_UNAUTHORIZED
+                {'detail': 'Failed to retrieve user profile'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     def patch(self, request):
@@ -1370,6 +1377,28 @@ class MeView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def post(self, request):
+        """Change password for current user."""
+        from accounts.serializers import PasswordChangeSerializer
+        from accounts.models import AuditLog
+        
+        serializer = PasswordChangeSerializer(data=request.data, context={'user': request.user})
+        if serializer.is_valid():
+            request.user.set_password(serializer.validated_data['new_password'])
+            request.user.save()
+            
+            # Create audit log
+            AuditLog.objects.create(
+                user=request.user,
+                action=AuditLog.ActionType.PASSWORD_CHANGE,
+                resource_type='User',
+                resource_id=str(request.user.id),
+                details={'email': request.user.email}
+            )
+            
+            return Response({'message': 'Password changed successfully'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

@@ -135,6 +135,18 @@ class MediaItemCreateSerializer(serializers.ModelSerializer):
             )
         
         return data
+    
+    def create(self, validated_data):
+        """Create media item with EXIF stripping for images"""
+        from .services.storage import strip_exif_metadata
+        
+        file = validated_data.get('file')
+        
+        # Strip EXIF metadata from images for privacy
+        if file and file.content_type and file.content_type.startswith('image/'):
+            validated_data['file'] = strip_exif_metadata(file)
+        
+        return super().create(validated_data)
 
 
 class MediaItemUpdateSerializer(serializers.ModelSerializer):

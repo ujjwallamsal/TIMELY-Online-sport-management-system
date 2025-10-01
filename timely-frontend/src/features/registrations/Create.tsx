@@ -7,10 +7,20 @@ import {
   Users,
   CheckCircle,
   AlertCircle,
-  ArrowLeft
+  ArrowLeft,
+  Upload,
+  X
 } from 'lucide-react';
-import { useEvents, useCreateRegistration } from '../../api/queries';
+import { useEvents } from '../../api/queries';
 import { useToast } from '../../contexts/ToastContext';
+import { api } from '../../api/client';
+import { ENDPOINTS } from '../../api/ENDPOINTS';
+
+interface DocumentFile {
+  type: 'id_card' | 'medical_clearance' | 'other';
+  file: File | null;
+  preview?: string;
+}
 
 const RegistrationCreate: React.FC = () => {
   const navigate = useNavigate();
@@ -22,14 +32,35 @@ const RegistrationCreate: React.FC = () => {
     page_size: 50,
   });
 
-  const createRegistrationMutation = useCreateRegistration();
-
   const [selectedEvent, setSelectedEvent] = useState(eventId || '');
   const [notes, setNotes] = useState('');
+  const [documents, setDocuments] = useState<DocumentFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const events = eventsData?.results || [];
   const selectedEventData = events?.find(e => e.id.toString() === selectedEvent);
+
+  const handleAddDocument = () => {
+    setDocuments([...documents, { type: 'id_card', file: null }]);
+  };
+
+  const handleRemoveDocument = (index: number) => {
+    setDocuments(documents.filter((_, i) => i !== index));
+  };
+
+  const handleDocumentChange = (index: number, field: keyof DocumentFile, value: any) => {
+    const newDocuments = [...documents];
+    if (field === 'file' && value instanceof File) {
+      newDocuments[index] = {
+        ...newDocuments[index],
+        file: value,
+        preview: URL.createObjectURL(value)
+      };
+    } else {
+      newDocuments[index] = { ...newDocuments[index], [field]: value };
+    }
+    setDocuments(newDocuments);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,15 +73,46 @@ const RegistrationCreate: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      await createRegistrationMutation.mutateAsync({
-        event: parseInt(selectedEvent),
-        notes: notes || null,
+      // Call the checkout endpoint
+      const response = await api.post(ENDPOINTS.registrations + 'checkout/', {
+        event_id: parseInt(selectedEvent),
+        notes: notes || undefined,
       });
+
+      const data = response.data;
+
+      // Handle different response modes
+      if (data.mode === 'free') {
+        showSuccess('Registration Submitted', 'Your free registration has been submitted for approval');
+        navigate('/registrations/my');
+        return;
+      }
+
+      if (data.mode === 'mock') {
+        showSuccess('Registration Submitted', 'Your registration has been submitted (mock payment mode)');
+        navigate('/registrations/my');
+        return;
+      }
+
+      // Real Stripe checkout - redirect to Stripe
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+        return;
+      }
+
+      // Fallback error
+      showError('Registration Error', 'Invalid response from server');
+    } catch (error: any) {
+      console.error('Registration error:', error);
       
-      showSuccess('Registration Submitted', 'Your registration has been submitted for approval');
-      navigate('/registrations/my');
-    } catch (error) {
-      showError('Registration Failed', 'Failed to submit registration. Please try again.');
+      let errorMessage = 'Failed to submit registration. Please try again.';
+      
+      if (error?.response?.data) {
+        const data = error.response.data;
+        errorMessage = data.detail || data.error || data.message || errorMessage;
+      }
+      
+      showError('Registration Failed', errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -172,6 +234,59 @@ const RegistrationCreate: React.FC = () => {
                   />
                 </div>
 
+                {/* Document Upload Section (Optional for now) */}
+                {/* <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="form-label mb-0">Documents (Optional)</label>
+                    <button
+                      type="button"
+                      onClick={handleAddDocument}
+                      className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
+                    >
+                      <Upload className="h-4 w-4 mr-1" />
+                      Add Document
+                    </button>
+                  </div>
+                  
+                  {documents.length > 0 && (
+                    <div className="space-y-3">
+                      {documents.map((doc, index) => (
+                        <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                          <select
+                            value={doc.type}
+                            onChange={(e) => handleDocumentChange(index, 'type', e.target.value)}
+                            className="form-input flex-shrink-0 w-48"
+                          >
+                            <option value="id_card">ID Card</option>
+                            <option value="medical_clearance">Medical Clearance</option>
+                            <option value="other">Other</option>
+                          </select>
+                          
+                          <input
+                            type="file"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleDocumentChange(index, 'file', file);
+                              }
+                            }}
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                            className="form-input flex-1"
+                          />
+                          
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDocument(index)}
+                            className="text-red-600 hover:text-red-700 p-1"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div> */}
+
                 {/* Submit Button */}
                 <div className="flex justify-end">
                   <button
@@ -182,12 +297,12 @@ const RegistrationCreate: React.FC = () => {
                     {isSubmitting ? (
                       <>
                         <div className="spinner spinner-sm mr-2"></div>
-                        Submitting...
+                        Processing...
                       </>
                     ) : (
                       <>
                         <CheckCircle className="h-4 w-4 mr-2" />
-                        Submit Registration
+                        {selectedEventData?.fee_cents ? 'Proceed to Payment' : 'Submit Registration'}
                       </>
                     )}
                   </button>
@@ -208,11 +323,11 @@ const RegistrationCreate: React.FC = () => {
                 </div>
                 <div className="flex items-start space-x-2">
                   <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                  <p>Review event details and requirements</p>
+                  <p>Review event details and fees</p>
                 </div>
                 <div className="flex items-start space-x-2">
                   <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                  <p>Submit your registration for approval</p>
+                  <p>Complete payment (if required)</p>
                 </div>
                 <div className="flex items-start space-x-2">
                   <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
@@ -235,7 +350,7 @@ const RegistrationCreate: React.FC = () => {
                 </div>
                 <div className="flex items-start space-x-2">
                   <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                  <p>Make sure you meet all event requirements</p>
+                  <p>Payment is secure via Stripe</p>
                 </div>
                 <div className="flex items-start space-x-2">
                   <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />

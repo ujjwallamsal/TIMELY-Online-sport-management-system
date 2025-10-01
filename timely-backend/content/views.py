@@ -99,8 +99,11 @@ class PublicPageViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
     @action(detail=False, methods=['get'])
-    def by_slug(self, request, slug=None):
+    def by_slug(self, request):
         """Get a specific page by slug."""
+        slug = request.query_params.get('slug')
+        if not slug:
+            return Response({'error': 'slug parameter is required'}, status=400)
         page = get_object_or_404(
             self.get_queryset(),
             slug=slug
@@ -124,6 +127,26 @@ class PublicNewsViewSet(viewsets.ReadOnlyModelViewSet):
         ).filter(
             models.Q(publish_at__isnull=True) | models.Q(publish_at__lte=now)
         ).order_by('-published_at', '-created_at')
+    
+    def get_object(self):
+        """Override to support both ID and slug lookup."""
+        lookup_value = self.kwargs[self.lookup_url_kwarg or self.lookup_field]
+        
+        # Try to find by slug first (default behavior)
+        try:
+            return self.get_queryset().get(slug=lookup_value)
+        except News.DoesNotExist:
+            pass
+        
+        # If not found by slug, try to find by ID
+        try:
+            return self.get_queryset().get(id=int(lookup_value))
+        except (News.DoesNotExist, ValueError):
+            pass
+        
+        # If still not found, raise 404
+        from rest_framework.exceptions import NotFound
+        raise NotFound()
 
 
 class PublicBannerViewSet(viewsets.ReadOnlyModelViewSet):

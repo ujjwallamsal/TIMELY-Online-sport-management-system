@@ -160,11 +160,37 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             return self.request.user
         return super().get_object()
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get', 'patch', 'put'])
     def me(self, request):
-        """Get current user profile"""
-        serializer = self.get_serializer(request.user)
-        return Response(serializer.data)
+        """Get or update current user profile"""
+        if request.method == 'GET':
+            serializer = self.get_serializer(request.user)
+            return Response(serializer.data)
+        else:
+            # Update profile
+            serializer = UserProfileUpdateSerializer(request.user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                
+                # Create audit log (use PROFILE_UPDATE or similar)
+                try:
+                    AuditLog.objects.create(
+                        user=request.user,
+                        action='PROFILE_UPDATE',  # Use string instead of ActionType enum
+                        resource_type='User',
+                        resource_id=str(request.user.id),
+                        details={'email': request.user.email, 'updated_fields': list(request.data.keys())}
+                    )
+                except Exception as e:
+                    # Don't fail profile update if audit logging fails
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to create audit log: {e}")
+                
+                # Return updated profile with full serializer
+                response_serializer = UserProfileSerializer(request.user)
+                return Response(response_serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'])
     def change_password(self, request):
@@ -360,3 +386,89 @@ class CoachApplicationViewSet(viewsets.ModelViewSet):
 
 
 # Password reset and email verification disabled for minimal boot profile
+
+# Role Application Functions
+from rest_framework.decorators import api_view, permission_classes
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_athlete_role(request):
+    """Apply for athlete role"""
+    try:
+        # Check if user already has an application
+        existing = AthleteApplication.objects.filter(user=request.user, status='PENDING').first()
+        if existing:
+            return Response({'error': 'You already have a pending application'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = AthleteApplicationCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            application = serializer.save(user=request.user)
+            return Response({
+                'message': 'Athlete application submitted successfully',
+                'application_id': application.id
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_coach_role(request):
+    """Apply for coach role"""
+    try:
+        # Check if user already has an application
+        existing = CoachApplication.objects.filter(user=request.user, status='PENDING').first()
+        if existing:
+            return Response({'error': 'You already have a pending application'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = CoachApplicationCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            application = serializer.save(user=request.user)
+            return Response({
+                'message': 'Coach application submitted successfully',
+                'application_id': application.id
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_organizer_role(request):
+    """Apply for organizer role"""
+    try:
+        # Check if user already has an application
+        existing = OrganizerApplication.objects.filter(user=request.user, status='PENDING').first()
+        if existing:
+            return Response({'error': 'You already have a pending application'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = OrganizerApplicationCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            application = serializer.save(user=request.user)
+            return Response({
+                'message': 'Organizer application submitted successfully',
+                'application_id': application.id
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_my_applications(request):
+    """Get current user's role applications"""
+    try:
+        athlete_apps = AthleteApplication.objects.filter(user=request.user)
+        coach_apps = CoachApplication.objects.filter(user=request.user)
+        organizer_apps = OrganizerApplication.objects.filter(user=request.user)
+        
+        return Response({
+            'athlete_applications': AthleteApplicationSerializer(athlete_apps, many=True).data,
+            'coach_applications': CoachApplicationSerializer(coach_apps, many=True).data,
+            'organizer_applications': OrganizerApplicationSerializer(organizer_apps, many=True).data,
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
