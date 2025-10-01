@@ -95,10 +95,18 @@ const NewsDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Featured Image Placeholder */}
-          <div className="w-full h-64 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center mb-8">
-            <Newspaper className="h-16 w-16 text-blue-600" />
-          </div>
+          {/* Featured Image */}
+          {article.image ? (
+            <img
+              src={article.image.startsWith('http') ? article.image : `http://127.0.0.1:8000${article.image}`}
+              alt={article.title}
+              className="w-full h-64 object-cover rounded-lg mb-8"
+            />
+          ) : (
+            <div className="w-full h-64 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center mb-8">
+              <Newspaper className="h-16 w-16 text-blue-600" />
+            </div>
+          )}
 
           {/* Article Content */}
           <div className="prose prose-lg max-w-none">

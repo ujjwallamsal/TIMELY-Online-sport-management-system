@@ -147,3 +147,6 @@ temp/
 htmlcov/
 # Ignore local sqlite db
 timely-backend/db.sqlite3
+
+# Ignore environment files
+timely-backend/.env

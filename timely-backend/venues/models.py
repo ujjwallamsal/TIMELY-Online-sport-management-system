@@ -87,6 +87,12 @@ class VenueSlot(models.Model):
 
     def clean(self):
         """Validate slot data"""
+        if self.starts_at is None:
+            raise ValidationError({'starts_at': 'Start time is required'})
+        
+        if self.ends_at is None:
+            raise ValidationError({'ends_at': 'End time is required'})
+        
         if self.ends_at <= self.starts_at:
             raise ValidationError({'ends_at': 'End time must be after start time'})
         
@@ -100,8 +106,10 @@ class VenueSlot(models.Model):
     @property
     def duration_minutes(self):
         """Get slot duration in minutes"""
-        delta = self.ends_at - self.starts_at
-        return int(delta.total_seconds() / 60)
+        if self.starts_at and self.ends_at:
+            delta = self.ends_at - self.starts_at
+            return int(delta.total_seconds() / 60)
+        return 0
 
     def overlaps_with(self, other_slot):
         """Check if this slot overlaps with another slot"""

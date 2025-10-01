@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.contrib import messages
 from django.db import transaction
 from .models import Event, Division
+from tickets.models import TicketType
 
 
 class DivisionInline(admin.TabularInline):
@@ -88,12 +89,12 @@ class EventAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs.select_related("created_by", "venue").prefetch_related(
-                "fixtures", "registrations", "tickettype_set"
+                "fixtures", "registrations"
             )
         # Organizer staff: show only their events
         if request.user.is_staff:
             return qs.filter(created_by=request.user).select_related("created_by", "venue").prefetch_related(
-                "fixtures", "registrations", "tickettype_set"
+                "fixtures", "registrations"
             )
         return qs.none()
     
@@ -132,7 +133,7 @@ class EventAdmin(admin.ModelAdmin):
     
     def tickets_count(self, obj):
         """Display ticket count with link"""
-        count = obj.tickettype_set.count()
+        count = TicketType.objects.filter(event_id=obj.id).count()
         if count > 0:
             url = reverse('admin:tickets_tickettype_changelist') + f'?event_id__exact={obj.id}'
             return format_html('<a href="{}">{} ticket types</a>', url, count)
@@ -142,7 +143,7 @@ class EventAdmin(admin.ModelAdmin):
     def total_revenue(self, obj):
         """Calculate and display total revenue"""
         total = 0
-        for ticket_type in obj.tickettype_set.all():
+        for ticket_type in TicketType.objects.filter(event_id=obj.id):
             total += ticket_type.price_cents * ticket_type.quantity_sold
         return f"${total / 100:.2f}"
     total_revenue.short_description = 'Revenue'

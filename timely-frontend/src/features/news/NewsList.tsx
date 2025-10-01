@@ -87,9 +87,17 @@ const NewsList: React.FC = () => {
             <div className="card">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div>
-                  <div className="w-full h-64 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
-                    <Newspaper className="h-16 w-16 text-blue-600" />
-                  </div>
+                  {news.results[0].image ? (
+                    <img
+                      src={news.results[0].image.startsWith('http') ? news.results[0].image : `http://127.0.0.1:8000${news.results[0].image}`}
+                      alt={news.results[0].title}
+                      className="w-full h-64 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-full h-64 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
+                      <Newspaper className="h-16 w-16 text-blue-600" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col justify-center">
                   <div className="flex items-center space-x-4 mb-4">
@@ -108,7 +116,7 @@ const NewsList: React.FC = () => {
                     {news.results[0].title}
                   </h2>
                   <p className="text-gray-600 mb-6 line-clamp-3">
-                    {news.results[0].excerpt || news.results[0].content.substring(0, 200) + '...'}
+                    {news.results[0].excerpt || (news.results[0].body ? news.results[0].body.substring(0, 200) + '...' : '')}
                   </p>
                   <Link
                     to={`/news/${news.results[0].id}`}
@@ -127,9 +135,17 @@ const NewsList: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {news.results.slice(1).map((article) => (
             <article key={article.id} className="card hover:shadow-lg transition-shadow group">
-              <div className="w-full h-48 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center mb-4">
-                <Newspaper className="h-12 w-12 text-gray-400" />
-              </div>
+              {article.image ? (
+                <img
+                  src={article.image.startsWith('http') ? article.image : `http://127.0.0.1:8000${article.image}`}
+                  alt={article.title}
+                  className="w-full h-48 object-cover rounded-lg mb-4"
+                />
+              ) : (
+                <div className="w-full h-48 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center mb-4">
+                  <Newspaper className="h-12 w-12 text-gray-400" />
+                </div>
+              )}
               
               <div className="flex items-center space-x-4 mb-3">
                 <div className="flex items-center text-sm text-gray-500">
@@ -151,7 +167,7 @@ const NewsList: React.FC = () => {
               </h3>
               
               <p className="text-gray-600 mb-4 line-clamp-3">
-                {article.excerpt || article.content.substring(0, 150) + '...'}
+                {article.excerpt || (article.body ? article.body.substring(0, 150) + '...' : '')}
               </p>
               
               <Link

@@ -1,6 +1,0 @@
-include('api.urls')
-path('admin/')
-path('api/')
-path('api/docs/')
-path('api/schema/')
-path('health/')

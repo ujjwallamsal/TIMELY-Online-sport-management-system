@@ -21,21 +21,25 @@ class TeamAdmin(admin.ModelAdmin):
 
 @admin.register(TeamMember)
 class TeamMemberAdmin(admin.ModelAdmin):
-    list_display = ['athlete', 'team', 'jersey_no', 'role', 'status', 'position', 'is_captain']
-    list_filter = ['team', 'role', 'status', 'is_captain', 'position']
-    search_fields = ['athlete__email', 'team__name', 'jersey_no']
+    list_display = ['athlete', 'team', 'jersey_no', 'role', 'status', 'is_captain', 'joined_date']
+    list_filter = ['team', 'role', 'status', 'is_captain', 'joined_date']
+    search_fields = ['athlete__email', 'team__name', 'jersey_no', 'full_name']
     ordering = ['team', 'jersey_no']
     raw_id_fields = ['athlete', 'team']
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['joined_date', 'created_at', 'updated_at']
     fieldsets = (
         ('Team Information', {
             'fields': ('team', 'athlete')
         }),
         ('Member Details', {
-            'fields': ('jersey_no', 'role', 'status', 'position', 'is_captain')
+            'fields': ('full_name', 'jersey_no', 'role', 'status', 'position', 'date_of_birth')
         }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
+        ('Permissions', {
+            'fields': ('is_captain', 'can_manage_team', 'can_edit_results'),
+            'classes': ('collapse',)
+        }),
+        ('Dates', {
+            'fields': ('joined_date', 'left_date', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         })
     )

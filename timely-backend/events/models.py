@@ -89,6 +89,12 @@ class Event(models.Model):
         if self.status == self.Status.COMPLETED:
             return "completed"
         
+        # Handle missing datetimes gracefully (during admin add form rendering)
+        if not self.start_datetime:
+            return "upcoming"
+        if not self.end_datetime:
+            return "ongoing" if now >= self.start_datetime else "upcoming"
+
         if now < self.start_datetime:
             return "upcoming"
         elif now >= self.start_datetime and now <= self.end_datetime:

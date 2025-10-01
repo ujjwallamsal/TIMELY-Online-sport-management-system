@@ -5,7 +5,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../api/client';
 import { ENDPOINTS } from '../../api/ENDPOINTS';
 import { Form, FormGroup, FormRow, FormActions, Input, Button } from '../../components/Form';
-import { User, Mail, Phone, Calendar, MapPin, Shield, Crown, Users, Clock, CheckCircle, Eye, EyeOff, Lock } from 'lucide-react';
+import { User, Mail, Shield, Crown, Users, Clock, CheckCircle, Eye, EyeOff, Lock } from 'lucide-react';
 import { z } from 'zod';
 import { validatePassword, validateConfirmPassword } from '../../utils/validators';
 
@@ -61,7 +61,7 @@ const Profile: React.FC = () => {
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
       email: user?.email || '',
-      username: user?.username || '',
+      username: (user as any)?.username || '',
     },
     validationSchema: z.object({
       first_name: z.string().min(1, 'First name is required'),
@@ -73,7 +73,7 @@ const Profile: React.FC = () => {
       setIsSaving(true);
       try {
         // Call the me endpoint with PATCH
-        const response = await api.patch('/users/me/', form.values);
+        await api.patch('/users/me/', form.values);
         
         // Send notification (optional, don't fail if it errors)
         try {
@@ -107,11 +107,11 @@ const Profile: React.FC = () => {
         first_name: user.first_name || '',
         last_name: user.last_name || '',
         email: user.email || '',
-        username: user.username || '',
+        username: (user as any)?.username || '',
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.first_name, user?.last_name, user?.email, user?.username, isEditing]);
+  }, [user?.id, user?.first_name, user?.last_name, user?.email, (user as any)?.username, isEditing]);
   
   useEffect(() => {
     initializeForm();
@@ -280,21 +280,21 @@ const Profile: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 py-4 sm:py-6 lg:py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
-          <p className="text-gray-600 mt-2">Manage your account information and role preferences.</p>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Profile</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">Manage your account information and role preferences.</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           {/* Profile Overview */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {/* Basic Info Card */}
             <div className="card">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3 sm:gap-0">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 flex items-center">
                   <User className="h-5 w-5 mr-2" />
                   Basic Information
                 </h2>
@@ -303,6 +303,7 @@ const Profile: React.FC = () => {
                     onClick={() => setIsEditing(true)}
                     variant="outline"
                     size="sm"
+                    className="w-full sm:w-auto"
                   >
                     Edit Profile
                   </Button>
@@ -377,28 +378,28 @@ const Profile: React.FC = () => {
                   </FormActions>
                 </Form>
               ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center">
-                      <User className="h-5 w-5 text-gray-400 mr-3" />
-                      <div>
-                        <p className="text-sm text-gray-500">Name</p>
-                        <p className="font-medium">{user.first_name} {user.last_name}</p>
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="flex items-center p-3 sm:p-0">
+                      <User className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm text-gray-500">Name</p>
+                        <p className="font-medium text-sm sm:text-base truncate">{user.first_name} {user.last_name}</p>
                       </div>
                     </div>
-                    <div className="flex items-center">
-                      <Mail className="h-5 w-5 text-gray-400 mr-3" />
-                      <div>
-                        <p className="text-sm text-gray-500">Email</p>
-                        <p className="font-medium">{user.email}</p>
+                    <div className="flex items-center p-3 sm:p-0">
+                      <Mail className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm text-gray-500">Email</p>
+                        <p className="font-medium text-sm sm:text-base truncate">{user.email}</p>
                       </div>
                     </div>
-                    {user.username && (
-                      <div className="flex items-center">
-                        <User className="h-5 w-5 text-gray-400 mr-3" />
-                        <div>
-                          <p className="text-sm text-gray-500">Username</p>
-                          <p className="font-medium">{user.username}</p>
+                    {(user as any)?.username && (
+                      <div className="flex items-center p-3 sm:p-0">
+                        <User className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs sm:text-sm text-gray-500">Username</p>
+                          <p className="font-medium text-sm sm:text-base truncate">{(user as any)?.username}</p>
                         </div>
                       </div>
                     )}
@@ -409,28 +410,28 @@ const Profile: React.FC = () => {
 
             {/* Current Role */}
             <div className="card">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
                 <Shield className="h-5 w-5 mr-2" />
                 Current Role
               </h2>
-              <div className="flex items-center space-x-3 mb-3">
+              <div className="flex flex-wrap items-center gap-3 mb-3">
                 {(() => {
                   const RoleIcon = getRoleIcon(user.role || 'SPECTATOR');
-                  return <RoleIcon className="h-6 w-6 text-blue-600" />;
+                  return <RoleIcon className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />;
                 })()}
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-blue-100 text-blue-800">
                   {getRoleDisplayName(user.role || 'SPECTATOR')}
                 </span>
               </div>
-              <p className="text-gray-600">
+              <p className="text-sm sm:text-base text-gray-600">
                 You currently have {getRoleDisplayName(user.role || 'SPECTATOR').toLowerCase()} access to the platform.
               </p>
             </div>
 
             {/* Change Password */}
             <div className="card">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3 sm:gap-0">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 flex items-center">
                   <Lock className="h-5 w-5 mr-2" />
                   Change Password
                 </h2>
@@ -439,6 +440,7 @@ const Profile: React.FC = () => {
                     onClick={() => setIsChangingPassword(true)}
                     variant="outline"
                     size="sm"
+                    className="w-full sm:w-auto"
                   >
                     Change Password
                   </Button>
@@ -513,7 +515,7 @@ const Profile: React.FC = () => {
                     </div>
                   </FormGroup>
 
-                  <div className="flex space-x-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <Button
                       type="button"
                       variant="outline"
@@ -526,6 +528,7 @@ const Profile: React.FC = () => {
                         });
                         setPasswordErrors({});
                       }}
+                      className="w-full sm:w-auto"
                     >
                       Cancel
                     </Button>
@@ -533,13 +536,14 @@ const Profile: React.FC = () => {
                       onClick={handlePasswordChange}
                       loading={isPasswordSaving}
                       disabled={isPasswordSaving}
+                      className="w-full sm:w-auto"
                     >
                       {isPasswordSaving ? 'Changing Password...' : 'Change Password'}
                     </Button>
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-600">
+                <p className="text-sm sm:text-base text-gray-600">
                   Click "Change Password" to update your account password.
                 </p>
               )}
@@ -547,20 +551,20 @@ const Profile: React.FC = () => {
           </div>
 
           {/* Upgrade Center */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="card">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
                 <Crown className="h-5 w-5 mr-2" />
                 Upgrade Center
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
                 Request additional roles to unlock more features and capabilities.
               </p>
 
               {/* Organizer Application */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Apply to be Organizer</h3>
-                <p className="text-sm text-gray-600">
+              <div className="space-y-3 sm:space-y-4">
+                <h3 className="text-base sm:text-lg font-medium text-gray-900">Apply to be Organizer</h3>
+                <p className="text-xs sm:text-sm text-gray-600">
                   Become an event organizer to create and manage sports events.
                 </p>
                 
@@ -610,9 +614,9 @@ const Profile: React.FC = () => {
               <div className="border-t border-gray-200 my-6"></div>
 
               {/* Athlete Request */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Become Athlete</h3>
-                <p className="text-sm text-gray-600">
+              <div className="space-y-3 sm:space-y-4">
+                <h3 className="text-base sm:text-lg font-medium text-gray-900">Become Athlete</h3>
+                <p className="text-xs sm:text-sm text-gray-600">
                   Request athlete access to participate in sports events and competitions.
                 </p>
                 <Button
@@ -629,25 +633,25 @@ const Profile: React.FC = () => {
 
             {/* Account Status */}
             <div className="card">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Status</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Account Status</h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Account Status</span>
+                  <span className="text-xs sm:text-sm text-gray-600">Account Status</span>
                   <div className="flex items-center">
-                    <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
-                    <span className="text-sm font-medium text-green-600">Active</span>
+                    <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 mr-1" />
+                    <span className="text-xs sm:text-sm font-medium text-green-600">Active</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Email Verified</span>
+                  <span className="text-xs sm:text-sm text-gray-600">Email Verified</span>
                   <div className="flex items-center">
-                    <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
-                    <span className="text-sm font-medium text-green-600">Verified</span>
+                    <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 mr-1" />
+                    <span className="text-xs sm:text-sm font-medium text-green-600">Verified</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Member Since</span>
-                  <span className="text-sm font-medium text-gray-900">
+                  <span className="text-xs sm:text-sm text-gray-600">Member Since</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900">
                     {user.date_joined ? new Date(user.date_joined).toLocaleDateString() : 'Unknown'}
                   </span>
                 </div>

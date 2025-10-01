@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Camera, Image, Video, Play, Download, Eye, Upload, Edit, Trash2, Search, Filter } from 'lucide-react';
+import { Camera, Image, Video, Play, Download, Eye, Upload, Trash2, Search, Filter } from 'lucide-react';
 import { usePublicGalleryMedia, useMyGalleryMedia } from '../../api/queries';
 import { useAuth } from '../../auth/AuthProvider';
 import { useToast } from '../../contexts/ToastContext';
@@ -14,7 +14,11 @@ interface MediaItem {
   description?: string;
   media_type: 'image' | 'video';
   file_url?: string;
+  image?: string;
+  video_url?: string;
   thumbnail_url?: string;
+  album?: number;
+  album_title?: string;
   event_id?: number;
   event_name?: string;
   uploaded_at: string;
@@ -38,7 +42,7 @@ const Gallery: React.FC = () => {
     visibility: 'private' as 'public' | 'private',
   });
   const [isUploading, setIsUploading] = useState(false);
-  const { hasRole, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { showSuccess, showError } = useToast();
   const queryClient = useQueryClient();
 
@@ -155,19 +159,9 @@ const Gallery: React.FC = () => {
       await api.delete(ENDPOINTS.mediaItem(mediaId));
       showSuccess('Media deleted successfully');
       queryClient.invalidateQueries({ queryKey: ['public', 'gallery-media'] });
+      queryClient.invalidateQueries({ queryKey: ['gallery-media'] });
     } catch (error) {
       showError('Delete failed', 'Please try again');
-    }
-  };
-
-  const handleToggleVisibility = async (mediaId: number, currentVisibility: string) => {
-    try {
-      const newVisibility = currentVisibility === 'public' ? 'private' : 'public';
-      await api.patch(ENDPOINTS.mediaItem(mediaId), { is_public: newVisibility === 'public' });
-      showSuccess(`Media ${newVisibility === 'public' ? 'made public' : 'made private'}`);
-      queryClient.invalidateQueries({ queryKey: ['public', 'gallery-media'] });
-    } catch (error) {
-      showError('Update failed', 'Please try again');
     }
   };
 
@@ -190,10 +184,18 @@ const Gallery: React.FC = () => {
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/3 mb-8"></div>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {[...Array(12)].map((_, i) => (
-                <div key={i} className="aspect-square bg-gray-200 rounded-lg"></div>
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <div className="h-10 bg-gray-200 rounded w-48 mb-3"></div>
+                <div className="h-6 bg-gray-200 rounded w-96"></div>
+              </div>
+            </div>
+            <div className="mb-8">
+              <div className="h-10 bg-gray-200 rounded w-full max-w-md"></div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {[...Array(18)].map((_, i) => (
+                <div key={i} className="aspect-square bg-gradient-to-br from-gray-200 to-gray-300 rounded-xl"></div>
               ))}
             </div>
           </div>
@@ -287,127 +289,138 @@ const Gallery: React.FC = () => {
 
         {/* Media Grid */}
         {filteredMedia.length === 0 ? (
-          <div className="text-center py-12">
-            <Camera className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {activeTab === 'public' ? 'No Public Media Available' : 'No Media in Your Gallery'}
-            </h3>
-            <p className="text-gray-500 mb-4">
-              {activeTab === 'public' 
-                ? 'Photos and videos from events will appear here when they are made public.'
-                : 'Upload your first photo or video to get started.'
-              }
-            </p>
-            {activeTab === 'mine' && (
-              <button
-                onClick={() => setShowUploadModal(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-              >
-                Upload Media
-              </button>
-            )}
+          <div className="text-center py-20">
+            <div className="max-w-md mx-auto">
+              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Camera className="h-10 w-10 text-gray-400" />
+              </div>
+              <h3 className="text-2xl font-semibold text-gray-900 mb-3">
+                {activeTab === 'public' ? 'No Media Yet' : 'Your Gallery is Empty'}
+              </h3>
+              <p className="text-gray-500 mb-6 text-lg">
+                {activeTab === 'public' 
+                  ? 'Photos and videos from events will appear here when they are shared publicly.'
+                  : 'Start building your collection by uploading your first photo or video.'
+                }
+              </p>
+              {activeTab === 'mine' && (
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-lg hover:shadow-xl"
+                >
+                  <Upload className="h-5 w-5 mr-2" />
+                  Upload Your First Media
+                </button>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             {filteredMedia.map((mediaItem) => (
               <div
                 key={mediaItem.id}
-                className="group relative aspect-square bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
+                className="group relative aspect-square bg-gray-100 rounded-xl overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
                 onClick={() => setSelectedMedia(mediaItem)}
               >
-                <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                  {mediaItem.media_type === 'image' ? (
-                    <Image className="h-8 w-8 text-gray-400" />
-                  ) : (
-                    <Video className="h-8 w-8 text-gray-400" />
-                  )}
-                </div>
+                {mediaItem.file_url ? (
+                  <>
+                    <img
+                      src={mediaItem.file_url.startsWith('http') ? mediaItem.file_url : `http://127.0.0.1:8000${mediaItem.file_url}`}
+                      alt={mediaItem.title || 'Gallery media'}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        target.style.display = 'none';
+                        const fallback = target.nextElementSibling as HTMLDivElement;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                    <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 items-center justify-center hidden">
+                      {mediaItem.media_type === 'image' ? (
+                        <Image className="h-12 w-12 text-gray-400" />
+                      ) : (
+                        <Video className="h-12 w-12 text-gray-400" />
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                    {mediaItem.media_type === 'image' ? (
+                      <Image className="h-12 w-12 text-gray-400" />
+                    ) : (
+                      <Video className="h-12 w-12 text-gray-400" />
+                    )}
+                  </div>
+                )}
                 
                 {/* Overlay */}
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center">
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedMedia(mediaItem);
-                      }}
-                      className="p-2 bg-white rounded-full hover:bg-gray-100 transition-colors"
-                    >
-                      <Eye className="h-4 w-4 text-gray-700" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownload(mediaItem);
-                      }}
-                      className="p-2 bg-white rounded-full hover:bg-gray-100 transition-colors"
-                    >
-                      <Download className="h-4 w-4 text-gray-700" />
-                    </button>
-                    {activeTab === 'mine' && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Edit functionality would go here
-                            console.log('Edit media:', mediaItem.id);
-                          }}
-                          className="p-2 bg-white rounded-full hover:bg-gray-100 transition-colors"
-                        >
-                          <Edit className="h-4 w-4 text-gray-700" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(mediaItem.id);
-                          }}
-                          className="p-2 bg-white rounded-full hover:bg-gray-100 transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4 text-gray-700" />
-                        </button>
-                      </>
-                    )}
-                    {hasRole(['ADMIN', 'ORGANIZER']) && (
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="flex space-x-2">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          const visibility = mediaItem.visibility || (mediaItem.is_public ? 'public' : 'private');
-                          handleToggleVisibility(mediaItem.id, visibility);
+                          setSelectedMedia(mediaItem);
                         }}
-                        className="p-2 bg-white rounded-full hover:bg-gray-100 transition-colors"
-                        title="Toggle visibility"
+                        className="p-3 bg-white/95 backdrop-blur-sm rounded-full hover:bg-white hover:scale-110 transition-all shadow-lg"
+                        title="View"
                       >
-                        {mediaItem.is_public ? '🔓' : '🔒'}
+                        <Eye className="h-5 w-5 text-gray-800" />
                       </button>
-                    )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(mediaItem);
+                        }}
+                        className="p-3 bg-white/95 backdrop-blur-sm rounded-full hover:bg-white hover:scale-110 transition-all shadow-lg"
+                        title="Download"
+                      >
+                        <Download className="h-5 w-5 text-gray-800" />
+                      </button>
+                      {activeTab === 'mine' && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(mediaItem.id);
+                            }}
+                            className="p-3 bg-red-500/95 backdrop-blur-sm rounded-full hover:bg-red-600 hover:scale-110 transition-all shadow-lg"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-5 w-5 text-white" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Media Type Badge */}
-                <div className="absolute top-2 left-2">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm ${
                     mediaItem.media_type === 'image'
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-red-100 text-red-800'
+                      ? 'bg-blue-500/90 text-white'
+                      : 'bg-purple-500/90 text-white'
                   }`}>
                     {mediaItem.media_type === 'image' ? (
-                      <Image className="h-3 w-3 inline mr-1" />
+                      <Image className="h-3 w-3 mr-1" />
                     ) : (
-                      <Play className="h-3 w-3 inline mr-1" />
+                      <Play className="h-3 w-3 mr-1" />
                     )}
                     {mediaItem.media_type}
                   </span>
                 </div>
 
                 {/* Visibility Badge */}
-                <div className="absolute top-2 right-2">
-                  {getVisibilityBadge(mediaItem)}
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {activeTab === 'mine' && getVisibilityBadge(mediaItem)}
                 </div>
 
-                {/* Title */}
+                {/* Title Overlay - Always visible on hover */}
                 {mediaItem.title && (
-                  <div className="absolute bottom-2 left-2 right-2">
-                    <p className="text-xs text-white bg-black bg-opacity-50 px-2 py-1 rounded truncate">
+                  <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="text-sm font-medium text-white truncate">
                       {mediaItem.title}
                     </p>
                   </div>
@@ -505,59 +518,85 @@ const Gallery: React.FC = () => {
 
         {/* Media Viewer Modal */}
         {selectedMedia && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-            <div className="max-w-4xl max-h-[90vh] w-full mx-4">
-              <div className="bg-white rounded-lg overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {selectedMedia.title || `Media ${selectedMedia.id}`}
-                    </h3>
-                    {selectedMedia.event_name && (
-                      <p className="text-sm text-gray-500">{selectedMedia.event_name}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setSelectedMedia(null)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+          <div 
+            className="fixed inset-0 bg-black/95 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setSelectedMedia(null)}
+          >
+            <div 
+              className="max-w-6xl max-h-[95vh] w-full flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl font-semibold text-white truncate">
+                    {selectedMedia.title || `Media ${selectedMedia.id}`}
+                  </h3>
+                  {selectedMedia.event_name && (
+                    <p className="text-sm text-gray-300">{selectedMedia.event_name}</p>
+                  )}
                 </div>
+                <button
+                  onClick={() => setSelectedMedia(null)}
+                  className="ml-4 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                  aria-label="Close"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
 
-                {/* Media Content */}
-                <div className="p-4">
-                  <div className="w-full h-96 bg-gray-100 rounded-lg flex items-center justify-center">
+              {/* Media Content */}
+              <div className="flex-1 flex items-center justify-center overflow-hidden rounded-xl bg-black/50">
+                {selectedMedia.file_url ? (
+                  selectedMedia.media_type === 'image' ? (
+                    <img
+                      src={selectedMedia.file_url.startsWith('http') ? selectedMedia.file_url : `http://127.0.0.1:8000${selectedMedia.file_url}`}
+                      alt={selectedMedia.title || 'Gallery image'}
+                      className="max-w-full max-h-[calc(95vh-200px)] w-auto h-auto object-contain"
+                    />
+                  ) : (
+                    <video
+                      src={selectedMedia.file_url.startsWith('http') ? selectedMedia.file_url : `http://127.0.0.1:8000${selectedMedia.file_url}`}
+                      controls
+                      className="max-w-full max-h-[calc(95vh-200px)] w-auto h-auto rounded-lg"
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  )
+                ) : (
+                  <div className="w-full h-96 flex flex-col items-center justify-center">
                     {selectedMedia.media_type === 'image' ? (
-                      <Image className="h-24 w-24 text-gray-400" />
+                      <Image className="h-24 w-24 text-gray-500 mb-4" />
                     ) : (
-                      <Video className="h-24 w-24 text-gray-400" />
+                      <Video className="h-24 w-24 text-gray-500 mb-4" />
                     )}
-                    <div className="absolute text-gray-500 mt-16">
-                      {selectedMedia.media_type === 'image' ? 'Image Preview' : 'Video Preview'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Description */}
-                {selectedMedia.description && (
-                  <div className="p-4 border-t border-gray-200">
-                    <p className="text-gray-600">{selectedMedia.description}</p>
+                    <p className="text-gray-400">
+                      {selectedMedia.media_type === 'image' ? 'Image not available' : 'Video not available'}
+                    </p>
                   </div>
                 )}
+              </div>
 
-                {/* Actions */}
-                <div className="flex items-center justify-between p-4 border-t border-gray-200">
-                  <div className="text-sm text-gray-500">
-                    Uploaded on {new Date(selectedMedia.uploaded_at).toLocaleDateString()}
-                    {selectedMedia.uploaded_by && ` by ${selectedMedia.uploaded_by}`}
+              {/* Footer */}
+              <div className="mt-4 bg-white/10 backdrop-blur-md rounded-xl p-4 space-y-3">
+                {selectedMedia.description && (
+                  <p className="text-white/90 text-sm">{selectedMedia.description}</p>
+                )}
+                
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="text-sm text-white/70">
+                    {new Date(selectedMedia.uploaded_at).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                    {selectedMedia.uploaded_by && ` • ${selectedMedia.uploaded_by}`}
                   </div>
                   <button
                     onClick={() => handleDownload(selectedMedia)}
-                    className="btn btn-primary"
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
                   >
                     <Download className="h-4 w-4 mr-2" />
                     Download

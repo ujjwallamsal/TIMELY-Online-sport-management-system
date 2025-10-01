@@ -31,55 +31,90 @@ const Toast: React.FC<ToastProps> = ({
   }, [id, duration, onClose]);
 
   const getIcon = () => {
+    const iconClass = `h-6 w-6 ${getIconColor()}`;
     switch (type) {
       case 'success':
-        return <CheckCircle className="h-5 w-5 text-green-400" />;
+        return <CheckCircle className={iconClass} />;
       case 'error':
-        return <AlertCircle className="h-5 w-5 text-red-400" />;
+        return <AlertCircle className={iconClass} />;
       case 'warning':
-        return <AlertTriangle className="h-5 w-5 text-yellow-400" />;
+        return <AlertTriangle className={iconClass} />;
       case 'info':
-        return <Info className="h-5 w-5 text-blue-400" />;
+        return <Info className={iconClass} />;
       default:
-        return <Info className="h-5 w-5 text-blue-400" />;
+        return <Info className={iconClass} />;
     }
   };
 
-  const getToastClass = () => {
-    const baseClass = 'toast';
+  const getToastStyles = () => {
+    const baseClass = 'w-full bg-white rounded-xl shadow-lg border-l-4 transform transition-all duration-300 ease-in-out animate-in fade-in slide-in-from-top-5';
     switch (type) {
       case 'success':
-        return `${baseClass} toast-success`;
+        return `${baseClass} border-l-green-500`;
       case 'error':
-        return `${baseClass} toast-error`;
+        return `${baseClass} border-l-red-500`;
       case 'warning':
-        return `${baseClass} toast-warning`;
+        return `${baseClass} border-l-yellow-500`;
       case 'info':
-        return `${baseClass} toast-info`;
+        return `${baseClass} border-l-blue-500`;
       default:
-        return `${baseClass} toast-info`;
+        return `${baseClass} border-l-blue-500`;
+    }
+  };
+
+  const getBackgroundColor = () => {
+    switch (type) {
+      case 'success':
+        return 'bg-white';
+      case 'error':
+        return 'bg-white';
+      case 'warning':
+        return 'bg-white';
+      case 'info':
+        return 'bg-white';
+      default:
+        return 'bg-white';
+    }
+  };
+
+  const getTextColor = () => {
+    return 'text-gray-900';
+  };
+  
+  const getIconColor = () => {
+    switch (type) {
+      case 'success':
+        return 'text-green-500';
+      case 'error':
+        return 'text-red-500';
+      case 'warning':
+        return 'text-yellow-500';
+      case 'info':
+        return 'text-blue-500';
+      default:
+        return 'text-blue-500';
     }
   };
 
   return (
-    <div className={getToastClass()}>
-      <div className="p-4">
-        <div className="flex items-start">
-          <div className="flex-shrink-0">
+    <div className={getToastStyles()}>
+      <div className={`p-4 ${getBackgroundColor()}`}>
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 pt-0.5">
             {getIcon()}
           </div>
-          <div className="ml-3 w-0 flex-1">
-            <p className="text-sm font-medium text-gray-900">{title}</p>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-semibold ${getTextColor()}`}>{title}</p>
             {message && (
-              <p className="mt-1 text-sm text-gray-500">{message}</p>
+              <p className="mt-0.5 text-sm text-gray-600">{message}</p>
             )}
           </div>
-          <div className="ml-4 flex-shrink-0 flex">
+          <div className="flex-shrink-0">
             <button
-              className="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="rounded-md inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
               onClick={() => onClose(id)}
+              aria-label="Close notification"
             >
-              <span className="sr-only">Close</span>
               <X className="h-5 w-5" />
             </button>
           </div>

@@ -192,7 +192,7 @@ class NotificationUnread(models.Model):
     def get_or_create_for_user(cls, user):
         """Get or create unread count for user"""
         unread, created = cls.objects.get_or_create(user=user)
-        return unread
+        return unread, created
     
     @classmethod
     def update_count_for_user(cls, user):

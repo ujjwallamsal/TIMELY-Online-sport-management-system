@@ -184,12 +184,54 @@ class TicketOrderAdmin(admin.ModelAdmin):
         return format_html(' | '.join(actions)) if actions else '-'
     actions_quick.short_description = 'Quick Actions'
 
+    def _validate_or_issue_tickets(self, order: TicketOrder) -> int:
+        """Ensure tickets for the order are VALID. If none exist, issue one generic ticket."""
+        made_valid = 0
+        tickets = list(order.tickets.all()) if hasattr(order, 'tickets') else []
+        if not tickets:
+            # Create a generic ticket type if needed, then issue one ticket so it shows up for the buyer
+            ticket_type, _ = TicketType.objects.get_or_create(
+                event_id=order.event_id,
+                name='General Admission',
+                defaults={
+                    'description': 'General admission ticket',
+                    'price_cents': max(order.total_cents, 0),
+                    'currency': order.currency,
+                    'quantity_total': 100000,
+                    'quantity_sold': 0,
+                    'on_sale': True,
+                }
+            )
+            ticket = Ticket.objects.create(order=order, ticket_type=ticket_type, status='valid')
+            # Update inventory accounting
+            ticket_type.quantity_sold = (ticket_type.quantity_sold or 0) + 1
+            ticket_type.save(update_fields=['quantity_sold'])
+            return 1
+        
+        for t in tickets:
+            if t.status != 'valid':
+                t.status = 'valid'
+                t.save(update_fields=['status'])
+                if t.ticket_type:
+                    tt = t.ticket_type
+                    tt.quantity_sold = (tt.quantity_sold or 0) + 1
+                    tt.save(update_fields=['quantity_sold'])
+                made_valid += 1
+        return made_valid
+
     def mark_paid(self, request, queryset):
-        """Mark selected orders as paid"""
-        updated = queryset.filter(status='pending').update(status='paid')
+        """Mark selected orders as paid and auto-validate their tickets."""
+        updated = 0
+        validated_total = 0
+        for order in queryset:
+            if order.status != 'paid':
+                order.status = 'paid'
+                order.save(update_fields=['status'])
+                updated += 1
+            validated_total += self._validate_or_issue_tickets(order)
         self.message_user(
             request,
-            f'Marked {updated} orders as paid.',
+            f'Marked {updated} orders as paid. Validated/issued {validated_total} ticket(s).',
             level=messages.SUCCESS
         )
     mark_paid.short_description = 'Mark selected as Paid'
@@ -284,6 +326,18 @@ class TicketOrderAdmin(admin.ModelAdmin):
         
         return response
     export_selected_to_csv.short_description = 'Export to CSV'
+
+    def save_model(self, request, obj, form, change):
+        """When an order is edited to Paid, auto-validate/issue tickets so they appear for the user."""
+        previous_status = None
+        if change:
+            try:
+                previous_status = TicketOrder.objects.only('status').get(pk=obj.pk).status
+            except TicketOrder.DoesNotExist:
+                previous_status = None
+        super().save_model(request, obj, form, change)
+        if obj.status == 'paid' and previous_status != 'paid':
+            self._validate_or_issue_tickets(obj)
 
 
 @admin.register(Ticket)

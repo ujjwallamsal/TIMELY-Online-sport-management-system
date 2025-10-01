@@ -120,6 +120,36 @@ class TeamMember(models.Model):
         default=False,
         help_text="Whether this member is the team captain"
     )
+    can_manage_team = models.BooleanField(
+        default=False,
+        help_text="Whether this member can manage team settings"
+    )
+    can_edit_results = models.BooleanField(
+        default=False,
+        help_text="Whether this member can edit match results"
+    )
+    full_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Full name of the team member"
+    )
+    date_of_birth = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date of birth"
+    )
+    joined_date = models.DateField(
+        auto_now_add=True,
+        null=True,
+        blank=True,
+        help_text="Date when member joined the team"
+    )
+    left_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when member left the team"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

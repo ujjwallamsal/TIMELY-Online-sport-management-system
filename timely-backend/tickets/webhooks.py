@@ -194,8 +194,8 @@ def handle_checkout_session_completed(event):
                             "type": "ticket_payment_success",
                             "order_id": order.id,
                             "status": "paid",
-                            "tickets_pending_approval": True,
-                            "event_name": order.event.name
+                            "tickets_pending_approval": False,
+                            "event_id": order.event_id
                         }
                     )
             except Exception as e:
