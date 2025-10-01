@@ -77,6 +77,13 @@ class TeamMember(models.Model):
         ('coach', 'Coach'),
         ('manager', 'Manager'),
     )
+    
+    STATUS_CHOICES = (
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('suspended', 'Suspended'),
+    )
+    
     team = models.ForeignKey(
         Team, 
         on_delete=models.CASCADE, 
@@ -97,6 +104,12 @@ class TeamMember(models.Model):
         choices=ROLE_CHOICES,
         default='player',
         help_text="Role of the team member",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='active',
+        help_text="Member status",
     )
     position = models.CharField(
         max_length=50,
